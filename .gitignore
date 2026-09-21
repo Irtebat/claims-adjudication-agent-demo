@@ -1,0 +1,38 @@
+# Local-only files (kept on disk, never tracked)
+.omnigent/
+docs/build-log/
+
+# Secrets and local config
+config/config.local.yaml
+config/*.local.*
+.env
+.env.*
+*.pem
+*.key
+*-credentials.json
+.databrickscfg
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Node / TypeScript
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Databricks
+.databricks/
+
+# OS and editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

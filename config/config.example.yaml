@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------
+# Config TEMPLATE — copy to config.local.yaml and fill in.
+# config.local.yaml is gitignored. NEVER put secrets here; secrets live in
+# Databricks secret scopes and are referenced by name, not value.
+# ---------------------------------------------------------------------------
+
+databricks:
+  profile: fe-bar                       # always pass --profile fe-bar
+  host: https://fe-sandbox-fe-bar-ir.cloud.databricks.com
+  catalog: fe-bar-ir                    # Unity Catalog for this build
+  schemas:
+    bronze: bronze
+    silver: silver
+    gold: gold
+    ops: ops                            # analytics mirror of operational tables
+  warehouse_name: Serverless Starter Warehouse
+
+# Foundation model / embedding choices — DEFERRED to Wave 4 (agent).
+models:
+  agent_llm_endpoint: "TBD_WAVE_4"
+  embedding_endpoint: "TBD_WAVE_4"
+
+# Lakebase (Postgres, OLTP) — instance to be PROVISIONED in Wave 2 (paid; needs approval).
+lakebase:
+  instance_name: "TBD_WAVE_2"
+  pg_version: 17                        # PG17 required for Lakehouse Sync (Beta)
+  database: claims
+  # Credentials come from a Databricks secret scope, referenced by name only:
+  secret_scope: "TBD_WAVE_2"
+
+# Kafka (Aiven) — provisioned/verified in Wave 8.
+kafka:
+  provider: aiven
+  bootstrap_servers: "TBD_WAVE_8"
+  topics:
+    claim_submitted: claim.submitted
+    claim_adjudicated: claim.adjudicated
+  secret_scope: "TBD_WAVE_8"            # SASL creds by secret name, never inline
+
+# Google Slides — living architecture/value walkthrough deck.
+slides:
+  presentation_id: "TBD"
+  drive_folder_id: "TBD"
