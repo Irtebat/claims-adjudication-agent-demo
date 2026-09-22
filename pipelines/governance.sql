@@ -46,11 +46,8 @@ ALTER MATERIALIZED VIEW `${catalog}`.bronze.claims_history ALTER COLUMN claimed_
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.claims_history ALTER COLUMN freight_cap SET MASK `${catalog}`.silver.mask_money;
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.adjudications_history ALTER COLUMN claimed_amount SET MASK `${catalog}`.silver.mask_money;
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.adjudications_history ALTER COLUMN approved_amount SET MASK `${catalog}`.silver.mask_money;
-ALTER TABLE `${catalog}`.silver.customers ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
-ALTER TABLE `${catalog}`.silver.customers ALTER COLUMN customer_name SET MASK `${catalog}`.silver.mask_customer;
-ALTER TABLE `${catalog}`.silver.customers ALTER COLUMN email SET MASK `${catalog}`.silver.mask_customer;
-ALTER TABLE `${catalog}`.silver.heats_coils ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
-ALTER TABLE `${catalog}`.silver.heats_coils ALTER COLUMN unit_price SET MASK `${catalog}`.silver.mask_money;
+-- silver.customers and silver.heats_coils intentionally remain unmasked for
+-- OLTP serve-down; analytical masking is retained on the gold layer.
 ALTER MATERIALIZED VIEW `${catalog}`.silver.claims_history ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
 ALTER MATERIALIZED VIEW `${catalog}`.silver.claims_history ALTER COLUMN unit_price SET MASK `${catalog}`.silver.mask_money;
 ALTER MATERIALIZED VIEW `${catalog}`.silver.claims_history ALTER COLUMN claimed_amount SET MASK `${catalog}`.silver.mask_money;

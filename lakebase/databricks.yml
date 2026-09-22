@@ -1,0 +1,42 @@
+bundle:
+  name: fe-bar-lakebase
+
+variables:
+  catalog:
+    default: fe-bar-ir
+  endpoint:
+    default: projects/fe-bar-operational-plane/branches/production/endpoints/primary
+  postgres_database:
+    default: databricks_postgres
+
+resources:
+  jobs:
+    setup_and_seed:
+      name: fe-bar-lakebase-setup-and-seed
+      max_concurrent_runs: 1
+      environments:
+        - environment_key: lakebase
+          spec:
+            client: "4"
+            dependencies:
+              - databricks-sdk>=0.81.0
+              - psycopg[binary]==3.2.10
+      tasks:
+        - task_key: setup_and_seed
+          environment_key: lakebase
+          notebook_task:
+            notebook_path: ./src/setup_and_seed.py
+            base_parameters:
+              catalog: ${var.catalog}
+              endpoint: ${var.endpoint}
+              postgres_database: ${var.postgres_database}
+          timeout_seconds: 1800
+          max_retries: 0
+
+targets:
+  prod:
+    default: true
+    mode: production
+    workspace:
+      profile: fe-bar
+      root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/fe-bar-lakebase/prod

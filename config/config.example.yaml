@@ -20,13 +20,18 @@ models:
   agent_llm_endpoint: "TBD_AGENT_LLM"
   embedding_endpoint: "TBD_AGENT_EMBEDDING"
 
-# Lakebase (Postgres, OLTP) — instance to be provisioned for operational storage (paid; needs approval).
+# Lakebase Autoscaling (Postgres, OLTP). Values below are placeholders only.
 lakebase:
-  instance_name: "TBD_LAKEBASE"
+  project: "TBD_LAKEBASE_PROJECT"
+  branch: "TBD_LAKEBASE_BRANCH"
+  endpoint: "TBD_LAKEBASE_ENDPOINT"
+  host: "TBD_LAKEBASE_HOST"
+  port: 5432
+  user: "TBD_LAKEBASE_USER"
   pg_version: 17                        # PG17 required for Lakehouse Sync (Beta)
-  database: claims
+  database: "TBD_LAKEBASE_DATABASE"
   # Credentials come from a Databricks secret scope, referenced by name only:
-  secret_scope: "TBD_LAKEBASE"
+  secret_scope: "TBD_LAKEBASE_SECRET_SCOPE"
 
 # Kafka (Aiven) — provision and verify for event streaming.
 kafka:
