@@ -1,0 +1,530 @@
+{
+  "captured_at_utc": "2026-09-22T09:35:27.110415+00:00",
+  "command": "databricks tables get <table_name> --profile fe-bar --output json",
+  "result": [
+    {
+      "table_name": "fe-bar-ir.silver.spec_standards",
+      "table_type": "STREAMING_TABLE",
+      "delta.enableChangeDataFeed": "true",
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "clause_id",
+          "type_text": "string"
+        },
+        {
+          "name": "clause_text",
+          "type_text": "string"
+        },
+        {
+          "name": "grade",
+          "type_text": "string"
+        },
+        {
+          "name": "parent_clause_id",
+          "type_text": "string"
+        },
+        {
+          "name": "region",
+          "type_text": "string"
+        },
+        {
+          "name": "section_ref",
+          "type_text": "string"
+        },
+        {
+          "name": "source_sha256",
+          "type_text": "string"
+        },
+        {
+          "name": "spec_edition",
+          "type_text": "string"
+        },
+        {
+          "name": "spec_id",
+          "type_text": "string"
+        },
+        {
+          "name": "structured_params",
+          "type_text": "struct<chemistry:struct<carbon_pct:struct<max:double,min:double>,manganese_pct:struct<max:double,min:double>>,coating_adhesion_required:boolean,gauge_tolerance_mm:double,mechanical:struct<elongation_pct:struct<max:double,min:double>,tensile_mpa:struct<max:double,min:double>,yield_mpa:struct<max:double,min:double>>,min_coating_g_m2:double,width_tolerance_mm:double>"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.silver.coating_warranty_terms",
+      "table_type": "STREAMING_TABLE",
+      "delta.enableChangeDataFeed": "true",
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "clause_id",
+          "type_text": "string"
+        },
+        {
+          "name": "clause_text",
+          "type_text": "string"
+        },
+        {
+          "name": "coating_class",
+          "type_text": "string"
+        },
+        {
+          "name": "effective_from",
+          "type_text": "date"
+        },
+        {
+          "name": "effective_to",
+          "type_text": "date"
+        },
+        {
+          "name": "parent_clause_id",
+          "type_text": "string"
+        },
+        {
+          "name": "product_line",
+          "type_text": "string"
+        },
+        {
+          "name": "region",
+          "type_text": "string"
+        },
+        {
+          "name": "section_ref",
+          "type_text": "string"
+        },
+        {
+          "name": "source_sha256",
+          "type_text": "string"
+        },
+        {
+          "name": "structured_params",
+          "type_text": "struct<duration_months:bigint,excluded_environments:array<string>,excluded_installations:array<string>,freight_covered:boolean,full_coverage_months:bigint,min_coast_distance_km:double,min_coating_g_m2:double,proration_method:string>"
+        },
+        {
+          "name": "warranty_id",
+          "type_text": "string"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.silver.heats_coils",
+      "table_type": "STREAMING_TABLE",
+      "delta.enableChangeDataFeed": "true",
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "coil_id",
+          "type_text": "string"
+        },
+        {
+          "name": "heat_no",
+          "type_text": "string"
+        },
+        {
+          "name": "grade",
+          "type_text": "string"
+        },
+        {
+          "name": "spec_edition",
+          "type_text": "string"
+        },
+        {
+          "name": "spec_id",
+          "type_text": "string"
+        },
+        {
+          "name": "product_line",
+          "type_text": "string"
+        },
+        {
+          "name": "coating_class",
+          "type_text": "string"
+        },
+        {
+          "name": "region",
+          "type_text": "string"
+        },
+        {
+          "name": "customer_id",
+          "type_text": "string"
+        },
+        {
+          "name": "warranty_id",
+          "type_text": "string"
+        },
+        {
+          "name": "ordered_gauge_mm",
+          "type_text": "decimal(3,2)"
+        },
+        {
+          "name": "gauge_mm",
+          "type_text": "decimal(3,2)"
+        },
+        {
+          "name": "ordered_width_mm",
+          "type_text": "decimal(5,1)"
+        },
+        {
+          "name": "width_mm",
+          "type_text": "decimal(5,1)"
+        },
+        {
+          "name": "coating_weight_g_m2",
+          "type_text": "decimal(4,1)"
+        },
+        {
+          "name": "line",
+          "type_text": "string"
+        },
+        {
+          "name": "prod_date",
+          "type_text": "date"
+        },
+        {
+          "name": "ship_date",
+          "type_text": "date"
+        },
+        {
+          "name": "raw_material_lot",
+          "type_text": "string"
+        },
+        {
+          "name": "coating_supplier_lot",
+          "type_text": "string"
+        },
+        {
+          "name": "raw_material_supplier_id",
+          "type_text": "string"
+        },
+        {
+          "name": "coating_supplier_id",
+          "type_text": "string"
+        },
+        {
+          "name": "shipped_tonnage",
+          "type_text": "decimal(12,3)"
+        },
+        {
+          "name": "unit_price",
+          "type_text": "decimal(18,2)"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.silver.mill_test_certs",
+      "table_type": "STREAMING_TABLE",
+      "delta.enableChangeDataFeed": "true",
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "cert_id",
+          "type_text": "string"
+        },
+        {
+          "name": "coil_id",
+          "type_text": "string"
+        },
+        {
+          "name": "heat_no",
+          "type_text": "string"
+        },
+        {
+          "name": "cert_date",
+          "type_text": "date"
+        },
+        {
+          "name": "carbon_pct",
+          "type_text": "decimal(2,2)"
+        },
+        {
+          "name": "manganese_pct",
+          "type_text": "decimal(2,2)"
+        },
+        {
+          "name": "yield_mpa",
+          "type_text": "decimal(4,1)"
+        },
+        {
+          "name": "tensile_mpa",
+          "type_text": "decimal(4,1)"
+        },
+        {
+          "name": "elongation_pct",
+          "type_text": "decimal(3,1)"
+        },
+        {
+          "name": "coating_adhesion_pass",
+          "type_text": "boolean"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.silver.customers",
+      "table_type": "STREAMING_TABLE",
+      "delta.enableChangeDataFeed": "true",
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "customer_id",
+          "type_text": "string"
+        },
+        {
+          "name": "customer_name",
+          "type_text": "string"
+        },
+        {
+          "name": "email",
+          "type_text": "string"
+        },
+        {
+          "name": "segment",
+          "type_text": "string"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.silver.suppliers",
+      "table_type": "STREAMING_TABLE",
+      "delta.enableChangeDataFeed": "true",
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "supplier_id",
+          "type_text": "string"
+        },
+        {
+          "name": "supplier_name",
+          "type_text": "string"
+        },
+        {
+          "name": "supplier_type",
+          "type_text": "string"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.silver.defect_codes",
+      "table_type": "STREAMING_TABLE",
+      "delta.enableChangeDataFeed": "true",
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "defect_code",
+          "type_text": "string"
+        },
+        {
+          "name": "description",
+          "type_text": "string"
+        },
+        {
+          "name": "process_step",
+          "type_text": "string"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.gold.claims_history",
+      "table_type": "MATERIALIZED_VIEW",
+      "delta.enableChangeDataFeed": null,
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "claim_id",
+          "type_text": "string"
+        },
+        {
+          "name": "coil_id",
+          "type_text": "string"
+        },
+        {
+          "name": "heat_no",
+          "type_text": "string"
+        },
+        {
+          "name": "customer_id",
+          "type_text": "string"
+        },
+        {
+          "name": "grade",
+          "type_text": "string"
+        },
+        {
+          "name": "spec_edition",
+          "type_text": "string"
+        },
+        {
+          "name": "spec_id",
+          "type_text": "string"
+        },
+        {
+          "name": "product_line",
+          "type_text": "string"
+        },
+        {
+          "name": "coating_class",
+          "type_text": "string"
+        },
+        {
+          "name": "region",
+          "type_text": "string"
+        },
+        {
+          "name": "warranty_id",
+          "type_text": "string"
+        },
+        {
+          "name": "claim_type",
+          "type_text": "string"
+        },
+        {
+          "name": "claim_date",
+          "type_text": "date"
+        },
+        {
+          "name": "ship_date",
+          "type_text": "date"
+        },
+        {
+          "name": "install_date",
+          "type_text": "date"
+        },
+        {
+          "name": "environment",
+          "type_text": "string"
+        },
+        {
+          "name": "installation",
+          "type_text": "string"
+        },
+        {
+          "name": "coast_distance_km",
+          "type_text": "decimal(3,1)"
+        },
+        {
+          "name": "defect_code",
+          "type_text": "string"
+        },
+        {
+          "name": "defect_narrative",
+          "type_text": "string"
+        },
+        {
+          "name": "shipped_tonnage",
+          "type_text": "decimal(12,3)"
+        },
+        {
+          "name": "unit_price",
+          "type_text": "decimal(18,2)"
+        },
+        {
+          "name": "claimed_tonnage",
+          "type_text": "decimal(12,3)"
+        },
+        {
+          "name": "claimed_freight",
+          "type_text": "decimal(18,2)"
+        },
+        {
+          "name": "freight_cap",
+          "type_text": "decimal(18,2)"
+        },
+        {
+          "name": "ground_truth_label",
+          "type_text": "string"
+        },
+        {
+          "name": "fraud_cluster_id",
+          "type_text": "string"
+        },
+        {
+          "name": "duplicate_of_claim_id",
+          "type_text": "string"
+        },
+        {
+          "name": "coating_supplier_id",
+          "type_text": "string"
+        },
+        {
+          "name": "claimed_amount",
+          "type_text": "decimal(18,2)"
+        }
+      ]
+    },
+    {
+      "table_name": "fe-bar-ir.gold.adjudications_history",
+      "table_type": "MATERIALIZED_VIEW",
+      "delta.enableChangeDataFeed": null,
+      "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+      "columns": [
+        {
+          "name": "adjudication_id",
+          "type_text": "string"
+        },
+        {
+          "name": "claim_id",
+          "type_text": "string"
+        },
+        {
+          "name": "verdict",
+          "type_text": "string"
+        },
+        {
+          "name": "recommended_verdict",
+          "type_text": "string"
+        },
+        {
+          "name": "disposition",
+          "type_text": "string"
+        },
+        {
+          "name": "claimed_amount",
+          "type_text": "decimal(18,2)"
+        },
+        {
+          "name": "approved_amount",
+          "type_text": "decimal(18,2)"
+        },
+        {
+          "name": "covered_tonnage",
+          "type_text": "decimal(12,3)"
+        },
+        {
+          "name": "freight_covered",
+          "type_text": "boolean"
+        },
+        {
+          "name": "supplier_attributable",
+          "type_text": "boolean"
+        },
+        {
+          "name": "recovery_supplier_id",
+          "type_text": "string"
+        },
+        {
+          "name": "defect_failure_mode_code",
+          "type_text": "string"
+        },
+        {
+          "name": "override_flag",
+          "type_text": "boolean"
+        },
+        {
+          "name": "decision_status",
+          "type_text": "string"
+        },
+        {
+          "name": "rationale",
+          "type_text": "string"
+        },
+        {
+          "name": "cited_clause_ids",
+          "type_text": "array<string>"
+        },
+        {
+          "name": "finalized_at",
+          "type_text": "timestamp"
+        }
+      ]
+    }
+  ]
+}

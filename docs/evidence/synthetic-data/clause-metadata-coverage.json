@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-09-22T09:39:08.800915+00:00",
+  "query": "SELECT 'spec_standards' corpus, count(*) clause_rows,\n          count(DISTINCT clause_id) unique_clause_ids, count(DISTINCT parent_clause_id) parents,\n          count_if(grade IS NULL OR spec_edition IS NULL OR region IS NULL\n            OR clause_id IS NULL OR parent_clause_id IS NULL OR section_ref IS NULL\n            OR source_sha256 IS NULL OR clause_text IS NULL OR length(trim(clause_text)) = 0\n            OR structured_params IS NULL) incomplete_rows\n          FROM `fe-bar-ir`.silver.spec_standards\n          UNION ALL\n          SELECT 'coating_warranty_terms', count(*), count(DISTINCT clause_id),\n          count(DISTINCT parent_clause_id),\n          count_if(product_line IS NULL OR coating_class IS NULL OR region IS NULL\n            OR effective_from IS NULL OR effective_to IS NULL OR effective_from >= effective_to\n            OR clause_id IS NULL OR parent_clause_id IS NULL OR section_ref IS NULL\n            OR source_sha256 IS NULL OR clause_text IS NULL OR length(trim(clause_text)) = 0\n            OR structured_params IS NULL)\n          FROM `fe-bar-ir`.silver.coating_warranty_terms",
+  "result": [
+    {
+      "clause_rows": "18",
+      "corpus": "spec_standards",
+      "incomplete_rows": "0",
+      "parents": "6",
+      "unique_clause_ids": "18"
+    },
+    {
+      "clause_rows": "36",
+      "corpus": "coating_warranty_terms",
+      "incomplete_rows": "0",
+      "parents": "12",
+      "unique_clause_ids": "36"
+    }
+  ]
+}

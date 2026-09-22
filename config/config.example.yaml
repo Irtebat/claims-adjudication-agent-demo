@@ -15,27 +15,27 @@ databricks:
     ops: ops                            # analytics mirror of operational tables
   warehouse_name: Serverless Starter Warehouse
 
-# Foundation model / embedding choices — DEFERRED to Wave 4 (agent).
+# Foundation model / embedding choices — deferred until agent configuration.
 models:
-  agent_llm_endpoint: "TBD_WAVE_4"
-  embedding_endpoint: "TBD_WAVE_4"
+  agent_llm_endpoint: "TBD_AGENT_LLM"
+  embedding_endpoint: "TBD_AGENT_EMBEDDING"
 
-# Lakebase (Postgres, OLTP) — instance to be PROVISIONED in Wave 2 (paid; needs approval).
+# Lakebase (Postgres, OLTP) — instance to be provisioned for operational storage (paid; needs approval).
 lakebase:
-  instance_name: "TBD_WAVE_2"
+  instance_name: "TBD_LAKEBASE"
   pg_version: 17                        # PG17 required for Lakehouse Sync (Beta)
   database: claims
   # Credentials come from a Databricks secret scope, referenced by name only:
-  secret_scope: "TBD_WAVE_2"
+  secret_scope: "TBD_LAKEBASE"
 
-# Kafka (Aiven) — provisioned/verified in Wave 8.
+# Kafka (Aiven) — provision and verify for event streaming.
 kafka:
   provider: aiven
-  bootstrap_servers: "TBD_WAVE_8"
+  bootstrap_servers: "TBD_KAFKA"
   topics:
     claim_submitted: claim.submitted
     claim_adjudicated: claim.adjudicated
-  secret_scope: "TBD_WAVE_8"            # SASL creds by secret name, never inline
+  secret_scope: "TBD_KAFKA"            # SASL creds by secret name, never inline
 
 # Google Slides — living architecture/value walkthrough deck.
 slides:

@@ -1,0 +1,5 @@
+{
+  "captured_at_utc": "2026-09-22T09:39:11.561686+00:00",
+  "query": "SELECT table_schema, table_name, column_name\n          FROM `fe-bar-ir`.information_schema.columns\n          WHERE table_schema IN ('bronze', 'silver', 'gold')\n          AND (lower(column_name) LIKE '%embedding%' OR lower(column_name) LIKE '%vector%'\n            OR (table_name = 'spec_standards' AND column_name = 'product_line'))",
+  "result": []
+}

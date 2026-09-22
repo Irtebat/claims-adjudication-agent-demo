@@ -1,0 +1,41 @@
+{
+  "captured_at_utc": "2026-09-22T09:38:17.344849+00:00",
+  "query": "SELECT ground_truth_label, count(*) row_count, round(100.0*count(*)/sum(count(*)) OVER (),2) percentage FROM `fe-bar-ir`.gold.claims_history GROUP BY ground_truth_label ORDER BY ground_truth_label",
+  "result": [
+    {
+      "ground_truth_label": "clean",
+      "percentage": "20.00",
+      "row_count": "1000"
+    },
+    {
+      "ground_truth_label": "duplicate",
+      "percentage": "10.00",
+      "row_count": "500"
+    },
+    {
+      "ground_truth_label": "fraud_cluster",
+      "percentage": "5.00",
+      "row_count": "250"
+    },
+    {
+      "ground_truth_label": "in_spec_should_deny",
+      "percentage": "20.00",
+      "row_count": "1000"
+    },
+    {
+      "ground_truth_label": "out_of_warranty_or_environment_excluded",
+      "percentage": "15.00",
+      "row_count": "750"
+    },
+    {
+      "ground_truth_label": "over_claim",
+      "percentage": "15.00",
+      "row_count": "750"
+    },
+    {
+      "ground_truth_label": "supplier_attributable",
+      "percentage": "15.00",
+      "row_count": "750"
+    }
+  ]
+}
