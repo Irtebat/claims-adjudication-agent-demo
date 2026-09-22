@@ -1,0 +1,77 @@
+bundle:
+  name: steel-claims
+variables:
+  catalog:
+    description: Unity Catalog supplied by settings.yaml or --var
+  claim_count:
+    description: Number of claims; configured in settings.yaml
+  seed:
+    description: Faker seed; configured in settings.yaml
+resources:
+  pipelines:
+    medallion:
+      name: steel-claims
+      catalog: ${var.catalog}
+      schema: silver
+      serverless: true
+      continuous: false
+      development: false
+      root_path: ./src
+      libraries:
+        - glob:
+            include: ./src/transformations/**
+      configuration:
+        claims.catalog: ${var.catalog}
+  jobs:
+    validate_generator:
+      name: steel-claims-validate-generator
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: claim_count
+          default: ${var.claim_count}
+        - name: seed
+          default: ${var.seed}
+      tasks:
+        - task_key: validate
+          notebook_task:
+            notebook_path: ./src/generate.py
+            base_parameters:
+              validate_only: "true"
+          timeout_seconds: 3600
+          max_retries: 0
+    bootstrap:
+      name: steel-claims-bootstrap
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: claim_count
+          default: ${var.claim_count}
+        - name: seed
+          default: ${var.seed}
+      tasks:
+        - task_key: generate
+          notebook_task:
+            notebook_path: ./src/generate.py
+          timeout_seconds: 3600
+          max_retries: 0
+        - task_key: medallion
+          depends_on:
+            - task_key: generate
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.medallion.id}
+      queue:
+        enabled: true
+targets:
+  prod:
+    default: true
+    mode: production
+    workspace:
+      profile: fe-bar
+      # Production deployment state.
+      root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod
+    variables:
+      catalog: fe-bar-ir
+      claim_count: 5000
+      seed: 42

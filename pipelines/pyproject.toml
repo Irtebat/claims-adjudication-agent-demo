@@ -1,0 +1,14 @@
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/generate.py" = ["F821"] # Databricks supplies spark and dbutils.
+"tests/test_policies.py" = ["E402"]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = true
+follow_imports = "skip"

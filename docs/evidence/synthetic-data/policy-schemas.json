@@ -1,0 +1,116 @@
+{
+  "captured_at_utc": "2026-09-22T09:39:05.715343+00:00",
+  "query": "SELECT table_name, column_name, full_data_type FROM `fe-bar-ir`.information_schema.columns WHERE table_schema = 'silver' AND table_name IN ('spec_standards','coating_warranty_terms') ORDER BY table_name, ordinal_position",
+  "result": [
+    {
+      "column_name": "clause_id",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "clause_text",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "coating_class",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "effective_from",
+      "full_data_type": "date",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "effective_to",
+      "full_data_type": "date",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "parent_clause_id",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "product_line",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "region",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "section_ref",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "source_sha256",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "structured_params",
+      "full_data_type": "struct<duration_months:bigint,excluded_environments:array<string>,excluded_installations:array<string>,freight_covered:boolean,full_coverage_months:bigint,min_coast_distance_km:double,min_coating_g_m2:double,proration_method:string>",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "warranty_id",
+      "full_data_type": "string",
+      "table_name": "coating_warranty_terms"
+    },
+    {
+      "column_name": "clause_id",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "clause_text",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "grade",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "parent_clause_id",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "region",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "section_ref",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "source_sha256",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "spec_edition",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "spec_id",
+      "full_data_type": "string",
+      "table_name": "spec_standards"
+    },
+    {
+      "column_name": "structured_params",
+      "full_data_type": "struct<chemistry:struct<carbon_pct:struct<max:double,min:double>,manganese_pct:struct<max:double,min:double>>,coating_adhesion_required:boolean,gauge_tolerance_mm:double,mechanical:struct<elongation_pct:struct<max:double,min:double>,tensile_mpa:struct<max:double,min:double>,yield_mpa:struct<max:double,min:double>>,min_coating_g_m2:double,width_tolerance_mm:double>",
+      "table_name": "spec_standards"
+    }
+  ]
+}

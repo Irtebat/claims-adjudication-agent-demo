@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-09-22T09:38:37.242815+00:00",
+  "query": "SELECT * FROM `fe-bar-ir`.silver.defect_codes ORDER BY 1 LIMIT 3",
+  "result": [
+    {
+      "defect_code": "COATING_VOID",
+      "description": "Coating adhesion/voids",
+      "process_step": "coating_line"
+    },
+    {
+      "defect_code": "MECH_TENSILE",
+      "description": "Mechanical tensile deviation",
+      "process_step": "cold_mill"
+    },
+    {
+      "defect_code": "RED_RUST",
+      "description": "Field corrosion/perforation",
+      "process_step": "field"
+    }
+  ]
+}

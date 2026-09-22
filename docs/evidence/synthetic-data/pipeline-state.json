@@ -1,0 +1,43 @@
+{
+  "creator_user_name": "irtebat.shaukat@databricks.com",
+  "effective_budget_policy_id": "09270d50-0927-3318-ad0b-06449c440d8b",
+  "effective_publishing_mode": "DEFAULT_PUBLISHING_MODE",
+  "last_modified": 1790069465480,
+  "latest_updates": [
+    {
+      "creation_time": "2026-09-22T09:31:35.796Z",
+      "state": "COMPLETED",
+      "update_id": "4d8e0f86-ca16-4dfd-a70e-5d6f0b4ffa95"
+    }
+  ],
+  "name": "steel-claims",
+  "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+  "run_as_user_name": "irtebat.shaukat@databricks.com",
+  "spec": {
+    "catalog": "fe-bar-ir",
+    "channel": "CURRENT",
+    "configuration": {
+      "claims.catalog": "fe-bar-ir"
+    },
+    "continuous": false,
+    "deployment": {
+      "kind": "BUNDLE",
+      "metadata_file_path": "/Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod/state/metadata.json"
+    },
+    "development": false,
+    "edition": "ADVANCED",
+    "id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+    "libraries": [
+      {
+        "glob": {
+          "include": "/Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod/files/src/transformations/**"
+        }
+      }
+    ],
+    "name": "steel-claims",
+    "root_path": "/Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod/files/src",
+    "schema": "silver",
+    "serverless": true
+  },
+  "state": "IDLE"
+}

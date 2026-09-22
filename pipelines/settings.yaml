@@ -1,0 +1,8 @@
+# Same databricks mapping as ../config/config.example.yaml; no credentials.
+databricks:
+  profile: fe-bar
+  catalog: fe-bar-ir
+  warehouse_name: Serverless Starter Warehouse
+synthetic:
+  claim_count: 5000
+  seed: 42

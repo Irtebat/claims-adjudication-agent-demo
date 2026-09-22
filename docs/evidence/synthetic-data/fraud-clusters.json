@@ -1,0 +1,306 @@
+{
+  "captured_at_utc": "2026-09-22T09:39:32.035057+00:00",
+  "query": "SELECT fraud_cluster_id, count(*) claims, count(DISTINCT customer_id) customers, count(DISTINCT heat_no) heats FROM `fe-bar-ir`.gold.claims_history WHERE ground_truth_label='fraud_cluster' GROUP BY fraud_cluster_id ORDER BY fraud_cluster_id",
+  "result": [
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-0",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-1",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-10",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-11",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-12",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-13",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-14",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-15",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-16",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-17",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-18",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-19",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-2",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-20",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-21",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-22",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-23",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-24",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-25",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-26",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-27",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-28",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-29",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-3",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-30",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-31",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-32",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-33",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-34",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-35",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-36",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-37",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-38",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-39",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-4",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-40",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-41",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-42",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-43",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-44",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-45",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-46",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-47",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-48",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-49",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-5",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-6",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-7",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-8",
+      "heats": "1"
+    },
+    {
+      "claims": "5",
+      "customers": "3",
+      "fraud_cluster_id": "RING-9",
+      "heats": "1"
+    }
+  ]
+}

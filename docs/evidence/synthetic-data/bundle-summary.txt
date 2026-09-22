@@ -1,0 +1,17 @@
+Name: steel-claims
+Target: prod
+Workspace:
+  User: irtebat.shaukat@databricks.com
+  Path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod
+Resources:
+  Jobs:
+    bootstrap:
+      Name: steel-claims-bootstrap
+      URL:  https://fe-sandbox-fe-bar-ir.cloud.databricks.com/jobs/712441345650514?w=7474655183924919
+    validate_generator:
+      Name: steel-claims-validate-generator
+      URL:  https://fe-sandbox-fe-bar-ir.cloud.databricks.com/jobs/12437594526675?w=7474655183924919
+  Pipelines:
+    medallion:
+      Name: steel-claims
+      URL:  https://fe-sandbox-fe-bar-ir.cloud.databricks.com/pipelines/495e25a1-d984-4993-8a07-7b9ba7c33467?w=7474655183924919

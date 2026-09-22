@@ -1,0 +1,7 @@
+pipelines/tests/test_policies.py::test_parameter_and_clause_come_from_same_source
+pipelines/tests/test_policies.py::test_policy_metadata_ranges_and_clause_identity
+pipelines/tests/test_policies.py::test_effective_windows_unique_at_sale_boundary
+
+3 tests collected in 0.01s
+...                                                                      [100%]
+3 passed in 0.02s

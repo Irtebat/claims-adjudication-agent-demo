@@ -1,0 +1,154 @@
+{
+  "notice": "Entirely synthetic demo policies; not authoritative ASTM/EN requirements or real warranties.",
+  "regions": [
+    "NA",
+    "EU"
+  ],
+  "standards": [
+    {
+      "spec_id": "S-A653",
+      "grade": "ASTM A653 CS Type B",
+      "spec_edition": "DEMO-1990",
+      "chemistry": {
+        "carbon_pct": {
+          "min": 0.0,
+          "max": 0.15
+        },
+        "manganese_pct": {
+          "min": 0.0,
+          "max": 0.6
+        }
+      },
+      "mechanical": {
+        "yield_mpa": {
+          "min": 140.0,
+          "max": 350.0
+        },
+        "tensile_mpa": {
+          "min": 270.0,
+          "max": 550.0
+        },
+        "elongation_pct": {
+          "min": 20.0,
+          "max": 60.0
+        }
+      },
+      "gauge_tolerance_mm": 0.05,
+      "width_tolerance_mm": 2.0,
+      "min_coating_g_m2": 275.0,
+      "coating_adhesion_required": true
+    },
+    {
+      "spec_id": "S-A792",
+      "grade": "ASTM A792 AZ50",
+      "spec_edition": "DEMO-1990",
+      "chemistry": {
+        "carbon_pct": {
+          "min": 0.0,
+          "max": 0.2
+        },
+        "manganese_pct": {
+          "min": 0.0,
+          "max": 0.8
+        }
+      },
+      "mechanical": {
+        "yield_mpa": {
+          "min": 140.0,
+          "max": 350.0
+        },
+        "tensile_mpa": {
+          "min": 270.0,
+          "max": 550.0
+        },
+        "elongation_pct": {
+          "min": 20.0,
+          "max": 60.0
+        }
+      },
+      "gauge_tolerance_mm": 0.05,
+      "width_tolerance_mm": 2.0,
+      "min_coating_g_m2": 150.0,
+      "coating_adhesion_required": true
+    },
+    {
+      "spec_id": "S-EN10346",
+      "grade": "EN 10346 DX51D+Z275",
+      "spec_edition": "DEMO-1990",
+      "chemistry": {
+        "carbon_pct": {
+          "min": 0.0,
+          "max": 0.18
+        },
+        "manganese_pct": {
+          "min": 0.0,
+          "max": 0.7
+        }
+      },
+      "mechanical": {
+        "yield_mpa": {
+          "min": 140.0,
+          "max": 350.0
+        },
+        "tensile_mpa": {
+          "min": 270.0,
+          "max": 550.0
+        },
+        "elongation_pct": {
+          "min": 20.0,
+          "max": 60.0
+        }
+      },
+      "gauge_tolerance_mm": 0.04,
+      "width_tolerance_mm": 2.0,
+      "min_coating_g_m2": 275.0,
+      "coating_adhesion_required": true
+    }
+  ],
+  "products": [
+    {
+      "product_line": "galvanized",
+      "coating_class": "G90",
+      "min_coating_g_m2": 275.0
+    },
+    {
+      "product_line": "galvalume",
+      "coating_class": "AZ50",
+      "min_coating_g_m2": 150.0
+    },
+    {
+      "product_line": "prepainted",
+      "coating_class": "Z275",
+      "min_coating_g_m2": 275.0
+    }
+  ],
+  "warranty_versions": [
+    {
+      "version": "V1",
+      "effective_from": "1990-01-01",
+      "effective_to": "2015-01-01",
+      "duration_months": 240,
+      "full_coverage_months": 60
+    },
+    {
+      "version": "V2",
+      "effective_from": "2015-01-01",
+      "effective_to": "2100-01-01",
+      "duration_months": 360,
+      "full_coverage_months": 120
+    }
+  ],
+  "coverage": {
+    "excluded_environments": [
+      "marine",
+      "industrial_aggressive"
+    ],
+    "excluded_installations": [
+      "unventilated",
+      "standing_water"
+    ],
+    "min_coast_distance_km": 2.0,
+    "proration_method": "linear_remaining_months_after_full_coverage",
+    "freight_covered": false
+  }
+}

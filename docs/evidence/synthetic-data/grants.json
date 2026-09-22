@@ -1,0 +1,226 @@
+{
+  "captured_at_utc": "2026-09-22T09:39:19.823371+00:00",
+  "query": "SELECT * FROM `fe-bar-ir`.information_schema.table_privileges WHERE grantee IN ('adjuster','metallurgy_analyst') ORDER BY table_schema, table_name, grantee",
+  "result": [
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "gold"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "gold"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "gold"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "gold"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "coating_warranty_terms",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "coating_warranty_terms",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "customers",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "customers",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "defect_codes",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "defect_codes",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "heats_coils",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "heats_coils",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "mill_test_certs",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "mill_test_certs",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "spec_standards",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "spec_standards",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "adjuster",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "suppliers",
+      "table_schema": "silver"
+    },
+    {
+      "grantee": "metallurgy_analyst",
+      "grantor": "irtebat.shaukat@databricks.com",
+      "inherited_from": "NONE",
+      "is_grantable": "NO",
+      "privilege_type": "SELECT",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "suppliers",
+      "table_schema": "silver"
+    }
+  ]
+}
