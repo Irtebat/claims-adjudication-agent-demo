@@ -1,9 +1,13 @@
 # Lakebase serve-down evidence
 
-Wave 2 uses the existing `fe-bar-operational-plane` Autoscaling project with
-PostgreSQL 17. Its primary endpoint is fixed at the smallest supported size,
-0.5 CU, and suspends after 300 seconds of inactivity. The CLI did not report a
-currency cost; Autoscaling bills for compute activity and can scale to zero.
+Wave 2 provisioned the `fe-bar-operational-plane` Autoscaling project,
+`production` branch, `primary` compute endpoint, and `databricks_postgres`
+database with PostgreSQL 17. The endpoint is fixed at the smallest supported
+size, 0.5 CU, and suspends after 300 seconds of inactivity. The CLI did not
+report a currency cost; Autoscaling bills for compute activity and can scale
+to zero. Rerunnable setup is idempotent: schema objects use `IF NOT EXISTS`,
+seed rows use primary-key upserts, and synced-table creation skips resources
+that already exist instead of duplicating them.
 
 The setup job created seven operational tables with stable primary keys and
 `REPLICA IDENTITY FULL`. It enabled `pg_trgm` and `vector`, then loaded 5,000
@@ -24,7 +28,7 @@ list and the absence of the `wal2delta` schema.
 
 ## Build activities
 
-- Reused the existing Autoscaling project, branch, endpoint, and database.
+- Provisioned the Autoscaling project, branch, endpoint, and database.
 - Corrected the serverless job dependencies to use a job environment.
 - Deployed and ran the schema/extension/idempotent-seed bundle job.
 - Registered `databricks_postgres` as `fe_bar_operational` in Unity Catalog.
