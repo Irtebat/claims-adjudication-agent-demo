@@ -1,0 +1,10 @@
+PASS  databricks bundle validate --strict -t prod --profile fe-bar  (lakebase/)
+PASS  databricks bundle deploy -t prod --profile fe-bar  (lakebase/)
+PASS  databricks bundle validate --strict -t prod --profile fe-bar  (pipelines/)
+PASS  uv run --with pytest pytest -q  (pipelines/; 3 test functions passed)
+PASS  uvx ruff check src tests  (pipelines/)
+PASS  python3 -m py_compile src/setup_and_seed.py  (lakebase/)
+PASS  bash -n scripts/create_synced_tables.sh  (lakebase/)
+PASS  governance mask assertion: zero serve-down SET MASK statements and 26 retained masks
+PASS  setup_and_seed run 660414214254803: idempotent source/target parity
+PASS  seven synced tables: ONLINE_NO_PENDING_UPDATE and source/target count parity

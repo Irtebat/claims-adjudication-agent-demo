@@ -1,0 +1,24 @@
+{
+  "extensions": [
+    "pg_trgm",
+    "vector"
+  ],
+  "native_cdf_enabled": false,
+  "seed": {
+    "adjudications": 5000,
+    "claims": 5000,
+    "provenance": "synthetic_wave_2_baseline",
+    "source_adjudications": 5000,
+    "source_claims": 5000
+  },
+  "tables": [
+    {"primary_key": ["adjudication_id"], "replica_identity": "full", "table": "adjudications"},
+    {"primary_key": ["claim_id"], "replica_identity": "full", "table": "claims"},
+    {"primary_key": ["claim_id"], "replica_identity": "full", "table": "claims_pending"},
+    {"primary_key": ["investigation_case_id"], "replica_identity": "full", "table": "investigation_cases"},
+    {"primary_key": ["event_id"], "replica_identity": "full", "table": "outbox"},
+    {"primary_key": ["settlement_id"], "replica_identity": "full", "table": "settlements"},
+    {"primary_key": ["supplier_recovery_case_id"], "replica_identity": "full", "table": "supplier_recovery_cases"}
+  ],
+  "verification_run_id": 660414214254803
+}

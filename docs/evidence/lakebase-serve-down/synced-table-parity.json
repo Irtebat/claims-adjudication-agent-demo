@@ -1,0 +1,13 @@
+{
+  "mode": "TRIGGERED",
+  "state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+  "tables": [
+    {"name": "spec_standards", "pipeline_id": "39cfa11d-999b-40fe-91bb-1468ae747900", "source_count": 18, "target_count": 18},
+    {"name": "coating_warranty_terms", "pipeline_id": "e2b33770-e9f5-4d08-b03c-230539230427", "source_count": 36, "target_count": 36},
+    {"name": "heats_coils", "pipeline_id": "9c74b0aa-8ccc-428a-a4d9-a1cc7e90ded3", "source_count": 4500, "target_count": 4500},
+    {"name": "mill_test_certs", "pipeline_id": "2b6b5f16-b5b4-4302-b445-6f77afc65fdd", "source_count": 4500, "target_count": 4500},
+    {"name": "customers", "pipeline_id": "4ba387a0-33e5-4df8-be58-985c1c214620", "source_count": 200, "target_count": 200},
+    {"name": "suppliers", "pipeline_id": "039933b7-0e11-41f2-bafe-6f693b0c30a1", "source_count": 12, "target_count": 12},
+    {"name": "defect_codes", "pipeline_id": "04ec7432-a9e1-4128-82bb-e051dd4ae8fc", "source_count": 3, "target_count": 3}
+  ]
+}

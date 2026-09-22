@@ -1,0 +1,24 @@
+{
+  "branch": "projects/fe-bar-operational-plane/branches/production",
+  "catalog_storage": {
+    "catalog": "fe-bar-ir",
+    "catalog_type": "MANAGED_CATALOG",
+    "storage_root": "s3://fe-bar-ir-bucket/"
+  },
+  "database": {
+    "name": "projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres",
+    "postgres_database": "databricks_postgres"
+  },
+  "endpoint": {
+    "autoscaling_limit_max_cu": 0.5,
+    "autoscaling_limit_min_cu": 0.5,
+    "host": "ep-lively-waterfall-d8mn6aui.database.us-east-2.cloud.databricks.com",
+    "name": "projects/fe-bar-operational-plane/branches/production/endpoints/primary",
+    "state": "ACTIVE",
+    "suspend_timeout_duration": "300s",
+    "type": "ENDPOINT_TYPE_READ_WRITE"
+  },
+  "postgres_version": 17,
+  "project": "projects/fe-bar-operational-plane",
+  "project_uid": "4f62ce23-53c7-49d9-9e1a-beb55c45766c"
+}
