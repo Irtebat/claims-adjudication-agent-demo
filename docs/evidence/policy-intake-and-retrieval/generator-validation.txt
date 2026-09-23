@@ -1,0 +1,14 @@
+check-generator (steel-claims-validate-generator) — live serverless run, validate_only.
+Proves generate.py sources the warranty schedule from the authored policy (run.py reads
+agent/src/policy_source.json -> BUNDLE_VAR_warranty_schedule -> job param -> generate.py)
+with NO hardcoded policy durations, and that history + integrity checks still hold.
+
+Result:
+{"mode": "validate_only_no_data_landed",
+ "tables": {"customers": 200, "suppliers": 12, "defect_codes": 3, "heats_coils": 4500,
+            "mill_test_certs": 4500, "claims_history": 5000, "adjudications_history": 5000},
+ "integrity_checks_passed": 11}
+
+No spec_standards / coating_warranty_terms tables are produced by the pipeline (policy is
+Lakebase-owned). warranty_id version + proration months are selected by ship-date
+effective window from the schedule, so a policy edit propagates into generated history.

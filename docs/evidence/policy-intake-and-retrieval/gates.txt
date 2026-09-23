@@ -1,0 +1,35 @@
+# Static + live gates — 2026-09-23T09:10:01Z (warehouse-removal cleanup)
+
+## ruff check (agent, pipelines)
+All checks passed!
+
+## ruff format --check (agent, pipelines)
+42 files already formatted
+
+## pytest (pipelines/tests + agent/tests)
+55 collected, 55 passed in ~19s.
+  - Offline: authorities correctness fixtures (in-spec/deny, genuine + dimensional
+    nonconformance, adhesion, over-claim capping + partials, warranty proration,
+    zero-proration + exact warranty-duration boundary, marine/environment exclusions),
+    the runtime adapter over a fake psycopg conn (verdict == in-process authority on
+    the fetched inputs; settlement is a pure in-process call with no DB read),
+    duplicate rule, RRF + folded filters, embedding helper, fraud-graph, governance render.
+  - Live (ran, not skipped): test_authorities_runtime.py
+    test_live_lakebase_path_matches_reference[conformance|coverage] over the real
+    Lakebase 5432 psycopg path — read reference.heats_coils / public.warranty_terms
+    and matched the in-process authority.
+
+## compileall (agent/src, pipelines/src, lakebase/src)
+compile OK
+
+## bundle validate (-t prod --profile fe-bar)
+agent:    Validation OK!
+pipelines: Validation OK!
+lakebase: Validation OK!
+
+## warehouse removed from the runtime decision path
+grep of agent/src for statement_execution|execute_statement|warehouse|StatementState|.silver.compute_
+returns only docstring/comment mentions of the removal; no live warehouse call remains.
+The two deployed-UC-function + parity artifacts (deploy_authorities.py,
+test_uc_authorities_parity.py) and the retired SQL-literal test (test_runtime_sql_safety.py)
+were deleted.

@@ -7,4 +7,4 @@ PASS  python3 -m py_compile src/setup_and_seed.py  (lakebase/)
 PASS  bash -n scripts/create_synced_tables.sh  (lakebase/)
 PASS  governance mask assertion: zero serve-down SET MASK statements and 26 retained masks
 PASS  setup_and_seed run 660414214254803: idempotent source/target parity
-PASS  seven synced tables: ONLINE_NO_PENDING_UPDATE and source/target count parity
+PASS  five synced reference tables (heats_coils, mill_test_certs, customers, suppliers, defect_codes): ONLINE_NO_PENDING_UPDATE and source/target count parity. (spec_standards / coating_warranty_terms are no longer synced — policy data now lives in native Lakebase public via policy_intake; two legacy synced relations reference.spec_standards / reference.coating_warranty_terms still linger and are safe to delete.)

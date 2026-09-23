@@ -1,0 +1,24 @@
+{
+  "extensions": {
+    "lakebase_text": "0.1.2",
+    "lakebase_vector": "1.1.1",
+    "pg_trgm": "1.6",
+    "vector": "0.8.0"
+  },
+  "verified_index_access_methods": {
+    "spec_clauses_lb_ann": "lakebase_ann",
+    "spec_clauses_lb_bm25": "lakebase_bm25",
+    "warranty_clauses_lb_ann": "lakebase_ann",
+    "warranty_clauses_lb_bm25": "lakebase_bm25"
+  },
+  "embedding_dim": 1024,
+  "embedding_provenance": [
+    "system.ai.gte-large-en|normalization=l2|dim=1024"
+  ],
+  "row_counts": {
+    "spec_params": 6,
+    "warranty_terms": 12,
+    "spec_clauses": 18,
+    "warranty_clauses": 36
+  }
+}

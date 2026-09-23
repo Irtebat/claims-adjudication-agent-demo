@@ -7,11 +7,15 @@ import json
 import pandas as pd
 from pyspark.sql import functions as F
 
-from policies import policy_rows
-
 catalog = dbutils.widgets.get("catalog")
 claim_count = int(dbutils.widgets.get("claim_count"))
 seed = int(dbutils.widgets.get("seed"))
+# The warranty version schedule (effective windows + durations) is sourced from the
+# single authored policy (agent/src/policy_source.json), passed in by run.py. No
+# policy numerics are hardcoded here; edits to the policy propagate into history.
+warranty_schedule = json.loads(dbutils.widgets.get("warranty_schedule"))
+if not warranty_schedule:
+    raise ValueError("warranty_schedule is empty; run via run.py so the policy is sourced")
 dbutils.widgets.text("validate_only", "false")
 validate_only = dbutils.widgets.get("validate_only").lower() == "true"
 validation_results = {}
@@ -45,16 +49,22 @@ def read(name):
     return spark.table(name) if validate_only else spark.read.parquet(f"{landing}/{name}")
 
 
-# Driver loops below handle the small authored policy inventory, never fact rows.
-for name, rows in zip(("spec_standards", "coating_warranty_terms"), policy_rows()):
-    json_rows = spark.createDataFrame([(json.dumps(row),) for row in rows], "value STRING")
-    schema = F.schema_of_json(F.lit(json.dumps(rows[0])))
-    frame = json_rows.select(F.from_json("value", schema).alias("r")).select("r.*")
-    if name == "coating_warranty_terms":
-        frame = frame.withColumn("effective_from", F.to_date("effective_from")).withColumn(
-            "effective_to", F.to_date("effective_to")
+def schedule_col(field):
+    """Column selecting a warranty-version field by the ship-date effective window."""
+    expr = F.lit(None)
+    for version in warranty_schedule:
+        in_window = (F.col("ship_date") >= F.lit(version["effective_from"])) & (
+            F.col("ship_date") < F.lit(version["effective_to"])
         )
-    write(name, frame)
+        expr = F.when(in_window, F.lit(version[field])).otherwise(expr)
+    return expr
+
+
+# Policy standards and coating-warranty terms are no longer generated here. They
+# are authored in agent/src/policy_source.json and loaded directly into Lakebase
+# by the policy intake (agent/src/policy_intake.py) as the single source of both
+# the structured params the deterministic authorities read and the citable text
+# clauses. This generator only produces reference/master/history fact data.
 
 
 @F.pandas_udf("string")
@@ -156,13 +166,7 @@ base = base.withColumn(
 )
 base = base.withColumn(
     "warranty_id",
-    F.concat(
-        F.lit("W-"),
-        F.col("product_line"),
-        F.lit("-"),
-        F.col("region"),
-        F.when(F.col("ship_date") < F.lit("2015-01-01"), F.lit("-V1")).otherwise(F.lit("-V2")),
-    ),
+    F.concat_ws("-", F.lit("W"), F.col("product_line"), F.col("region"), schedule_col("version")),
 )
 materials = base.filter("slot NOT BETWEEN 55 AND 64")
 write(
@@ -248,27 +252,22 @@ claims = claims.withColumn(
 )
 write("claims_history", claims)
 
-# Historical outcomes are synthetic ground truth, never an LLM's calculation.
+# Historical outcomes are synthetic ground truth, never an LLM's calculation. The
+# duration/full-coverage months and version boundaries come from warranty_schedule
+# (the authored policy, via run.py) so an edit to the policy propagates here. The
+# authoritative live coverage math is compute_coverage/compute_settlement reading
+# the params loaded into Lakebase, never this generator.
 claims = read("claims_history")
-terms = (
-    read("coating_warranty_terms")
-    .filter("section_ref = 'coverage'")
-    .select("warranty_id", "structured_params")
-)
-adj = claims.join(terms, "warranty_id")
+adj = claims.withColumn("_duration_months", schedule_col("duration_months"))
+adj = adj.withColumn("_full_coverage_months", schedule_col("full_coverage_months"))
 adj = adj.withColumn("elapsed_months", F.floor(F.months_between("claim_date", "ship_date")))
 adj = adj.withColumn(
     "proration_factor",
-    F.when(
-        F.col("elapsed_months") <= F.col("structured_params.full_coverage_months"), F.lit(1.0)
-    ).otherwise(
+    F.when(F.col("elapsed_months") <= F.col("_full_coverage_months"), F.lit(1.0)).otherwise(
         F.greatest(
             F.lit(0.0),
-            (F.col("structured_params.duration_months") - F.col("elapsed_months"))
-            / (
-                F.col("structured_params.duration_months")
-                - F.col("structured_params.full_coverage_months")
-            ),
+            (F.col("_duration_months") - F.col("elapsed_months"))
+            / (F.col("_duration_months") - F.col("_full_coverage_months")),
         )
     ),
 )

@@ -1,0 +1,32 @@
+bundle:
+  name: fe-bar-agent
+
+variables:
+  catalog:
+    default: fe-bar-ir
+
+resources:
+  jobs:
+    fraud_graph:
+      name: fe-bar-fraud-graph
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: customer_heat_risk
+          notebook_task:
+            notebook_path: ./src/fraud_graph_job.py
+            base_parameters:
+              catalog: ${var.catalog}
+          timeout_seconds: 3600
+          max_retries: 0
+      queue:
+        enabled: true
+
+targets:
+  prod:
+    default: true
+    mode: production
+    workspace:
+      profile: fe-bar
+      root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/fe-bar-agent/prod
+    variables:
+      catalog: fe-bar-ir

@@ -23,8 +23,10 @@ create_sync() {
     --profile "${profile}" -o json
 }
 
-create_sync spec_standards clause_id
-create_sync coating_warranty_terms clause_id
+# spec_standards and coating_warranty_terms are no longer synced down: the policy
+# corpus (structured params + citable clauses + embeddings) is authored directly
+# into Lakebase by the policy intake (agent/src/policy_intake.py), so it is native
+# operational data, not a UC serve-down.
 create_sync heats_coils coil_id
 create_sync mill_test_certs cert_id
 create_sync customers customer_id
