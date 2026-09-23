@@ -62,9 +62,9 @@ ALTER TABLE adjudications
   ADD COLUMN IF NOT EXISTS fraud_cluster_id text;
 ALTER TABLE claims
   DROP COLUMN IF EXISTS heat_no, DROP COLUMN IF EXISTS grade,
-  DROP COLUMN IF EXISTS spec_edition, DROP COLUMN IF EXISTS spec_id,
+  DROP COLUMN IF EXISTS spec_edition,
   DROP COLUMN IF EXISTS product_line, DROP COLUMN IF EXISTS coating_class,
-  DROP COLUMN IF EXISTS region, DROP COLUMN IF EXISTS warranty_id,
+  DROP COLUMN IF EXISTS region,
   DROP COLUMN IF EXISTS ship_date, DROP COLUMN IF EXISTS shipped_tonnage,
   DROP COLUMN IF EXISTS unit_price, DROP COLUMN IF EXISTS freight_cap,
   DROP COLUMN IF EXISTS ground_truth_label, DROP COLUMN IF EXISTS fraud_cluster_id,
@@ -147,9 +147,24 @@ with psycopg.connect(
 ) as connection:
     with connection.cursor() as cursor:
         cursor.execute(DDL)
+        # Replace only this deterministic fixture set. Keeping stale synthetic
+        # rows would make a smaller future fixture non-idempotent, while rows
+        # from real intake retain their independent provenance.
+        cursor.execute(
+            "DELETE FROM adjudications WHERE data_provenance = %s",
+            ("synthetic_wave_2_baseline",),
+        )
+        cursor.execute(
+            "DELETE FROM claims WHERE data_provenance = %s",
+            ("synthetic_wave_2_baseline",),
+        )
         cursor.executemany(
             upsert_sql("claims", CLAIM_COLUMNS, "claim_id"),
             rows(f"`{catalog}`.gold.claims_history", CLAIM_COLUMNS),
+        )
+        cursor.executemany(
+            upsert_sql("adjudications", ADJUDICATION_COLUMNS, "adjudication_id"),
+            rows(f"`{catalog}`.gold.adjudications_history", ADJUDICATION_COLUMNS),
         )
         cursor.execute(
             """
@@ -167,10 +182,6 @@ with psycopg.connect(
               verdict=EXCLUDED.verdict,
               approved_amount=EXCLUDED.approved_amount
             """
-        )
-        cursor.executemany(
-            upsert_sql("adjudications", ADJUDICATION_COLUMNS, "adjudication_id"),
-            rows(f"`{catalog}`.gold.adjudications_history", ADJUDICATION_COLUMNS),
         )
         cursor.execute("SELECT count(*) FROM claims")
         claim_count = cursor.fetchone()[0]

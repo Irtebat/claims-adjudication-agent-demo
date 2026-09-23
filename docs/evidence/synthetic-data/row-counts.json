@@ -1,0 +1,70 @@
+{
+  "captured_at_utc": "2026-09-23T17:00:47.706540+00:00",
+  "query": "SELECT 'bronze.customers' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.bronze.customers UNION ALL SELECT 'bronze.suppliers' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.bronze.suppliers UNION ALL SELECT 'bronze.defect_codes' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.bronze.defect_codes UNION ALL SELECT 'bronze.heats_coils' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.bronze.heats_coils UNION ALL SELECT 'bronze.mill_test_certs' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.bronze.mill_test_certs UNION ALL SELECT 'bronze.claims_history' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.bronze.claims_history UNION ALL SELECT 'bronze.adjudications_history' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.bronze.adjudications_history UNION ALL SELECT 'silver.customers' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.silver.customers UNION ALL SELECT 'silver.suppliers' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.silver.suppliers UNION ALL SELECT 'silver.defect_codes' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.silver.defect_codes UNION ALL SELECT 'silver.heats_coils' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.silver.heats_coils UNION ALL SELECT 'silver.mill_test_certs' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.silver.mill_test_certs UNION ALL SELECT 'silver.claims_history' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.silver.claims_history UNION ALL SELECT 'silver.adjudications_history' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.silver.adjudications_history UNION ALL SELECT 'gold.claims_history' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.gold.claims_history UNION ALL SELECT 'gold.adjudications_history' AS table_name, count(*) AS row_count FROM `fe-bar-ir`.gold.adjudications_history",
+  "result": [
+    {
+      "row_count": "200",
+      "table_name": "bronze.customers"
+    },
+    {
+      "row_count": "12",
+      "table_name": "bronze.suppliers"
+    },
+    {
+      "row_count": "3",
+      "table_name": "bronze.defect_codes"
+    },
+    {
+      "row_count": "4500",
+      "table_name": "bronze.heats_coils"
+    },
+    {
+      "row_count": "4500",
+      "table_name": "bronze.mill_test_certs"
+    },
+    {
+      "row_count": "5000",
+      "table_name": "bronze.claims_history"
+    },
+    {
+      "row_count": "5000",
+      "table_name": "bronze.adjudications_history"
+    },
+    {
+      "row_count": "200",
+      "table_name": "silver.customers"
+    },
+    {
+      "row_count": "12",
+      "table_name": "silver.suppliers"
+    },
+    {
+      "row_count": "3",
+      "table_name": "silver.defect_codes"
+    },
+    {
+      "row_count": "4500",
+      "table_name": "silver.heats_coils"
+    },
+    {
+      "row_count": "4500",
+      "table_name": "silver.mill_test_certs"
+    },
+    {
+      "row_count": "5000",
+      "table_name": "silver.claims_history"
+    },
+    {
+      "row_count": "5000",
+      "table_name": "silver.adjudications_history"
+    },
+    {
+      "row_count": "5000",
+      "table_name": "gold.claims_history"
+    },
+    {
+      "row_count": "5000",
+      "table_name": "gold.adjudications_history"
+    }
+  ]
+}

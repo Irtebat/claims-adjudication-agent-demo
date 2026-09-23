@@ -1,0 +1,24 @@
+{
+  "captured_at_utc": "2026-09-23T17:01:00.296681+00:00",
+  "query": "SELECT * FROM `fe-bar-ir`.silver.customers ORDER BY 1 LIMIT 3",
+  "result": [
+    {
+      "customer_id": "CUST-0000",
+      "customer_name": "Rodriguez, Figueroa and Sanchez",
+      "email": "contact-0@example.invalid",
+      "segment": "manufacturer"
+    },
+    {
+      "customer_id": "CUST-0001",
+      "customer_name": "Mitchell and Sons",
+      "email": "contact-1@example.invalid",
+      "segment": "service_center"
+    },
+    {
+      "customer_id": "CUST-0002",
+      "customer_name": "Meyer-Miles",
+      "email": "contact-2@example.invalid",
+      "segment": "service_center"
+    }
+  ]
+}

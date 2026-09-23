@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-09-23T17:01:03.292928+00:00",
+  "query": "SELECT * FROM `fe-bar-ir`.silver.suppliers ORDER BY 1 LIMIT 3",
+  "result": [
+    {
+      "supplier_id": "SUP-00",
+      "supplier_name": "Bowman-Bradshaw",
+      "supplier_type": "coating"
+    },
+    {
+      "supplier_id": "SUP-01",
+      "supplier_name": "Stafford and Sons",
+      "supplier_type": "coating"
+    },
+    {
+      "supplier_id": "SUP-02",
+      "supplier_name": "Reed and Sons",
+      "supplier_type": "coating"
+    }
+  ]
+}

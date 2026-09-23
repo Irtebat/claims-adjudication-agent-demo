@@ -75,10 +75,10 @@ class _FakeConn:
 
 
 def test_retrieve_policy_clauses_uses_bm25_only():
-    cols = ["clause_id", "parent_clause_id", "section_ref", "clause_text"]
+    cols = ["citation_key", "section_ref", "clause_text"]
     keyword_rows = [
-        ("W-galvanized-NA-V2:exclusions", "W-galvanized-NA-V2", "exclusions", "Does not cover ..."),
-        ("W-galvanized-NA-V2:coverage", "W-galvanized-NA-V2", "coverage", "Coverage lasts ..."),
+        ("galvanized/NA/V2/exclusions", "exclusions", "Does not cover ..."),
+        ("galvanized/NA/V2/coverage", "coverage", "Coverage lasts ..."),
     ]
     cursor = _MultiCursor([{"rows": keyword_rows, "columns": cols}])
     conn = _FakeConn(cursor)
@@ -94,7 +94,7 @@ def test_retrieve_policy_clauses_uses_bm25_only():
             "ship_date": "2018-01-01",
         },
     )
-    assert results[0]["clause_id"] == "W-galvanized-NA-V2:exclusions"
+    assert results[0]["citation_key"] == "galvanized/NA/V2/exclusions"
     assert "embedding" not in cursor.calls[0][0]
     assert "lakebase_bm25" not in cursor.calls[0][0] or "to_bm25query" in cursor.calls[0][0]
     for _, params in cursor.calls:

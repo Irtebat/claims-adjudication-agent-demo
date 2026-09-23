@@ -7,7 +7,6 @@
   ],
   "entries": [
     {
-      "spec_id": "S-A653",
       "grade": "ASTM A653 CS Type B",
       "spec_edition": "DEMO-1990",
       "chemistry": {
@@ -40,7 +39,6 @@
       "coating_adhesion_required": true
     },
     {
-      "spec_id": "S-A792",
       "grade": "ASTM A792 AZ50",
       "spec_edition": "DEMO-1990",
       "chemistry": {
@@ -73,7 +71,6 @@
       "coating_adhesion_required": true
     },
     {
-      "spec_id": "S-EN10346",
       "grade": "EN 10346 DX51D+Z275",
       "spec_edition": "DEMO-1990",
       "chemistry": {

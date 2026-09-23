@@ -1,0 +1,36 @@
+{
+  "captured_at_utc": "2026-09-23T17:00:54.238707+00:00",
+  "query": "SELECT verdict, disposition, count(*) row_count FROM `fe-bar-ir`.gold.adjudications_history GROUP BY verdict, disposition ORDER BY verdict, disposition",
+  "result": [
+    {
+      "disposition": "CREDIT",
+      "row_count": "1000",
+      "verdict": "APPROVE"
+    },
+    {
+      "disposition": "REPLACEMENT",
+      "row_count": "750",
+      "verdict": "APPROVE"
+    },
+    {
+      "disposition": "REWORK",
+      "row_count": "750",
+      "verdict": "APPROVE"
+    },
+    {
+      "disposition": "DENY",
+      "row_count": "1750",
+      "verdict": "DENY"
+    },
+    {
+      "disposition": "DUPLICATE",
+      "row_count": "500",
+      "verdict": "DENY"
+    },
+    {
+      "disposition": "PEND_INVESTIGATE",
+      "row_count": "250",
+      "verdict": "PEND"
+    }
+  ]
+}

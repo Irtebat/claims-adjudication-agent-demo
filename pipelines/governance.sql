@@ -64,7 +64,7 @@ ALTER MATERIALIZED VIEW `${catalog}`.gold.adjudications_history ALTER COLUMN app
 --   SELECT       `fe_bar_operational`.public.spec_params        (fetch_spec_params)
 --   SELECT       `fe_bar_operational`.public.warranty_terms     (fetch_warranty_terms)
 --   USE SCHEMA   `fe_bar_operational`.reference
---   SELECT       `fe_bar_operational`.reference.heats_coils     (fetch_measured: dims + spec_id)
+--   SELECT       `fe_bar_operational`.reference.heats_coils     (atomic policy attrs + dimensions)
 --   SELECT       `fe_bar_operational`.reference.mill_test_certs (fetch_measured: MTC)
 -- No UC-function EXECUTE grants remain (the functions are retired); no UC silver
 -- grant is needed by the agent (it no longer reads UC silver on the decision path).

@@ -1,0 +1,19 @@
+Captured 2026-09-23
+
+uv run --with pytest --with pyyaml --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' pytest agent/tests pipelines/tests
+collected 57 cases: 55 passed, 2 skipped
+
+PATH="../workstream-a/.venv/bin:$PATH" ruff check agent
+All checks passed!
+
+PATH="../workstream-a/.venv/bin:$PATH" ruff check pipelines
+All checks passed!
+
+databricks bundle validate --strict -t prod --profile fe-bar  (pipelines)
+Validation OK!
+
+databricks bundle validate --strict -t prod --profile fe-bar  (lakebase)
+Validation OK!
+
+databricks bundle validate --strict -t prod --profile fe-bar  (agent)
+Validation OK!

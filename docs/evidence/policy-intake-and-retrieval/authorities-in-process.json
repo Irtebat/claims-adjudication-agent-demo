@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-09-23T17:02:46.814136+00:00",
+  "connection_path": "Lakebase psycopg/5432",
+  "coil_id": "COIL-0000000",
+  "resolved": {
+    "spec_provenance": {"grade": "ASTM A653 CS Type B", "spec_edition": "DEMO-1990", "region": "EU"},
+    "warranty_provenance": {"product_line": "galvanized", "region": "EU", "version": "V1"},
+    "ship_date": "2014-01-01",
+    "shipped_tonnage": 10.0,
+    "unit_price": 650.0,
+    "freight_cap": 500.0
+  },
+  "conformance": {"conforms": true, "nonconforming_properties": []},
+  "coverage": {"claim_date": "2026-01-01", "covered": true, "elapsed_months": 144, "proration_factor": 0.533333, "exclusions_hit": []},
+  "settlement": {"approved_amount": 7000.0, "claimed_amount": 8400.0, "covered_tonnage": 10.0, "freight_amount": 500.0, "freight_covered": true, "over_claim_detected": true, "is_partial": true}
+}

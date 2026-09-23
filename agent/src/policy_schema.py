@@ -38,8 +38,9 @@ def _range(pair: dict) -> tuple[float, float]:
 def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
     """Return {spec_params, warranty_terms, spec_clauses, warranty_clauses}.
 
-    Every clause row carries a stable ``clause_id`` and ``parent_clause_id`` and
-    is joinable to its param row by ``spec_id`` / ``warranty_id``.
+    Parameter and clause rows share atomic policy keys: grade/edition/region for
+    specifications and product-line/region/version for warranties. A clause adds
+    ``section_ref`` to its parent policy key.
     """
     source, digest = _load(path)
     notice = source["notice"]

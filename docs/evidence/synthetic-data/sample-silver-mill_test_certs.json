@@ -1,0 +1,42 @@
+{
+  "captured_at_utc": "2026-09-23T17:01:12.046458+00:00",
+  "query": "SELECT * FROM `fe-bar-ir`.silver.mill_test_certs ORDER BY 1 LIMIT 3",
+  "result": [
+    {
+      "carbon_pct": "0.08",
+      "cert_date": "2013-12-27",
+      "cert_id": "MTC-COIL-0000000",
+      "coating_adhesion_pass": "true",
+      "coil_id": "COIL-0000000",
+      "elongation_pct": "30.0",
+      "heat_no": "HEAT-000000",
+      "manganese_pct": "0.40",
+      "tensile_mpa": "400.0",
+      "yield_mpa": "250.0"
+    },
+    {
+      "carbon_pct": "0.08",
+      "cert_date": "2017-12-27",
+      "cert_id": "MTC-COIL-0000001",
+      "coating_adhesion_pass": "true",
+      "coil_id": "COIL-0000001",
+      "elongation_pct": "30.0",
+      "heat_no": "HEAT-000000",
+      "manganese_pct": "0.40",
+      "tensile_mpa": "400.0",
+      "yield_mpa": "250.0"
+    },
+    {
+      "carbon_pct": "0.08",
+      "cert_date": "2013-12-27",
+      "cert_id": "MTC-COIL-0000002",
+      "coating_adhesion_pass": "true",
+      "coil_id": "COIL-0000002",
+      "elongation_pct": "30.0",
+      "heat_no": "HEAT-000000",
+      "manganese_pct": "0.40",
+      "tensile_mpa": "400.0",
+      "yield_mpa": "250.0"
+    }
+  ]
+}

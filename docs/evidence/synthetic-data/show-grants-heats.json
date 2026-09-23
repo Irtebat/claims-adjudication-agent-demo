@@ -1,0 +1,30 @@
+{
+  "captured_at_utc": "2026-09-23T17:01:35.059109+00:00",
+  "query": "SHOW GRANTS ON TABLE `fe-bar-ir`.silver.heats_coils",
+  "result": [
+    {
+      "ActionType": "READ METADATA",
+      "ObjectKey": "metastore_aws_us_east_2_vending_machine",
+      "ObjectType": "METASTORE",
+      "Principal": "rupesh.maharjan@databricks.com"
+    },
+    {
+      "ActionType": "SELECT",
+      "ObjectKey": "fe-bar-ir.silver.heats_coils",
+      "ObjectType": "TABLE",
+      "Principal": "adjuster"
+    },
+    {
+      "ActionType": "SELECT",
+      "ObjectKey": "fe-bar-ir.silver.heats_coils",
+      "ObjectType": "TABLE",
+      "Principal": "metallurgy_analyst"
+    },
+    {
+      "ActionType": "READ METADATA",
+      "ObjectKey": "metastore_aws_us_east_2_vending_machine",
+      "ObjectType": "METASTORE",
+      "Principal": "ali.karaouzene@databricks.com"
+    }
+  ]
+}

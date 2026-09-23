@@ -68,6 +68,10 @@ resources:
             - task_key: generate
           pipeline_task:
             pipeline_id: ${resources.pipelines.medallion.id}
+            # Synthetic landing files are replaced on every bootstrap. Reset the
+            # streaming tables/checkpoints so replacement files cannot append a
+            # second copy of the same deterministic fixture rows.
+            full_refresh: true
       queue:
         enabled: true
 targets:

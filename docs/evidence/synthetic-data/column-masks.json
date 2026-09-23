@@ -1,0 +1,142 @@
+{
+  "captured_at_utc": "2026-09-23T17:01:46.050739+00:00",
+  "query": "SELECT * FROM `fe-bar-ir`.information_schema.column_masks WHERE table_schema IN ('bronze','silver','gold') ORDER BY table_schema, table_name, column_name",
+  "result": [
+    {
+      "column_name": "approved_amount",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "claimed_amount",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "claimed_freight",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "customer_id",
+      "mask_name": "fe-bar-ir.silver.mask_customer",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "customer_id",
+      "mask_name": "fe-bar-ir.silver.mask_customer",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "customers",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "customer_name",
+      "mask_name": "fe-bar-ir.silver.mask_customer",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "customers",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "email",
+      "mask_name": "fe-bar-ir.silver.mask_customer",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "customers",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "customer_id",
+      "mask_name": "fe-bar-ir.silver.mask_customer",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "heats_coils",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "unit_price",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "heats_coils",
+      "table_schema": "bronze",
+      "using_columns": ""
+    },
+    {
+      "column_name": "approved_amount",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "gold",
+      "using_columns": ""
+    },
+    {
+      "column_name": "claimed_amount",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "gold",
+      "using_columns": ""
+    },
+    {
+      "column_name": "claimed_freight",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "gold",
+      "using_columns": ""
+    },
+    {
+      "column_name": "customer_id",
+      "mask_name": "fe-bar-ir.silver.mask_customer",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "gold",
+      "using_columns": ""
+    },
+    {
+      "column_name": "approved_amount",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "silver",
+      "using_columns": ""
+    },
+    {
+      "column_name": "claimed_amount",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "adjudications_history",
+      "table_schema": "silver",
+      "using_columns": ""
+    },
+    {
+      "column_name": "claimed_freight",
+      "mask_name": "fe-bar-ir.silver.mask_money",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "silver",
+      "using_columns": ""
+    },
+    {
+      "column_name": "customer_id",
+      "mask_name": "fe-bar-ir.silver.mask_customer",
+      "table_catalog": "fe-bar-ir",
+      "table_name": "claims_history",
+      "table_schema": "silver",
+      "using_columns": ""
+    }
+  ]
+}

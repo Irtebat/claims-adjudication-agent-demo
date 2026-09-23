@@ -79,7 +79,7 @@ def retrieve_policy_clauses(
     bm25_index = _BM25_INDEX[corpus]
     kw_sql = (
         f"SELECT concat_ws('/', "
-        f"{('grade, region, spec_edition' if corpus == 'spec' else 'product_line, region, version')}, section_ref) clause_id, "
+        f"{('grade, region, spec_edition' if corpus == 'spec' else 'product_line, region, version')}, section_ref) citation_key, "
         f"section_ref, clause_text "
         f"FROM {table} WHERE clause_tsv IS NOT NULL{where} "
         f"ORDER BY clause_tsv <@> to_bm25query(to_tsvector('english', %(q)s), "

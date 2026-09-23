@@ -1,0 +1,46 @@
+{
+  "captured_at_utc": "2026-09-23T17:01:55.174682+00:00",
+  "query": "SELECT 'missing_coil' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.gold.claims_history c LEFT ANTI JOIN `fe-bar-ir`.silver.heats_coils m USING(coil_id)) UNION ALL SELECT 'missing_mtc' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.silver.heats_coils m LEFT ANTI JOIN `fe-bar-ir`.silver.mill_test_certs t USING(coil_id)) UNION ALL SELECT 'missing_customer' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.gold.claims_history c LEFT ANTI JOIN `fe-bar-ir`.silver.customers d USING(customer_id)) UNION ALL SELECT 'missing_supplier' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.silver.heats_coils m LEFT ANTI JOIN `fe-bar-ir`.silver.suppliers s ON m.coating_supplier_id=s.supplier_id) UNION ALL SELECT 'missing_raw_supplier' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.silver.heats_coils m LEFT ANTI JOIN `fe-bar-ir`.silver.suppliers s ON m.raw_material_supplier_id=s.supplier_id) UNION ALL SELECT 'missing_defect' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.gold.claims_history c LEFT ANTI JOIN `fe-bar-ir`.silver.defect_codes d USING(defect_code)) UNION ALL SELECT 'missing_adjudication' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.gold.claims_history c LEFT ANTI JOIN `fe-bar-ir`.gold.adjudications_history a USING(claim_id)) UNION ALL SELECT 'invalid_duplicate' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.gold.adjudications_history d LEFT JOIN `fe-bar-ir`.gold.claims_history c USING(claim_id) LEFT JOIN `fe-bar-ir`.gold.claims_history o ON d.duplicate_of_claim_id=o.claim_id WHERE d.disposition='DUPLICATE' AND (d.verdict<>'DENY' OR o.claim_id IS NULL OR c.coil_id<>o.coil_id)) UNION ALL SELECT 'invalid_final_status' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.gold.adjudications_history WHERE decision_status='FINAL' AND verdict NOT IN ('APPROVE','DENY','PEND')) UNION ALL SELECT 'invalid_money' check_name, n violations FROM (SELECT count(*) n FROM `fe-bar-ir`.gold.adjudications_history WHERE approved_amount<0 OR approved_amount>claimed_amount OR (verdict<>'APPROVE' AND approved_amount<>0))",
+  "result": [
+    {
+      "check_name": "missing_coil",
+      "violations": "0"
+    },
+    {
+      "check_name": "missing_mtc",
+      "violations": "0"
+    },
+    {
+      "check_name": "missing_customer",
+      "violations": "0"
+    },
+    {
+      "check_name": "missing_supplier",
+      "violations": "0"
+    },
+    {
+      "check_name": "missing_raw_supplier",
+      "violations": "0"
+    },
+    {
+      "check_name": "missing_defect",
+      "violations": "0"
+    },
+    {
+      "check_name": "missing_adjudication",
+      "violations": "0"
+    },
+    {
+      "check_name": "invalid_duplicate",
+      "violations": "0"
+    },
+    {
+      "check_name": "invalid_final_status",
+      "violations": "0"
+    },
+    {
+      "check_name": "invalid_money",
+      "violations": "0"
+    }
+  ]
+}

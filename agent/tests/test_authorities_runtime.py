@@ -158,7 +158,7 @@ def test_conformance_fetches_reference_and_matches_in_process_reference():
     sql, params = rt._conn.cursor_obj.calls[0]
     assert "reference.mill_test_certs" in sql and "reference.heats_coils" in sql
     assert "%(coil_id)s" in sql and params == {"coil_id": "COIL-0000005"}
-    # spec_params came from Lakebase public, parameterized on spec_id.
+    # Resolution next reads the coil's atomic policy attributes with a bound parameter.
     spec_sql, spec_params = rt._conn.cursor_obj.calls[1]
     assert "reference.heats_coils" in spec_sql and spec_params == {"coil_id": "COIL-0000005"}
 
@@ -188,7 +188,7 @@ def test_coverage_fetches_public_and_matches_in_process_reference():
     assert "environment:marine" in result["verdict"]["exclusions_hit"]
 
 
-def test_settlement_is_pure_in_process_no_fetch():
+def test_settlement_resolves_coil_and_warranty_before_money_math():
     rt, _ = _runtime()
     inputs = {
         "coil_id": "COIL-0000005",
