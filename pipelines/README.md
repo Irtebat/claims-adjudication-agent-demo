@@ -7,12 +7,14 @@ The CLI wrapper always supplies the configured profile explicitly.
 
 The serverless bootstrap job writes Parquet to
 `/Volumes/<catalog>/bronze/raw_landing`. A triggered Lakeflow declarative
-pipeline creates nine bronze materialized views, seven silver streaming tables
+pipeline creates seven bronze materialized views, five silver streaming tables
 with `delta.enableChangeDataFeed=true`, two silver history materialized views,
 and two gold history materialized views. The serve-down tables stream immutable
-Parquet files from bronze's landing volume using Auto Loader, preserving the
-structured parameters and citable clause text. No joins or aggregations are
-needed. Gold history is for evaluation/analytics; live claims originate in Lakebase.
+Parquet files from bronze's landing volume using Auto Loader. No joins or
+aggregations are needed. Gold history is for evaluation/analytics; live claims
+originate in Lakebase. Policy standards and coating-warranty terms are **not**
+produced here: they are authored in `agent/src/policy_source.json` and loaded
+directly into Lakebase by the policy intake (`agent/src/policy_intake.py`).
 
 The default bundle target is `prod` (production mode), profile `fe-bar`, catalog
 `fe-bar-ir`. Its workspace root is `/Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod`.
@@ -23,31 +25,25 @@ this bootstrap job against live data.
 
 | Curated dataset | Meaning |
 | --- | --- |
-| silver.spec_standards | Chemistry/mechanical ranges, dimensional tolerances and coating thresholds, plus citable clauses |
-| silver.coating_warranty_terms | Versioned duration, thresholds, exclusions and proration, plus citable clauses |
 | silver.heats_coils | Coil/heat, ordered and measured dimensions, coating, dates, supplier lots, customer and price |
 | silver.mill_test_certs | Chemistry, mechanical measurements and coating adhesion result |
 | silver.customers / suppliers / defect_codes | Synthetic entities and defect taxonomy |
 | silver.claims_history / adjudications_history | Validated historical facts |
 | gold.claims_history / adjudications_history | Published claims and final labeled decisions |
 
-`src/policy_source.json` is the sole authored policy source. `policies.py`
-parses it once into a typed `structured_params` struct and clause text. Every
-row has a stable `clause_id`, `parent_clause_id`, section, source hash and
-corpus-specific metadata. Parameters repeat identically across a parent's
-clauses; use `section_ref = 'coverage'` for one warranty row or
-`section_ref = 'mechanical'` for one standard row when joining decision tools.
-A vector column can be added to these clause rows later. None exists now.
-These are illustrative policies, not licensed or authoritative ASTM/EN limits.
-
-Warranty windows are **[effective_from, effective_to)** and selected using
-shipment date, not claim date. Duration starts at shipment. Proration uses
-completed months: full coverage through `full_coverage_months`, then
-`max(0, (duration_months - completed_months) /
-(duration_months - full_coverage_months))`. The final month has zero coverage.
-Warranty freight is excluded. Material claims cap freight at `freight_cap`.
-Money is stored as decimal values. A partial approval has a smaller approved
-amount; denials and investigations have zero approved amount and no disposition.
+Policy standards and coating-warranty terms are authored in
+`agent/src/policy_source.json` and loaded into Lakebase by the policy intake, as
+both the structured params the deterministic authorities read and the citable
+text clauses (`agent/README.md`). This generator only synthesizes the reference,
+master and history fact data above. The synthetic historical adjudications apply
+the warranty version schedule (effective windows + durations) **sourced from the
+authored policy** — `run.py` reads `agent/src/policy_source.json` and passes it to
+`generate.py` as a job parameter, so an edit to the policy propagates into the
+generated history and no policy numbers are hardcoded here. The authoritative live
+coverage/settlement math lives in the `compute_*` authorities, never in this
+generator. Money is stored as decimal values; a partial approval has a smaller
+approved amount; denials and investigations have zero approved amount and no
+disposition.
 
 The `ground_truth_label` column records the injected pattern. Each complete
 100-claim block contains 20 clean claims, 20 in-spec denials, 15 warranty or
@@ -99,22 +95,21 @@ End-to-end verification with a real nonprivileged user requires that user's
 membership and authenticated session; owner-level metadata inspection alone
 does not prove their effective access.
 
-Evidence capture writes SQL, UTC capture time, real result rows, policy schemas,
-role grants, masks, samples and relationship/pattern assertions to
+Evidence capture writes SQL, UTC capture time, real result rows, role grants,
+masks, samples and relationship/pattern assertions to
 `docs/evidence/synthetic-data/`. It fails if any integrity check finds a violation.
 Do not treat planned row counts or temporary-view checks as persisted data.
 
 ## Development checks
 
 ```bash
-uv run --with pytest pytest pipelines/tests/test_policies.py -q
 uv run --with ruff ruff check pipelines
 uv run --with ruff ruff format --check pipelines
-uv run --with mypy --with types-PyYAML mypy --config-file pipelines/pyproject.toml pipelines/run.py pipelines/evidence.py pipelines/src/policies.py pipelines/src/checks.py
+uv run --with mypy --with types-PyYAML mypy --config-file pipelines/pyproject.toml pipelines/run.py pipelines/evidence.py pipelines/src/checks.py
 python3 -m compileall -q pipelines
 ```
 
-Mypy covers local orchestration and policy parsing. Spark expressions are
-analyzed and executed by the serverless generator and Lakeflow; pipeline
-expectations fail on invalid keys or economic invariants. Optional process
-telemetry and downstream risk, KPI, embedding and Lakebase jobs are deferred.
+Mypy covers local orchestration. Spark expressions are analyzed and executed by
+the serverless generator and Lakeflow; pipeline expectations fail on invalid
+keys or economic invariants. The policy intake, retrieval, deterministic
+authorities and fraud-graph risk job live under `agent/` and Lakebase.

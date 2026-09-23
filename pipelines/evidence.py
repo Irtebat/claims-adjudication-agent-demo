@@ -3,10 +3,11 @@
 import json
 from datetime import datetime, timezone
 
+# Policy standards and coating-warranty terms are no longer produced by this
+# pipeline; they are loaded into Lakebase by the policy intake. This inventory
+# covers only the reference/master/history datasets the medallion still owns.
 TABLES = {
     "bronze": [
-        "spec_standards",
-        "coating_warranty_terms",
         "customers",
         "suppliers",
         "defect_codes",
@@ -16,8 +17,6 @@ TABLES = {
         "adjudications_history",
     ],
     "silver": [
-        "spec_standards",
-        "coating_warranty_terms",
         "customers",
         "suppliers",
         "defect_codes",
@@ -84,44 +83,18 @@ def capture(sql, catalog, destination):
             save(
                 f"sample-{schema}-{table}", f"SELECT * FROM {c}.{schema}.{table} ORDER BY 1 LIMIT 3"
             )
-    save(
-        "policy-schemas",
-        f"SELECT table_name, column_name, full_data_type FROM {c}.information_schema.columns WHERE table_schema = 'silver' AND table_name IN ('spec_standards','coating_warranty_terms') ORDER BY table_name, ordinal_position",
-    )
-    coverage = save(
-        "clause-metadata-coverage",
-        f"""SELECT 'spec_standards' corpus, count(*) clause_rows,
-          count(DISTINCT clause_id) unique_clause_ids, count(DISTINCT parent_clause_id) parents,
-          count_if(grade IS NULL OR spec_edition IS NULL OR region IS NULL
-            OR clause_id IS NULL OR parent_clause_id IS NULL OR section_ref IS NULL
-            OR source_sha256 IS NULL OR clause_text IS NULL OR length(trim(clause_text)) = 0
-            OR structured_params IS NULL) incomplete_rows
-          FROM {c}.silver.spec_standards
-          UNION ALL
-          SELECT 'coating_warranty_terms', count(*), count(DISTINCT clause_id),
-          count(DISTINCT parent_clause_id),
-          count_if(product_line IS NULL OR coating_class IS NULL OR region IS NULL
-            OR effective_from IS NULL OR effective_to IS NULL OR effective_from >= effective_to
-            OR clause_id IS NULL OR parent_clause_id IS NULL OR section_ref IS NULL
-            OR source_sha256 IS NULL OR clause_text IS NULL OR length(trim(clause_text)) = 0
-            OR structured_params IS NULL)
-          FROM {c}.silver.coating_warranty_terms""",
-    )
-    assert all(
-        int(r["incomplete_rows"]) == 0 and int(r["clause_rows"]) == int(r["unique_clause_ids"])
-        for r in coverage
-    ), coverage
+    # Policy clauses/params live in Lakebase now; the medallion carries no
+    # embedding or vector columns. Keep asserting that invariant here.
     prohibited = save(
         "deferred-column-check",
         f"""SELECT table_schema, table_name, column_name
           FROM {c}.information_schema.columns
           WHERE table_schema IN ('bronze', 'silver', 'gold')
-          AND (lower(column_name) LIKE '%embedding%' OR lower(column_name) LIKE '%vector%'
-            OR (table_name = 'spec_standards' AND column_name = 'product_line'))""",
+          AND (lower(column_name) LIKE '%embedding%' OR lower(column_name) LIKE '%vector%')""",
     )
     assert not prohibited, prohibited
     save("show-grants-claims", f"SHOW GRANTS ON TABLE {c}.gold.claims_history")
-    save("show-grants-specs", f"SHOW GRANTS ON TABLE {c}.silver.spec_standards")
+    save("show-grants-heats", f"SHOW GRANTS ON TABLE {c}.silver.heats_coils")
     grants = save(
         "grants",
         f"SELECT * FROM {c}.information_schema.table_privileges WHERE grantee IN ('adjuster','metallurgy_analyst') ORDER BY table_schema, table_name, grantee",

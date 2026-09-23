@@ -8,8 +8,6 @@ CREATE OR REPLACE FUNCTION `${catalog}`.silver.mask_customer(value STRING) RETUR
 CREATE OR REPLACE FUNCTION `${catalog}`.silver.mask_money(value DECIMAL(18,2)) RETURNS DECIMAL(18,2) RETURN CASE WHEN is_account_group_member('adjuster') OR is_member('admins') THEN value ELSE CAST(NULL AS DECIMAL(18,2)) END;
 GRANT USE CATALOG ON CATALOG `${catalog}` TO `adjuster`;
 GRANT USE SCHEMA ON SCHEMA `${catalog}`.silver TO `adjuster`;
-GRANT SELECT ON TABLE `${catalog}`.silver.spec_standards TO `adjuster`;
-GRANT SELECT ON TABLE `${catalog}`.silver.coating_warranty_terms TO `adjuster`;
 GRANT SELECT ON TABLE `${catalog}`.silver.customers TO `adjuster`;
 GRANT SELECT ON TABLE `${catalog}`.silver.suppliers TO `adjuster`;
 GRANT SELECT ON TABLE `${catalog}`.silver.defect_codes TO `adjuster`;
@@ -22,8 +20,6 @@ GRANT SELECT ON TABLE `${catalog}`.gold.claims_history TO `adjuster`;
 GRANT SELECT ON TABLE `${catalog}`.gold.adjudications_history TO `adjuster`;
 GRANT USE CATALOG ON CATALOG `${catalog}` TO `metallurgy_analyst`;
 GRANT USE SCHEMA ON SCHEMA `${catalog}`.silver TO `metallurgy_analyst`;
-GRANT SELECT ON TABLE `${catalog}`.silver.spec_standards TO `metallurgy_analyst`;
-GRANT SELECT ON TABLE `${catalog}`.silver.coating_warranty_terms TO `metallurgy_analyst`;
 GRANT SELECT ON TABLE `${catalog}`.silver.customers TO `metallurgy_analyst`;
 GRANT SELECT ON TABLE `${catalog}`.silver.suppliers TO `metallurgy_analyst`;
 GRANT SELECT ON TABLE `${catalog}`.silver.defect_codes TO `metallurgy_analyst`;
@@ -62,12 +58,33 @@ ALTER MATERIALIZED VIEW `${catalog}`.gold.claims_history ALTER COLUMN claimed_fr
 ALTER MATERIALIZED VIEW `${catalog}`.gold.claims_history ALTER COLUMN freight_cap SET MASK `${catalog}`.silver.mask_money;
 ALTER MATERIALIZED VIEW `${catalog}`.gold.adjudications_history ALTER COLUMN claimed_amount SET MASK `${catalog}`.silver.mask_money;
 ALTER MATERIALIZED VIEW `${catalog}`.gold.adjudications_history ALTER COLUMN approved_amount SET MASK `${catalog}`.silver.mask_money;
--- FUTURE COMPONENTS: app/agent service-principal placeholders; replace IDs before enabling.
--- GRANT USE CATALOG ON CATALOG `${catalog}` TO `<app-service-principal-application-id>`;
--- GRANT USE SCHEMA ON SCHEMA `${catalog}`.gold TO `<app-service-principal-application-id>`;
--- GRANT SELECT ON TABLE `${catalog}`.gold.claims_history TO `<app-service-principal-application-id>`;
--- GRANT USE CATALOG ON CATALOG `${catalog}` TO `<agent-service-principal-application-id>`;
--- GRANT USE SCHEMA ON SCHEMA `${catalog}`.silver TO `<agent-service-principal-application-id>`;
--- GRANT SELECT ON TABLE `${catalog}`.silver.spec_standards TO `<agent-service-principal-application-id>`;
--- GRANT SELECT ON TABLE `${catalog}`.silver.coating_warranty_terms TO `<agent-service-principal-application-id>`;
+-- App/agent service-principal grants. These are REAL GRANT statements (not comments).
+-- run.py govern SUBSTITUTES ${app_principal} / ${agent_principal} from --app-principal /
+-- --agent-principal, the APP_PRINCIPAL / AGENT_PRINCIPAL env vars, or a `governance:` config
+-- block; once substituted the grant EXECUTES. A statement is skipped ONLY while its principal
+-- is genuinely unset, so this never fails against a not-yet-created SP.
+--
+-- Agent-principal object->grant chain. The authorities now run IN-PROCESS (pure
+-- authorities.py, no UC functions, no warehouse), and the runtime adapter reads ALL
+-- four inputs over the Lakebase psycopg (5432) path, governed through the
+-- `fe_bar_operational` catalog. So the chain is entirely on `fe_bar_operational`:
+--   USE CATALOG  `fe_bar_operational`
+--   USE SCHEMA   `fe_bar_operational`.public
+--   SELECT       `fe_bar_operational`.public.spec_params        (fetch_spec_params)
+--   SELECT       `fe_bar_operational`.public.warranty_terms     (fetch_warranty_terms)
+--   USE SCHEMA   `fe_bar_operational`.reference
+--   SELECT       `fe_bar_operational`.reference.heats_coils     (fetch_measured: dims + spec_id)
+--   SELECT       `fe_bar_operational`.reference.mill_test_certs (fetch_measured: MTC)
+-- No UC-function EXECUTE grants remain (the functions are retired); no UC silver
+-- grant is needed by the agent (it no longer reads UC silver on the decision path).
+GRANT USE CATALOG ON CATALOG `${catalog}` TO `${app_principal}`;
+GRANT USE SCHEMA ON SCHEMA `${catalog}`.gold TO `${app_principal}`;
+GRANT SELECT ON TABLE `${catalog}`.gold.claims_history TO `${app_principal}`;
+GRANT USE CATALOG ON CATALOG `fe_bar_operational` TO `${agent_principal}`;
+GRANT USE SCHEMA ON SCHEMA `fe_bar_operational`.public TO `${agent_principal}`;
+GRANT SELECT ON TABLE `fe_bar_operational`.public.spec_params TO `${agent_principal}`;
+GRANT SELECT ON TABLE `fe_bar_operational`.public.warranty_terms TO `${agent_principal}`;
+GRANT USE SCHEMA ON SCHEMA `fe_bar_operational`.reference TO `${agent_principal}`;
+GRANT SELECT ON TABLE `fe_bar_operational`.reference.heats_coils TO `${agent_principal}`;
+GRANT SELECT ON TABLE `fe_bar_operational`.reference.mill_test_certs TO `${agent_principal}`;
 -- SP unmasking entitlement is intentionally deferred; do not add SPs to human roles.

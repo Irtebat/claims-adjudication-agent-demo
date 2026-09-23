@@ -3,12 +3,51 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parent
+
+# A service-principal application id, group name, or user email — deliberately excludes
+# backticks, quotes, semicolons and whitespace/newlines so a principal can never break
+# out of the backticked identifier it is substituted into.
+_PRINCIPAL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]*$")
+
+
+def _validate_principal(value):
+    if value is not None and not _PRINCIPAL_RE.match(value):
+        raise ValueError(f"unsafe principal identifier: {value!r}")
+    return value
+
+
+def render_governance(sql_text, catalog, app_principal=None, agent_principal=None):
+    """Substitute ${catalog} and any supplied principals, then split into statements.
+
+    Returns (executable, skipped): a statement is skipped ONLY when it still contains
+    an unresolved ${...} placeholder — i.e. a principal that was genuinely not supplied.
+    Supplying a principal substitutes it and the grant becomes executable. Principals are
+    validated against a safe identifier pattern before being placed inside backticks.
+    """
+    _validate_principal(app_principal)
+    _validate_principal(agent_principal)
+    subs = {"${catalog}": catalog}
+    if app_principal:
+        subs["${app_principal}"] = app_principal
+    if agent_principal:
+        subs["${agent_principal}"] = agent_principal
+    for key, value in subs.items():
+        sql_text = sql_text.replace(key, value)
+    body = "\n".join(line for line in sql_text.splitlines() if not line.lstrip().startswith("--"))
+    executable, skipped = [], []
+    for statement in body.split(";"):
+        statement = statement.strip()
+        if not statement:
+            continue
+        (skipped if "${" in statement else executable).append(statement)
+    return executable, skipped
 
 
 def main():
@@ -24,17 +63,39 @@ def main():
         action="store_true",
         help="Apply schema/function/USE grants only; no table grants or masks",
     )
+    parser.add_argument(
+        "--app-principal", help="App SP application id for the ${app_principal} grants"
+    )
+    parser.add_argument(
+        "--agent-principal", help="Agent SP application id for the ${agent_principal} grants"
+    )
     args = parser.parse_args()
     config = yaml.safe_load(args.config.read_text())
     db = config["databricks"]
     profile, catalog = db["profile"], db["catalog"]
     if not catalog or "`" in catalog or "/" in catalog:
         raise ValueError("Invalid catalog")
+    # Source the warranty version schedule from the single authored policy so the
+    # generator carries no hardcoded policy numerics (durations, effective windows).
+    policy_source = json.loads((ROOT.parent / "agent/src/policy_source.json").read_text())
+    warranty_schedule = json.dumps(
+        [
+            {
+                "version": v["version"],
+                "effective_from": v["effective_from"],
+                "effective_to": v["effective_to"],
+                "duration_months": v["duration_months"],
+                "full_coverage_months": v["full_coverage_months"],
+            }
+            for v in policy_source["warranty_versions"]
+        ]
+    )
     env = dict(
         os.environ,
         BUNDLE_VAR_catalog=catalog,
         BUNDLE_VAR_claim_count=str(args.claim_count or config["synthetic"]["claim_count"]),
         BUNDLE_VAR_seed=str(config["synthetic"]["seed"]),
+        BUNDLE_VAR_warranty_schedule=warranty_schedule,
     )
 
     def cli(*parts):
@@ -111,16 +172,25 @@ def main():
                         ),
                     )
                 )
-        content = (ROOT / "governance.sql").read_text().replace("${catalog}", catalog)
-        content = "\n".join(
-            line for line in content.splitlines() if not line.lstrip().startswith("--")
+        gov = config.get("governance", {}) or {}
+        app_principal = (
+            args.app_principal or os.environ.get("APP_PRINCIPAL") or gov.get("app_principal")
         )
-        for statement in content.split(";"):
-            if statement.strip():
-                if args.metadata_only and not statement.strip().startswith(("CREATE", "GRANT USE")):
-                    continue
-                print(statement.strip(), flush=True)
-                print(sql(statement.strip()), flush=True)
+        agent_principal = (
+            args.agent_principal or os.environ.get("AGENT_PRINCIPAL") or gov.get("agent_principal")
+        )
+        executable, skipped = render_governance(
+            (ROOT / "governance.sql").read_text(), catalog, app_principal, agent_principal
+        )
+        for statement in skipped:
+            # Only reached when a principal was genuinely not supplied; the grant SQL is
+            # real and activates as soon as its principal is configured.
+            print(f"-- skipped (principal not configured): {statement[:80]}", flush=True)
+        for statement in executable:
+            if args.metadata_only and not statement.startswith(("CREATE", "GRANT USE")):
+                continue
+            print(statement, flush=True)
+            print(sql(statement), flush=True)
     else:
         from evidence import capture
 

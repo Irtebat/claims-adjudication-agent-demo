@@ -15,23 +15,36 @@ databricks:
     ops: ops                            # analytics mirror of operational tables
   warehouse_name: Serverless Starter Warehouse
 
-# Foundation model / embedding choices — deferred until agent configuration.
+# Foundation model / embedding choices.
 models:
   agent_llm_endpoint: "TBD_AGENT_LLM"
-  embedding_endpoint: "TBD_AGENT_EMBEDDING"
+  # Governed GTE embeddings via the Unity Gateway model service (GA, no provisioning).
+  # 1024-dim, NOT normalized -> we L2-normalize and use cosine. No dimensions param.
+  embedding_model_service: "system.ai.gte-large-en"
+  embedding_gateway_path: "/ai-gateway/mlflow/v1/embeddings"
+  embedding_dim: 1024
+  embedding_normalization: "l2"
 
-# Lakebase Autoscaling (Postgres, OLTP). Values below are placeholders only.
+# Policy corpus — authored once, loaded into Lakebase by agent/src/policy_intake.py.
+policy:
+  source: agent/src/policy_source.json         # single source of truth
+  param_tables: [spec_params, warranty_terms]  # read by the deterministic authorities
+  clause_tables: [spec_clauses, warranty_clauses]  # embedded + tsvector, hybrid retrieval
+  # Deterministic UC-function authorities (governed, auditable) in <catalog>.silver.
+  authorities: [compute_conformance, compute_coverage, compute_settlement]
+
+# Lakebase Autoscaling (Postgres, OLTP). Non-secret identifiers only; the OAuth
+# credential is minted at runtime by the SDK, never stored here.
 lakebase:
-  project: "TBD_LAKEBASE_PROJECT"
-  branch: "TBD_LAKEBASE_BRANCH"
-  endpoint: "TBD_LAKEBASE_ENDPOINT"
-  host: "TBD_LAKEBASE_HOST"
+  project: fe-bar-operational-plane
+  branch: production
+  endpoint: projects/fe-bar-operational-plane/branches/production/endpoints/primary
   port: 5432
-  user: "TBD_LAKEBASE_USER"
   pg_version: 17                        # PG17 required for Lakehouse Sync (Beta)
-  database: "TBD_LAKEBASE_DATABASE"
-  # Credentials come from a Databricks secret scope, referenced by name only:
-  secret_scope: "TBD_LAKEBASE_SECRET_SCOPE"
+  database: databricks_postgres
+  # Read-only UC mirror of Lakebase; the authorities read structured params here.
+  catalog_mirror: fe_bar_operational
+  # Credentials come from the SDK OAuth credential provider at runtime (no scope needed).
 
 # Kafka (Aiven) — provision and verify for event streaming.
 kafka:

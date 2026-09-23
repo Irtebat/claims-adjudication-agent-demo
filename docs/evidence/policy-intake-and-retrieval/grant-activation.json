@@ -1,0 +1,25 @@
+{
+  "invocation_model": "in-process authorities over Lakebase psycopg; UC functions retired",
+  "agent_principal_object_grants": {
+    "USE CATALOG fe_bar_operational": true,
+    "USE SCHEMA fe_bar_operational.public": true,
+    "SELECT fe_bar_operational.public.spec_params": true,
+    "SELECT fe_bar_operational.public.warranty_terms": true,
+    "USE SCHEMA fe_bar_operational.reference": true,
+    "SELECT fe_bar_operational.reference.heats_coils": true,
+    "SELECT fe_bar_operational.reference.mill_test_certs": true
+  },
+  "removed_grants": [
+    "EXECUTE fe-bar-ir.silver.compute_conformance / compute_coverage / compute_settlement (UC functions retired)",
+    "USE CATALOG / USE SCHEMA fe-bar-ir.silver and SELECT fe-bar-ir.silver.mill_test_certs / heats_coils (agent no longer reads UC silver on the decision path; it reads the Lakebase reference synced copies over psycopg)"
+  ],
+  "app_principal_object_grants": {
+    "USE CATALOG fe-bar-ir": true,
+    "USE SCHEMA fe-bar-ir.gold": true,
+    "SELECT fe-bar-ir.gold.claims_history": true
+  },
+  "skipped_without_principal": 10,
+  "skipped_with_principal": 0,
+  "no_unresolved_placeholders_when_supplied": true,
+  "note": "run.py govern executes every `executable` statement via the live warehouse path; a live test-grant vs a specific principal was not auto-run (needs a named principal/object). Principals are validated against ^[A-Za-z0-9][A-Za-z0-9._@-]*$ before backtick insertion. The agent grant chain now matches the psycopg access path exactly (7 grants on fe_bar_operational: public spec_params/warranty_terms + reference heats_coils/mill_test_certs); asserted in pipelines/tests/test_governance_render.py."
+}

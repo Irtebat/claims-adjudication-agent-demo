@@ -15,8 +15,16 @@ claims and 5,000 adjudications. A second run returned the same counts as the
 Unity Catalog sources, demonstrating idempotent upserts. Seeded rows use the
 `synthetic_wave_2_baseline` provenance marker.
 
-All seven reference tables use Triggered sync and are online at source/target
-row-count parity. The masks on `silver.customers` and
+Five reference tables (`heats_coils`, `mill_test_certs`, `customers`,
+`suppliers`, `defect_codes`) use Triggered sync and are online at source/target
+row-count parity. `spec_standards` and `coating_warranty_terms` are no longer
+synced down — the policy corpus (structured params + citable clauses +
+embeddings) is now authored directly into native Lakebase `public` by the policy
+intake (`agent/src/policy_intake.py`), so it is operational data, not a UC
+serve-down. Two legacy synced relations (`reference.spec_standards`,
+`reference.coating_warranty_terms`) still linger from the original seven-table
+sync; nothing references them and they are safe to delete via
+`databricks postgres delete-synced-table`. The masks on `silver.customers` and
 `silver.heats_coils` were intentionally removed because the operational plane
 requires real values. Masks remain on the gold analytical layer and the silver
 history materialized views.
@@ -33,7 +41,10 @@ list and the absence of the `wal2delta` schema.
 - Deployed and ran the schema/extension/idempotent-seed bundle job.
 - Registered `databricks_postgres` as `fe_bar_operational` in Unity Catalog.
 - Removed five approved silver serve-down masks and retained analytical masks.
-- Created seven Triggered synced tables and verified row-count parity.
+- Created the Triggered synced reference tables and verified row-count parity.
+  The current sync set is five (`heats_coils`, `mill_test_certs`, `customers`,
+  `suppliers`, `defect_codes`); `spec_standards` / `coating_warranty_terms` were
+  dropped from the sync set once policy data moved to native Lakebase `public`.
 - Created the secret scope and verified its connection metadata keys.
 - Validated the bundle and repository checks recorded in `gates.txt`.
 

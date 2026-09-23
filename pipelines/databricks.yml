@@ -7,6 +7,9 @@ variables:
     description: Number of claims; configured in settings.yaml
   seed:
     description: Faker seed; configured in settings.yaml
+  warranty_schedule:
+    description: Warranty version schedule JSON, sourced from the policy by run.py
+    default: "[]"
 resources:
   pipelines:
     medallion:
@@ -32,6 +35,8 @@ resources:
           default: ${var.claim_count}
         - name: seed
           default: ${var.seed}
+        - name: warranty_schedule
+          default: ${var.warranty_schedule}
       tasks:
         - task_key: validate
           notebook_task:
@@ -50,6 +55,8 @@ resources:
           default: ${var.claim_count}
         - name: seed
           default: ${var.seed}
+        - name: warranty_schedule
+          default: ${var.warranty_schedule}
       tasks:
         - task_key: generate
           notebook_task:
