@@ -16,8 +16,37 @@ cdf_table = ".".join(
 
 @dp.temporary_view(name="adjudications_cdf_changes")
 def adjudications_cdf_changes():
-    return spark.readStream.table(cdf_table).filter(
+    changes = spark.readStream.table(cdf_table).filter(
         F.col("_pg_change_type") != "update_preimage"
+    )
+    # Native Lakebase CDF serializes Postgres text[] as an array-literal string.
+    # Convert the outer braces to JSON brackets so the established ARRAY<STRING>
+    # silver contract remains intact; NULL stays NULL and {} becomes an empty array.
+    cited_clause_ids = F.when(
+        F.col("cited_clause_ids").isNull(),
+        F.lit(None).cast("array<string>"),
+    ).otherwise(
+        F.from_json(
+            F.concat(
+                F.lit("["),
+                F.substring(
+                    F.col("cited_clause_ids"),
+                    2,
+                    F.length("cited_clause_ids") - 2,
+                ),
+                F.lit("]"),
+            ),
+            "array<string>",
+        )
+    )
+    return (
+        changes.withColumn("cited_clause_ids", cited_clause_ids)
+        # Postgres `timestamp` arrives as TIMESTAMP_NTZ, while the preceding
+        # Parquet-backed silver contract exposed finalized_at as TIMESTAMP.
+        .withColumn("finalized_at", F.col("finalized_at").cast("timestamp"))
+        # Seed provenance is operational metadata introduced with Lakebase and
+        # was never part of the consumer-facing silver history contract.
+        .drop("data_provenance", "baseline_loaded_at")
     )
 
 

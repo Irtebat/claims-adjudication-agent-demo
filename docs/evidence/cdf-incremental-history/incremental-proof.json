@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-09-23T23:14:27Z",
+  "lakebase_update": {
+    "table": "public.adjudications",
+    "adjudication_id": "ADJ-CLM-0000000",
+    "column": "decision_status",
+    "before": "FINAL",
+    "after": "REVIEWED",
+    "updated_rows": 1
+  },
+  "before_pipeline_run": [
+    {"adjudication_id": "ADJ-CLM-0000000", "decision_status": "FINAL", "__START_AT": "3750", "__END_AT": null}
+  ],
+  "query": "SELECT adjudication_id, decision_status, __START_AT, __END_AT, cited_clause_ids, typeof(cited_clause_ids) cited_clause_ids_type, typeof(finalized_at) finalized_at_type FROM `fe-bar-ir`.silver.adjudications_history WHERE adjudication_id='ADJ-CLM-0000000' ORDER BY __START_AT",
+  "after_pipeline_run": [
+    {"adjudication_id": "ADJ-CLM-0000000", "decision_status": "FINAL", "__START_AT": "3750", "__END_AT": "5001", "cited_clause_ids_type": "array<string>", "finalized_at_type": "timestamp"},
+    {"adjudication_id": "ADJ-CLM-0000000", "decision_status": "REVIEWED", "__START_AT": "5001", "__END_AT": null, "cited_clause_ids_type": "array<string>", "finalized_at_type": "timestamp"}
+  ]
+}
+

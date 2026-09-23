@@ -1,0 +1,19 @@
+Databricks bundle validation
+  command: cd pipelines && databricks bundle validate --strict --target prod --profile fe-bar
+  result: Validation OK!
+
+Pytest collection
+  command: uv run --with pytest --with pyyaml --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' pytest --collect-only -q agent/tests pipelines/tests
+  result: 60 tests collected
+
+Pytest execution
+  command: uv run --with pytest --with pyyaml --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' pytest agent/tests pipelines/tests
+  result: 58 passed, 2 skipped
+
+Ruff
+  command: uv run --with ruff ruff check agent pipelines
+  result: All checks passed!
+
+Evidence JSON validation
+  command: for f in docs/evidence/cdf-incremental-history/*.json; do jq empty "$f" || exit 1; done
+  result: passed

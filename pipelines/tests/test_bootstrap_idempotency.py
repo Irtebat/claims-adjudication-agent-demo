@@ -53,3 +53,15 @@ def test_history_uses_native_cdf_auto_cdc_scd2():
     assert "gold.claims_current" in views
     assert "gold.adjudications_current" in views
     assert views.count("WHERE __END_AT IS NULL") == 2
+
+
+def test_adjudication_cdf_restores_prior_silver_types():
+    transforms = Path(__file__).parents[1] / "src" / "transformations"
+    source = (transforms / "silver_adjudications_history.py").read_text()
+
+    assert 'F.lit(None).cast("array<string>")' in source
+    assert 'F.from_json(' in source
+    assert '"array<string>"' in source
+    assert 'F.lit("[")' in source and 'F.lit("]")' in source
+    assert '.withColumn("finalized_at", F.col("finalized_at").cast("timestamp"))' in source
+    assert '.drop("data_provenance", "baseline_loaded_at")' in source

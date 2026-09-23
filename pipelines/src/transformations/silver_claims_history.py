@@ -16,8 +16,12 @@ cdf_table = ".".join(
 
 @dp.temporary_view(name="claims_cdf_changes")
 def claims_cdf_changes():
-    return spark.readStream.table(cdf_table).filter(
-        F.col("_pg_change_type") != "update_preimage"
+    return (
+        spark.readStream.table(cdf_table)
+        .filter(F.col("_pg_change_type") != "update_preimage")
+        # Native CDF adds seed provenance fields that were absent from the prior
+        # consumer-facing silver schema; all remaining claim types already match.
+        .drop("data_provenance", "baseline_loaded_at")
     )
 
 
