@@ -59,6 +59,7 @@ def main():
             "validate",
             "deploy",
             "run",
+            "resume",
             "preview-status",
             "summary",
             "check-generator",
@@ -158,7 +159,7 @@ def main():
         print(json.dumps(status, sort_keys=True))
         raise SystemExit(0 if status["enabled"] else 2)
 
-    if args.action == "run":
+    if args.action in {"run", "resume"}:
         status = preview_status()
         if not status["enabled"]:
             raise RuntimeError(
@@ -168,18 +169,23 @@ def main():
 
         cdf_schema = db["cdf_schema"]
         existing = status["cdf_configs"]
-        if existing:
+        if args.action == "run" and existing:
             raise RuntimeError(
                 "A CDF config already exists. Refusing to reseed Lakebase because fixture "
                 "delete/upsert operations would create spurious SCD2 versions."
             )
 
-        # The baseline is generated and seeded exactly once, before native CDF starts.
-        cli("bundle", "deploy", "--target", "prod")
-        cli("bundle", "run", "generate_raw", "--target", "prod")
-        lakebase_root = ROOT.parent / "lakebase"
-        cli("bundle", "deploy", "--target", "prod", cwd=lakebase_root)
-        cli("bundle", "run", "setup_and_seed", "--target", "prod", cwd=lakebase_root)
+        if args.action == "run":
+            # The baseline is generated and seeded exactly once, before native CDF starts.
+            cli("bundle", "deploy", "--target", "prod")
+            cli("bundle", "run", "generate_raw", "--target", "prod")
+            lakebase_root = ROOT.parent / "lakebase"
+            cli("bundle", "deploy", "--target", "prod", cwd=lakebase_root)
+            cli("bundle", "run", "setup_and_seed", "--target", "prod", cwd=lakebase_root)
+        elif not isinstance(existing, list) or len(existing) != 1:
+            raise RuntimeError(
+                f"Resume requires exactly one existing CDF config; found {existing}"
+            )
 
         warehouses = cli_json("warehouses", "list")
         warehouse = next(
@@ -188,23 +194,26 @@ def main():
             if item["name"] == db["warehouse_name"]
             and item["enable_serverless_compute"]
         )
-        cli(
-            "experimental",
-            "aitools",
-            "tools",
-            "query",
-            f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.`{cdf_schema}`",
-            "--warehouse",
-            warehouse,
-        )
-        created = cli_json(
-            "postgres",
-            "create-cdf-config",
-            database,
-            catalog,
-            cdf_schema,
-            "public",
-        )
+        if args.action == "run":
+            cli(
+                "experimental",
+                "aitools",
+                "tools",
+                "query",
+                f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.`{cdf_schema}`",
+                "--warehouse",
+                warehouse,
+            )
+            created = cli_json(
+                "postgres",
+                "create-cdf-config",
+                database,
+                catalog,
+                cdf_schema,
+                "public",
+            )
+        else:
+            created = existing[0]
         cdf_config_name = created["name"]
 
         statuses = None
@@ -218,7 +227,10 @@ def main():
                 or row.get("table_name") in {"claims", "adjudications"}
             ]
             states = {
-                str(row.get("status") or row.get("state", "")).upper() for row in relevant
+                str(row.get("status") or row.get("state", ""))
+                .upper()
+                .removeprefix("CDF_STATE_")
+                for row in relevant
             }
             if len(relevant) == 2 and states == {"STREAMING"}:
                 break
