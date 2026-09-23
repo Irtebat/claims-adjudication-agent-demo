@@ -158,8 +158,8 @@ def upsert_sql(table, columns, key):
     )
 
 
-def rows(table, columns):
-    for row in spark.table(table).select(*columns).toLocalIterator():
+def rows(frame, columns):
+    for row in frame.select(*columns).toLocalIterator():
         values = row.asDict(recursive=True)
         yield tuple(values[column] for column in columns) + (
             "synthetic_wave_2_baseline",
@@ -173,6 +173,12 @@ with psycopg.connect(
     password=credential.token,
     sslmode="require",
 ) as connection:
+    claims_source = spark.read.parquet(
+        f"/Volumes/{catalog}/bronze/raw_landing/claims_history"
+    )
+    adjudications_source = spark.read.parquet(
+        f"/Volumes/{catalog}/bronze/raw_landing/adjudications_history"
+    )
     with connection.cursor() as cursor:
         cursor.execute(DDL)
         # Replace only this deterministic fixture set. Keeping stale synthetic
@@ -201,11 +207,11 @@ with psycopg.connect(
         )
         cursor.executemany(
             upsert_sql("claims", CLAIM_COLUMNS, "claim_id"),
-            rows(f"`{catalog}`.gold.claims_history", CLAIM_COLUMNS),
+            rows(claims_source, CLAIM_COLUMNS),
         )
         cursor.executemany(
             upsert_sql("adjudications", ADJUDICATION_COLUMNS, "adjudication_id"),
-            rows(f"`{catalog}`.gold.adjudications_history", ADJUDICATION_COLUMNS),
+            rows(adjudications_source, ADJUDICATION_COLUMNS),
         )
         cursor.execute(
             """
@@ -265,10 +271,12 @@ with psycopg.connect(
 result = {
     "claims": claim_count,
     "adjudications": adjudication_count,
-    "source_claims": spark.table(f"`{catalog}`.gold.claims_history").count(),
-    "source_adjudications": spark.table(
-        f"`{catalog}`.gold.adjudications_history"
-    ).count(),
+    "source_claims": claims_source.count(),
+    "source_adjudications": adjudications_source.count(),
+    "source_claims_label": f"/Volumes/{catalog}/bronze/raw_landing/claims_history",
+    "source_adjudications_label": (
+        f"/Volumes/{catalog}/bronze/raw_landing/adjudications_history"
+    ),
     "extensions": extensions,
     "native_cdf_enabled": native_cdf_enabled,
     "provenance": "synthetic_wave_2_baseline",

@@ -18,6 +18,8 @@ GRANT SELECT ON TABLE `${catalog}`.silver.adjudications_history TO `adjuster`;
 GRANT USE SCHEMA ON SCHEMA `${catalog}`.gold TO `adjuster`;
 GRANT SELECT ON TABLE `${catalog}`.gold.claims_history TO `adjuster`;
 GRANT SELECT ON TABLE `${catalog}`.gold.adjudications_history TO `adjuster`;
+GRANT SELECT ON TABLE `${catalog}`.gold.claims_current TO `adjuster`;
+GRANT SELECT ON TABLE `${catalog}`.gold.adjudications_current TO `adjuster`;
 GRANT USE CATALOG ON CATALOG `${catalog}` TO `metallurgy_analyst`;
 GRANT USE SCHEMA ON SCHEMA `${catalog}`.silver TO `metallurgy_analyst`;
 GRANT SELECT ON TABLE `${catalog}`.silver.customers TO `metallurgy_analyst`;
@@ -30,25 +32,19 @@ GRANT SELECT ON TABLE `${catalog}`.silver.adjudications_history TO `metallurgy_a
 GRANT USE SCHEMA ON SCHEMA `${catalog}`.gold TO `metallurgy_analyst`;
 GRANT SELECT ON TABLE `${catalog}`.gold.claims_history TO `metallurgy_analyst`;
 GRANT SELECT ON TABLE `${catalog}`.gold.adjudications_history TO `metallurgy_analyst`;
+GRANT SELECT ON TABLE `${catalog}`.gold.claims_current TO `metallurgy_analyst`;
+GRANT SELECT ON TABLE `${catalog}`.gold.adjudications_current TO `metallurgy_analyst`;
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.customers ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.customers ALTER COLUMN customer_name SET MASK `${catalog}`.silver.mask_customer;
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.customers ALTER COLUMN email SET MASK `${catalog}`.silver.mask_customer;
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.heats_coils ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
 ALTER MATERIALIZED VIEW `${catalog}`.bronze.heats_coils ALTER COLUMN unit_price SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.bronze.claims_history ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
-ALTER MATERIALIZED VIEW `${catalog}`.bronze.claims_history ALTER COLUMN claimed_freight SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.bronze.adjudications_history ALTER COLUMN claimed_amount SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.bronze.adjudications_history ALTER COLUMN approved_amount SET MASK `${catalog}`.silver.mask_money;
 -- silver.customers and silver.heats_coils intentionally remain unmasked for
 -- OLTP serve-down; analytical masking is retained on the gold layer.
-ALTER MATERIALIZED VIEW `${catalog}`.silver.claims_history ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
-ALTER MATERIALIZED VIEW `${catalog}`.silver.claims_history ALTER COLUMN claimed_freight SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.silver.adjudications_history ALTER COLUMN claimed_amount SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.silver.adjudications_history ALTER COLUMN approved_amount SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.gold.claims_history ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
-ALTER MATERIALIZED VIEW `${catalog}`.gold.claims_history ALTER COLUMN claimed_freight SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.gold.adjudications_history ALTER COLUMN claimed_amount SET MASK `${catalog}`.silver.mask_money;
-ALTER MATERIALIZED VIEW `${catalog}`.gold.adjudications_history ALTER COLUMN approved_amount SET MASK `${catalog}`.silver.mask_money;
+ALTER TABLE `${catalog}`.silver.claims_history ALTER COLUMN customer_id SET MASK `${catalog}`.silver.mask_customer;
+ALTER TABLE `${catalog}`.silver.claims_history ALTER COLUMN claimed_freight SET MASK `${catalog}`.silver.mask_money;
+ALTER TABLE `${catalog}`.silver.adjudications_history ALTER COLUMN claimed_amount SET MASK `${catalog}`.silver.mask_money;
+ALTER TABLE `${catalog}`.silver.adjudications_history ALTER COLUMN approved_amount SET MASK `${catalog}`.silver.mask_money;
 -- App/agent service-principal grants. These are REAL GRANT statements (not comments).
 -- run.py govern SUBSTITUTES ${app_principal} / ${agent_principal} from --app-principal /
 -- --agent-principal, the APP_PRINCIPAL / AGENT_PRINCIPAL env vars, or a `governance:` config

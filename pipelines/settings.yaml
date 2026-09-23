@@ -3,6 +3,8 @@ databricks:
   profile: fe-bar
   catalog: fe-bar-ir
   warehouse_name: Serverless Starter Warehouse
+  lakebase_database: projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres
+  cdf_schema: cdf
 synthetic:
   claim_count: 5000
   seed: 42
