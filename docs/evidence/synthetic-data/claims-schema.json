@@ -1,0 +1,9 @@
+{
+  "columns": [
+    "claim_id", "coil_id", "customer_id", "claim_type", "claim_date", "install_date",
+    "environment", "installation", "coast_distance_km", "defect_code",
+    "defect_narrative", "claimed_tonnage", "claimed_freight"
+  ],
+  "ground_truth_label_present": false,
+  "resolved_policy_columns_present": false
+}

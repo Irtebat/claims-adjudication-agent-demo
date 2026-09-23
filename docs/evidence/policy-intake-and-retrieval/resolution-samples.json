@@ -1,0 +1,5 @@
+[
+  {"coil_id":"COIL-0000000","spec":{"grade":"ASTM A653 CS Type B","spec_edition":"DEMO-1990","region":"EU"},"warranty":{"product_line":"galvanized","region":"EU","version":"V1","ship_date":"2014-01-01","freight_cap":500}},
+  {"coil_id":"COIL-0000001","spec":{"grade":"ASTM A792 AZ50","spec_edition":"DEMO-1990","region":"NA"},"warranty":{"product_line":"galvalume","region":"NA","version":"V2","ship_date":"2018-01-01","freight_cap":500}},
+  {"coil_id":"COIL-0000002","spec":{"grade":"EN 10346 DX51D+Z275","spec_edition":"DEMO-1990","region":"NA"},"warranty":{"product_line":"prepainted","region":"NA","version":"V1","ship_date":"2014-01-01","freight_cap":500}}
+]

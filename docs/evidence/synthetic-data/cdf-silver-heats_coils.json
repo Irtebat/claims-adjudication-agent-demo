@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-09-22T09:37:59.276132+00:00",
-  "query": "SHOW TBLPROPERTIES `fe-bar-ir`.silver.heats_coils ('delta.enableChangeDataFeed')",
-  "result": [
-    {
-      "value": "true"
-    }
-  ]
-}

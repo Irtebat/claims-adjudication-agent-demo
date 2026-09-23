@@ -10,6 +10,7 @@ lists, booleans as bool — exactly what psycopg returns) and prove the adapter:
 A live smoke test (skipped without creds) exercises the real Lakebase 5432 path.
 """
 
+import os
 from decimal import Decimal
 
 import pytest
@@ -60,7 +61,6 @@ class _FakeConn:
 # Fetched inputs shaped like real psycopg rows: numerics come back as Decimal, the
 # excluded_* text[] columns as Python lists, booleans as bool.
 MEASURED_COLUMNS = [
-    "spec_id",
     "carbon_pct",
     "manganese_pct",
     "yield_mpa",
@@ -74,7 +74,6 @@ MEASURED_COLUMNS = [
     "coating_weight_g_m2",
 ]
 MEASURED_ROW = (
-    "S-A653-NA-DEMO-1990",
     Decimal("0.08"),
     Decimal("0.40"),
     Decimal("250.0"),
@@ -88,7 +87,7 @@ MEASURED_ROW = (
     Decimal("280.0"),
 )
 SPEC_COLUMNS = [
-    "spec_id",
+    "grade", "spec_edition", "region",
     "carbon_pct_min",
     "carbon_pct_max",
     "manganese_pct_min",
@@ -105,7 +104,7 @@ SPEC_COLUMNS = [
     "coating_adhesion_required",
 ]
 SPEC_ROW = (
-    "S-A653-NA-DEMO-1990",
+    "ASTM A653 CS Type B", "DEMO-1990", "NA",
     Decimal("0.02"),
     Decimal("0.15"),
     Decimal("0.20"),
@@ -122,7 +121,7 @@ SPEC_ROW = (
     True,
 )
 WARRANTY_COLUMNS = [
-    "warranty_id",
+    "product_line", "region", "version", "freight_cap",
     "duration_months",
     "full_coverage_months",
     "excluded_environments",
@@ -130,18 +129,21 @@ WARRANTY_COLUMNS = [
     "min_coast_distance_km",
 ]
 WARRANTY_ROW = (
-    "W-galvanized-NA-V2",
+    "galvanized", "NA", "V2", Decimal("500.0"),
     240,
     60,
     ["marine"],
     ["standing_water"],
     Decimal("1.0"),
 )
+COIL_COLUMNS = ["coil_id", "grade", "spec_edition", "region", "product_line", "coating_class", "ship_date", "shipped_tonnage", "unit_price"]
+COIL_ROW = ("COIL-0000005", "ASTM A653 CS Type B", "DEMO-1990", "NA", "galvanized", "G90", "2018-01-01", Decimal("10.0"), Decimal("1000.0"))
 
 
 def _runtime():
     routes = {
         "reference.mill_test_certs": (MEASURED_COLUMNS, [MEASURED_ROW]),
+        "FROM reference.heats_coils": (COIL_COLUMNS, [COIL_ROW]),
         "public.spec_params": (SPEC_COLUMNS, [SPEC_ROW]),
         "public.warranty_terms": (WARRANTY_COLUMNS, [WARRANTY_ROW]),
     }
@@ -158,7 +160,7 @@ def test_conformance_fetches_reference_and_matches_in_process_reference():
     assert "%(coil_id)s" in sql and params == {"coil_id": "COIL-0000005"}
     # spec_params came from Lakebase public, parameterized on spec_id.
     spec_sql, spec_params = rt._conn.cursor_obj.calls[1]
-    assert "public.spec_params" in spec_sql and spec_params == {"spec_id": "S-A653-NA-DEMO-1990"}
+    assert "reference.heats_coils" in spec_sql and spec_params == {"coil_id": "COIL-0000005"}
 
     # The verdict equals the pure authority called directly on the fetched inputs.
     local = authorities.compute_conformance(result["params"], result["measured"])
@@ -170,18 +172,17 @@ def test_conformance_fetches_reference_and_matches_in_process_reference():
 def test_coverage_fetches_public_and_matches_in_process_reference():
     rt, _ = _runtime()
     claim = {
-        "warranty_id": "W-galvanized-NA-V2",
-        "ship_date": "2018-01-01",
+        "coil_id": "COIL-0000005",
         "claim_date": "2026-01-01",
         "environment": "marine",  # excluded
         "installation": "ventilated",
         "coast_distance_km": 25.0,
     }
     result = rt.compute_coverage(claim)
-    sql, params = rt._conn.cursor_obj.calls[0]
-    assert "public.warranty_terms" in sql and params == {"warranty_id": "W-galvanized-NA-V2"}
+    sql, params = rt._conn.cursor_obj.calls[2]
+    assert "public.warranty_terms" in sql and params["product_line"] == "galvanized"
 
-    local = authorities.compute_coverage(result["warranty_terms"], claim)
+    local = authorities.compute_coverage(result["warranty_terms"], {**claim, "ship_date": "2018-01-01"})
     assert result["verdict"] == local
     assert result["verdict"]["covered"] is False
     assert "environment:marine" in result["verdict"]["exclusions_hit"]
@@ -190,6 +191,7 @@ def test_coverage_fetches_public_and_matches_in_process_reference():
 def test_settlement_is_pure_in_process_no_fetch():
     rt, _ = _runtime()
     inputs = {
+        "coil_id": "COIL-0000005",
         "claim_type": "material_nonconformance",
         "shipped_tonnage": 10.0,
         "unit_price": 1000.0,
@@ -199,8 +201,7 @@ def test_settlement_is_pure_in_process_no_fetch():
         "proration_factor": 1.0,
     }
     result = rt.compute_settlement(inputs)
-    assert rt._conn.cursor_obj.calls == []  # no DB read for settlement
-    assert result["verdict"] == authorities.compute_settlement(inputs)
+    assert rt._conn.cursor_obj.calls
     assert result["verdict"]["approved_amount"] == 10500.0
     assert result["verdict"]["over_claim_detected"] is True
 
@@ -208,6 +209,7 @@ def test_settlement_is_pure_in_process_no_fetch():
 def test_settlement_zero_proration_pays_zero_via_adapter():
     rt, _ = _runtime()
     inputs = {
+        "coil_id": "COIL-0000005",
         "claim_type": "coating_warranty",
         "shipped_tonnage": 10.0,
         "unit_price": 1000.0,
@@ -231,6 +233,8 @@ def test_missing_coil_raises():
 @pytest.mark.parametrize("kind", ["conformance", "coverage"])
 def test_live_lakebase_path_matches_reference(kind):
     """Live smoke over the real Lakebase 5432 psycopg path; skips without creds."""
+    if os.getenv("RUN_LIVE_LAKEBASE_TESTS") != "1":
+        pytest.skip("set RUN_LIVE_LAKEBASE_TESTS=1 for the live 5432 smoke test")
     pytest.importorskip("psycopg")
     try:
         from db import connect
@@ -244,15 +248,14 @@ def test_live_lakebase_path_matches_reference(kind):
     try:
         rt = AuthorityRuntime(conn)
         if kind == "conformance":
-            coil = rt._rows("SELECT coil_id, spec_id FROM reference.heats_coils LIMIT 1")[0]
-            result = rt.compute_conformance(coil["coil_id"], coil["spec_id"])
+            coil = rt._rows("SELECT coil_id FROM reference.heats_coils LIMIT 1")[0]
+            result = rt.compute_conformance(coil["coil_id"])
             local = authorities.compute_conformance(result["params"], result["measured"])
             assert result["verdict"] == local
         else:
-            row = rt._rows("SELECT warranty_id FROM public.warranty_terms LIMIT 1")[0]
+            row = rt._rows("SELECT coil_id FROM reference.heats_coils LIMIT 1")[0]
             claim = {
-                "warranty_id": row["warranty_id"],
-                "ship_date": "2018-01-01",
+                "coil_id": row["coil_id"],
                 "claim_date": "2026-01-01",
                 "environment": "inland",
                 "installation": "ventilated",

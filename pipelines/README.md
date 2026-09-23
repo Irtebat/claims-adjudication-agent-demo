@@ -45,7 +45,7 @@ generator. Money is stored as decimal values; a partial approval has a smaller
 approved amount; denials and investigations have zero approved amount and no
 disposition.
 
-The `ground_truth_label` column records the injected pattern. Each complete
+Finalized adjudications record the injected pattern; claims carry no label. Each complete
 100-claim block contains 20 clean claims, 20 in-spec denials, 15 warranty or
 exclusion denials, 10 duplicates, 15 over-claims, 15 supplier-attributable
 claims and a five-claim fraud cluster. Clean claims include covered corrosion

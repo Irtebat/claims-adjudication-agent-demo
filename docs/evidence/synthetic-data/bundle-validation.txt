@@ -1,7 +1,0 @@
-Name: steel-claims
-Target: prod
-Workspace:
-  User: irtebat.shaukat@databricks.com
-  Path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod
-
-Validation OK!

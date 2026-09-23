@@ -5,14 +5,11 @@ query), NOT as a UC Python UDF (those cannot open Postgres 5432). Retrieval only
 *finds and cites* candidate clauses; the deterministic ``compute_*`` authorities
 decide (PLAN §6.4).
 
-The lexical arm uses the real Lakebase Search **BM25** index: it scores rows with
+Clause citation uses the real Lakebase Search **BM25** index: it scores rows with
 ``clause_tsv <@> to_bm25query(to_tsvector('english', query), '<index>'::regclass)``
 (a lower/more-negative score is a better match, so ORDER BY ASC), driven by the
-``lakebase_bm25`` index built at intake. The dense arm uses cosine distance
-(``<=>``) over the normalized ``embedding`` column, served by the ``lakebase_ann``
-index. Metadata filters are folded into BOTH arms, then results are fused with
-Reciprocal Rank Fusion. The query is embedded with the same governed GTE model and
-L2 normalization used at intake (provenance is stored on each clause row).
+``lakebase_bm25`` index built at intake. Metadata filters bind citations to resolved
+policy. Dense+BM25 RRF is reserved for the separate prior-claims corpus.
 """
 
 from __future__ import annotations
@@ -62,87 +59,58 @@ def _build_filters(corpus: str, filters: dict) -> tuple[str, dict]:
 
 def retrieve_policy_clauses(
     conn: Any,
-    embed_fn: Callable[[list[str]], list[list[float]]],
+    embed_fn: Callable[[list[str]], list[list[float]]] | None,
     query: str,
     corpus: str,
     filters: dict | None = None,
     k: int = 10,
     final_n: int = 5,
 ) -> list[dict]:
-    """Hybrid retrieve over spec_clauses / warranty_clauses with metadata pre-filter + RRF."""
+    """Retrieve citable clauses with metadata pre-filtering and BM25 only."""
     if corpus not in ("spec", "warranty"):
         raise ValueError("corpus must be 'spec' or 'warranty'")
     table = "spec_clauses" if corpus == "spec" else "warranty_clauses"
     filters = filters or {}
     where, filter_params = _build_filters(corpus, filters)
 
-    qvec = embed_fn([query])[0]
-    vec_params = {"qvec": _vector_literal(qvec), "k": k, **filter_params}
-    vec_sql = (
-        f"SELECT clause_id, parent_clause_id, section_ref, clause_text "
-        f"FROM {table} WHERE embedding IS NOT NULL{where} "
-        f"ORDER BY embedding <=> %(qvec)s::vector LIMIT %(k)s"
-    )
     kw_params = {"q": query, "k": k, **filter_params}
     # Lexical arm: real Lakebase Search BM25 over the clause_tsv column. The bm25
     # score (<@>) is lower/more-negative for a better match, so ORDER BY ASC.
     bm25_index = _BM25_INDEX[corpus]
     kw_sql = (
-        f"SELECT clause_id, parent_clause_id, section_ref, clause_text "
+        f"SELECT concat_ws('/', "
+        f"{('grade, region, spec_edition' if corpus == 'spec' else 'product_line, region, version')}, section_ref) clause_id, "
+        f"section_ref, clause_text "
         f"FROM {table} WHERE clause_tsv IS NOT NULL{where} "
         f"ORDER BY clause_tsv <@> to_bm25query(to_tsvector('english', %(q)s), "
         f"'{bm25_index}'::regclass) ASC LIMIT %(k)s"
     )
 
     with conn.cursor() as cur:
-        cur.execute(vec_sql, vec_params)
-        vec_rows = [dict(zip([c.name for c in cur.description], r)) for r in cur.fetchall()]
         cur.execute(kw_sql, kw_params)
         kw_rows = [dict(zip([c.name for c in cur.description], r)) for r in cur.fetchall()]
-
-    by_id = {r["clause_id"]: r for r in vec_rows + kw_rows}
-    vec_ids = {r["clause_id"] for r in vec_rows}
-    kw_ids = {r["clause_id"] for r in kw_rows}
-    fused = rrf_fuse([[r["clause_id"] for r in vec_rows], [r["clause_id"] for r in kw_rows]])
-    results = []
-    for clause_id, score in fused[:final_n]:
-        row = by_id[clause_id]
-        results.append(
-            {
-                "clause_id": clause_id,
-                "parent_clause_id": row["parent_clause_id"],
-                "section_ref": row["section_ref"],
-                "clause_text": row["clause_text"],
-                "rrf_score": round(score, 6),
-                "in_vector_arm": clause_id in vec_ids,
-                "in_keyword_arm": clause_id in kw_ids,
-            }
-        )
-    return results
+    return kw_rows[:final_n]
 
 
 SIMILAR_CLAIMS_SQL = """
 WITH filtered AS (
   SELECT claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
-         claimed_amount, claim_date
-  FROM claims
+         embedding, narrative_tsv, claim_date
+  FROM prior_claims
   WHERE coil_id <> %(coil_id)s {filters}
 ),
-trgm AS (
-  SELECT claim_id, similarity(defect_narrative, %(text)s) AS s
-  FROM filtered ORDER BY s DESC LIMIT %(k)s
+dense AS (
+  SELECT claim_id, embedding <=> %(qvec)s::vector AS s
+  FROM filtered WHERE embedding IS NOT NULL ORDER BY s ASC LIMIT %(k)s
 ),
 fts AS (
   SELECT claim_id,
-         ts_rank_cd(to_tsvector('english', defect_narrative),
-                    replace(plainto_tsquery('english', %(text)s)::text, ' & ', ' | ')::tsquery) AS s
-  FROM filtered
-  WHERE to_tsvector('english', defect_narrative)
-        @@ replace(plainto_tsquery('english', %(text)s)::text, ' & ', ' | ')::tsquery
-  ORDER BY s DESC LIMIT %(k)s
+         narrative_tsv <@> to_bm25query(to_tsvector('english', %(text)s),
+                    'prior_claims_lb_bm25'::regclass) AS s
+  FROM filtered WHERE narrative_tsv IS NOT NULL ORDER BY s ASC LIMIT %(k)s
 )
 SELECT claim_id, arm, rnk FROM (
-  SELECT claim_id, 'trgm' arm, row_number() OVER (ORDER BY s DESC) rnk FROM trgm
+  SELECT claim_id, 'dense' arm, row_number() OVER (ORDER BY s ASC) rnk FROM dense
   UNION ALL
   SELECT claim_id, 'fts' arm, row_number() OVER (ORDER BY s DESC) rnk FROM fts
 ) ranked
@@ -151,19 +119,20 @@ SELECT claim_id, arm, rnk FROM (
 
 def find_similar_prior_claims(
     conn: Any,
+    embed_fn: Callable[[list[str]], list[list[float]]],
     text: str,
     coil_id: str,
     filters: dict | None = None,
     k: int = 10,
     final_n: int = 5,
 ) -> list[dict]:
-    """Advisory hybrid (trgm + FTS on narrative) over prior claims, RRF-fused.
+    """Advisory dense + BM25 hybrid over prior claims, RRF-fused.
 
     Surfaces precedent and copy-paste-narrative fraud signals. Advisory only — it
     never denies money; that is the deterministic duplicate gate's job.
     """
     filters = filters or {}
-    extra, params = [], {"coil_id": coil_id, "text": text, "k": k}
+    extra, params = [], {"coil_id": coil_id, "text": text, "k": k, "qvec": _vector_literal(embed_fn([text])[0])}
     for key in ("grade", "coating_class"):
         if filters.get(key) is not None:
             extra.append(f"AND {key} = %({key})s")

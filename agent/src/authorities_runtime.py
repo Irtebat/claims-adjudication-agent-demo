@@ -22,6 +22,7 @@ import json
 from typing import Any
 
 import authorities
+from resolution import PolicyResolver
 
 # Ordered (name, type) field lists: which fetched columns each authority reads, and
 # the plain-Python type to normalize the psycopg value to (numerics arrive as Decimal,
@@ -54,7 +55,6 @@ SPEC_PARAM_FIELDS = [
     ("width_tolerance_mm", "DOUBLE"),
     ("min_coating_g_m2", "DOUBLE"),
     ("coating_adhesion_required", "BOOLEAN"),
-    ("spec_id", "STRING"),
 ]
 WARRANTY_FIELDS = [
     ("duration_months", "INT"),
@@ -62,7 +62,7 @@ WARRANTY_FIELDS = [
     ("excluded_environments", "ARRAY<STRING>"),
     ("excluded_installations", "ARRAY<STRING>"),
     ("min_coast_distance_km", "DOUBLE"),
-    ("warranty_id", "STRING"),
+    ("freight_cap", "DOUBLE"),
 ]
 
 
@@ -91,6 +91,7 @@ class AuthorityRuntime:
 
     def __init__(self, conn: Any):
         self._conn = conn
+        self._resolver = PolicyResolver(conn)
 
     def _rows(self, statement: str, parameters: dict | None = None) -> list[dict]:
         with self._conn.cursor() as cur:
@@ -101,7 +102,7 @@ class AuthorityRuntime:
     def fetch_measured(self, coil_id: str) -> dict:
         """Coil MTC (chemistry/mechanicals/adhesion) + dimensional record, from Lakebase reference."""
         rows = self._rows(
-            "SELECT h.spec_id, m.carbon_pct, m.manganese_pct, m.yield_mpa, m.tensile_mpa, "
+            "SELECT m.carbon_pct, m.manganese_pct, m.yield_mpa, m.tensile_mpa, "
             "m.elongation_pct, m.coating_adhesion_pass, h.gauge_mm, h.ordered_gauge_mm, "
             "h.width_mm, h.ordered_width_mm, h.coating_weight_g_m2 "
             "FROM reference.mill_test_certs m "
@@ -113,50 +114,32 @@ class AuthorityRuntime:
             raise LookupError(f"no MTC/coil record for {coil_id}")
         row = rows[0]
         measured = {name: coerce(row.get(name), typ) for name, typ in MEASURED_FIELDS}
-        measured["spec_id"] = row["spec_id"]
         return measured
 
-    def fetch_spec_params(self, spec_id: str) -> dict:
-        rows = self._rows(
-            "SELECT * FROM public.spec_params WHERE spec_id = %(spec_id)s",
-            {"spec_id": spec_id},
-        )
-        if not rows:
-            raise LookupError(f"no spec_params for {spec_id}")
-        row = rows[0]
-        params = {name: coerce(row.get(name), typ) for name, typ in SPEC_PARAM_FIELDS}
-        params["spec_id"] = spec_id
-        return params
-
-    def fetch_warranty_terms(self, warranty_id: str) -> dict:
-        rows = self._rows(
-            "SELECT * FROM public.warranty_terms WHERE warranty_id = %(warranty_id)s",
-            {"warranty_id": warranty_id},
-        )
-        if not rows:
-            raise LookupError(f"no warranty_terms for {warranty_id}")
-        row = rows[0]
-        terms = {name: coerce(row.get(name), typ) for name, typ in WARRANTY_FIELDS}
-        terms["warranty_id"] = warranty_id
-        return terms
-
-    def compute_conformance(self, coil_id: str, spec_id: str | None = None) -> dict:
+    def compute_conformance(self, coil_id: str) -> dict:
         measured = self.fetch_measured(coil_id)
-        spec_id = spec_id or measured["spec_id"]
-        params = self.fetch_spec_params(spec_id)
+        resolved = self._resolver.resolve(coil_id)
+        params = resolved["spec_params"]
         return {
             "coil_id": coil_id,
-            "spec_id": spec_id,
+            "spec_provenance": resolved["spec_provenance"],
             "measured": measured,
             "params": params,
             "verdict": authorities.compute_conformance(params, measured),
         }
 
     def compute_coverage(self, claim: dict) -> dict:
-        terms = self.fetch_warranty_terms(claim["warranty_id"])
-        return {"warranty_terms": terms, "verdict": authorities.compute_coverage(terms, claim)}
+        resolved = self._resolver.resolve(claim["coil_id"])
+        terms = resolved["warranty_terms"]
+        enriched_claim = {**claim, "ship_date": resolved["coil"]["ship_date"]}
+        return {"warranty_terms": terms, "warranty_provenance": resolved["warranty_provenance"], "verdict": authorities.compute_coverage(terms, enriched_claim)}
 
     def compute_settlement(self, inputs: dict) -> dict:
-        # Settlement inputs are caller-provided (from the claim), not fetched, so this
-        # is a pure in-process call with no DB read.
-        return {"verdict": authorities.compute_settlement(inputs)}
+        resolved = self._resolver.resolve(inputs["coil_id"])
+        enriched = {
+            **inputs,
+            "shipped_tonnage": resolved["coil"]["shipped_tonnage"],
+            "unit_price": resolved["coil"]["unit_price"],
+            "freight_cap": resolved["freight_cap"],
+        }
+        return {"resolved": resolved, "verdict": authorities.compute_settlement(enriched)}

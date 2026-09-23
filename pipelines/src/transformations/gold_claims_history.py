@@ -13,7 +13,7 @@ catalog = spark.conf.get("claims.catalog")
 @dp.expect_all_or_fail(
     {
         "required_key": "claim_id IS NOT NULL",
-        "business_invariant": "claimed_amount = cast(claimed_tonnage * unit_price + claimed_freight as decimal(18,2)) AND ship_date <= claim_date AND ground_truth_label IN ('clean','in_spec_should_deny','out_of_warranty_or_environment_excluded','duplicate','over_claim','supplier_attributable','fraud_cluster')",
+        "business_invariant": "claim_date IS NOT NULL AND claimed_tonnage >= 0 AND claimed_freight >= 0",
     }
 )
 def dataset():

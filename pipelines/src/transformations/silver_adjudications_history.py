@@ -13,7 +13,7 @@ catalog = spark.conf.get("claims.catalog")
 @dp.expect_all_or_fail(
     {
         "required_key": "adjudication_id IS NOT NULL",
-        "business_invariant": "approved_amount >= 0 AND approved_amount <= claimed_amount AND ((verdict = 'APPROVE' AND disposition IS NOT NULL) OR (verdict IN ('DENY','PEND_INVESTIGATE') AND disposition IS NULL AND approved_amount = 0))",
+        "business_invariant": "approved_amount >= 0 AND approved_amount <= claimed_amount AND ((verdict = 'APPROVE' AND disposition IN ('CREDIT','REPLACEMENT','REWORK')) OR (verdict = 'DENY' AND disposition IN ('DENY','DUPLICATE') AND approved_amount = 0) OR (verdict = 'PEND' AND disposition = 'PEND_INVESTIGATE' AND approved_amount = 0))",
     }
 )
 def dataset():

@@ -10,8 +10,8 @@ from policy_schema import SOURCE_PATH, parse_policies
 def test_params_and_clauses_share_one_source(tmp_path):
     source = json.loads(SOURCE_PATH.read_text())
     changed = copy.deepcopy(source)
-    changed["standards"][0]["mechanical"]["tensile_mpa"]["max"] = 512.5
-    changed["warranty_versions"][0]["duration_months"] = 252
+    changed["specs"]["entries"][0]["mechanical"]["tensile_mpa"]["max"] = 512.5
+    changed["warranties"]["versions"][0]["duration_months"] = 252
     path = tmp_path / "source.json"
     path.write_text(json.dumps(changed))
     parsed = parse_policies(path)
@@ -21,7 +21,7 @@ def test_params_and_clauses_share_one_source(tmp_path):
     clause = next(
         c
         for c in parsed["spec_clauses"]
-        if c["parent_clause_id"] == spec["spec_id"] and c["section_ref"] == "mechanical"
+        if c["grade"] == spec["grade"] and c["region"] == spec["region"] and c["section_ref"] == "mechanical"
     )
     assert "512.5" in clause["clause_text"]
 
@@ -30,7 +30,7 @@ def test_params_and_clauses_share_one_source(tmp_path):
     coverage_clause = next(
         c
         for c in parsed["warranty_clauses"]
-        if c["parent_clause_id"] == v1["warranty_id"] and c["section_ref"] == "coverage"
+        if c["product_line"] == v1["product_line"] and c["region"] == v1["region"] and c["version"] == v1["version"] and c["section_ref"] == "coverage"
     )
     assert "252 months" in coverage_clause["clause_text"]
 
@@ -38,7 +38,8 @@ def test_params_and_clauses_share_one_source(tmp_path):
 def test_clause_identity_and_metadata():
     parsed = parse_policies()
     clauses = parsed["spec_clauses"] + parsed["warranty_clauses"]
-    assert len({c["clause_id"] for c in clauses}) == len(clauses)
+    keys = [(c.get("grade", c.get("product_line")), c["region"], c.get("spec_edition", c.get("version")), c["section_ref"]) for c in clauses]
+    assert len(set(keys)) == len(clauses)
 
     # spec params: three grades x two regions; ranges ordered; specs carry no product_line
     assert len(parsed["spec_params"]) == 6
@@ -54,6 +55,7 @@ def test_clause_identity_and_metadata():
         assert row["effective_from"] < row["effective_to"]
         assert row["duration_months"] > row["full_coverage_months"] >= 0
         assert "marine" in row["excluded_environments"]
+        assert row["freight_cap"] == 500.0
 
 
 def test_clauses_carry_numbers_identifiers_and_negation():
@@ -73,3 +75,9 @@ def test_clauses_carry_numbers_identifiers_and_negation():
 
 def test_source_path_exists():
     assert Path(SOURCE_PATH).is_file()
+
+
+def test_live_claim_schema_has_no_ground_truth_label():
+    ddl = (Path(__file__).parents[2] / "lakebase/src/setup_and_seed.py").read_text()
+    claims_ddl = ddl.split("CREATE TABLE IF NOT EXISTS claims (", 1)[1].split(");", 1)[0]
+    assert "ground_truth_label" not in claims_ddl

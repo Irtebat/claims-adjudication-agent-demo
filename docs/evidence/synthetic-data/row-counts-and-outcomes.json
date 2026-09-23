@@ -1,0 +1,14 @@
+{
+  "claims_history": 5000,
+  "adjudications_history": 5000,
+  "outcomes": [
+    {"verdict": "APPROVE", "disposition": "CREDIT", "rows": 1000},
+    {"verdict": "APPROVE", "disposition": "REPLACEMENT", "rows": 750},
+    {"verdict": "APPROVE", "disposition": "REWORK", "rows": 750},
+    {"verdict": "DENY", "disposition": "DENY", "rows": 1750},
+    {"verdict": "DENY", "disposition": "DUPLICATE", "rows": 500},
+    {"verdict": "PEND", "disposition": "PEND_INVESTIGATE", "rows": 250}
+  ],
+  "pipeline_run_id": "122092277256700",
+  "pipeline_result": "SUCCESS"
+}

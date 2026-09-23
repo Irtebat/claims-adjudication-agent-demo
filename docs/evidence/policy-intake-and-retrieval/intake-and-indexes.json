@@ -1,0 +1,8 @@
+{
+  "counts": {"spec_params": 6, "warranty_terms": 12, "spec_clauses": 18, "warranty_clauses": 36, "prior_claims": 5000, "prior_claims_embedded": 5000},
+  "clause_indexes": {"spec_clauses_lb_bm25": "lakebase_bm25", "warranty_clauses_lb_bm25": "lakebase_bm25"},
+  "clause_vector_columns": [],
+  "clause_ann_indexes": [],
+  "prior_claim_indexes": {"prior_claims_lb_ann": "lakebase_ann", "prior_claims_lb_bm25": "lakebase_bm25"},
+  "embedding": {"model": "system.ai.gte-large-en", "dimension": 1024, "normalization": "l2", "distance": "cosine"}
+}

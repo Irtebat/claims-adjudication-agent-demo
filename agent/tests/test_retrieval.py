@@ -74,19 +74,13 @@ class _FakeConn:
         return self._cursor
 
 
-def test_retrieve_policy_clauses_fuses_both_arms():
+def test_retrieve_policy_clauses_uses_bm25_only():
     cols = ["clause_id", "parent_clause_id", "section_ref", "clause_text"]
-    vector_rows = [
-        ("W-galvanized-NA-V2:coverage", "W-galvanized-NA-V2", "coverage", "Coverage lasts ..."),
-        ("W-galvanized-NA-V2:proration", "W-galvanized-NA-V2", "proration", "Full coverage ..."),
-    ]
     keyword_rows = [
         ("W-galvanized-NA-V2:exclusions", "W-galvanized-NA-V2", "exclusions", "Does not cover ..."),
         ("W-galvanized-NA-V2:coverage", "W-galvanized-NA-V2", "coverage", "Coverage lasts ..."),
     ]
-    cursor = _MultiCursor(
-        [{"rows": vector_rows, "columns": cols}, {"rows": keyword_rows, "columns": cols}]
-    )
+    cursor = _MultiCursor([{"rows": keyword_rows, "columns": cols}])
     conn = _FakeConn(cursor)
     results = retrieve_policy_clauses(
         conn,
@@ -100,10 +94,9 @@ def test_retrieve_policy_clauses_fuses_both_arms():
             "ship_date": "2018-01-01",
         },
     )
-    # coverage appears in both arms -> should fuse to the top
-    assert results[0]["clause_id"] == "W-galvanized-NA-V2:coverage"
-    assert results[0]["in_vector_arm"] and results[0]["in_keyword_arm"]
-    # both executed queries carried the folded metadata filter
+    assert results[0]["clause_id"] == "W-galvanized-NA-V2:exclusions"
+    assert "embedding" not in cursor.calls[0][0]
+    assert "lakebase_bm25" not in cursor.calls[0][0] or "to_bm25query" in cursor.calls[0][0]
     for _, params in cursor.calls:
         assert params["product_line"] == "galvanized"
         assert params["ship_date"] == "2018-01-01"
@@ -120,7 +113,7 @@ def test_find_similar_prior_claims_rrf_over_arms():
     cursor = _MultiCursor([{"rows": rows, "columns": cols}])
     conn = _FakeConn(cursor)
     results = find_similar_prior_claims(
-        conn, text="edge failure", coil_id="COIL-1", filters={"grade": "ASTM A653 CS Type B"}
+        conn, lambda texts: [[0.1] * 1024], text="edge failure", coil_id="COIL-1", filters={"grade": "ASTM A653 CS Type B"}
     )
     assert results[0]["claim_id"] == "CLM-A"  # in both arms at rank 1
     _, params = cursor.calls[0]

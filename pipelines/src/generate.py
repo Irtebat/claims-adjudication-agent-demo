@@ -153,21 +153,7 @@ base = base.selectExpr(
     "CASE WHEN m_slot >= 95 THEN concat('RING-',block) ELSE cast(NULL as string) END fraud_cluster_id",
 )
 base = base.withColumn("spec_edition", F.lit("DEMO-1990"))
-base = base.withColumn(
-    "spec_id",
-    F.concat(
-        F.when(F.col("product_idx") == 0, F.lit("S-A653"))
-        .when(F.col("product_idx") == 1, F.lit("S-A792"))
-        .otherwise(F.lit("S-EN10346")),
-        F.lit("-"),
-        F.col("region"),
-        F.lit("-DEMO-1990"),
-    ),
-)
-base = base.withColumn(
-    "warranty_id",
-    F.concat_ws("-", F.lit("W"), F.col("product_line"), F.col("region"), schedule_col("version")),
-)
+base = base.withColumn("warranty_version", schedule_col("version"))
 materials = base.filter("slot NOT BETWEEN 55 AND 64")
 write(
     "heats_coils",
@@ -176,12 +162,10 @@ write(
         "heat_no",
         "grade",
         "spec_edition",
-        "spec_id",
         "product_line",
         "coating_class",
         "region",
         "customer_id",
-        "warranty_id",
         "1.00 ordered_gauge_mm",
         "1.01 gauge_mm",
         "1200.0 ordered_width_mm",
@@ -213,29 +197,18 @@ write(
         "CASE WHEN m_slot BETWEEN 80 AND 94 THEN false ELSE true END coating_adhesion_pass",
     ),
 )
-claims = base.selectExpr(
+claims_enriched = base.selectExpr(
     "concat('CLM-',lpad(cast(i as string),7,'0')) claim_id",
     "coil_id",
-    "heat_no",
     "customer_id",
-    "grade",
-    "spec_edition",
-    "spec_id",
-    "product_line",
-    "coating_class",
-    "region",
-    "warranty_id",
     "CASE WHEN is_warranty THEN 'coating_warranty' ELSE 'material_nonconformance' END claim_type",
     "date_add(claim_date, CASE WHEN slot BETWEEN 55 AND 64 THEN 1 ELSE 0 END) claim_date",
-    "ship_date",
     "date_add(ship_date,30) install_date",
     "environment",
     "installation",
     "coast_distance_km",
     "defect_code",
     "CASE WHEN m_slot >= 95 THEN 'Identical edge failure across delivered coils; request full replacement urgently.' WHEN is_warranty THEN 'Premature red rust and perforation observed on installed roofing.' WHEN m_slot BETWEEN 80 AND 94 THEN 'Coating detaches during forming; coating voids visible along strip.' ELSE 'Tensile response during forming differs from ordered mechanical requirements.' END defect_narrative",
-    "shipped_tonnage",
-    "unit_price",
     "cast(CASE WHEN m_slot BETWEEN 65 AND 79 THEN shipped_tonnage * 1.4 ELSE shipped_tonnage END as decimal(12,3)) claimed_tonnage",
     "cast(CASE WHEN m_slot BETWEEN 65 AND 79 THEN 1800 ELSE 0 END as decimal(18,2)) claimed_freight",
     "cast(500 as decimal(18,2)) freight_cap",
@@ -243,22 +216,30 @@ claims = base.selectExpr(
     "fraud_cluster_id",
     "CASE WHEN slot BETWEEN 55 AND 64 THEN concat('CLM-',lpad(cast(material_i as string),7,'0')) ELSE cast(NULL as string) END duplicate_of_claim_id",
     "coating_supplier_id",
+    "grade", "spec_edition", "product_line", "coating_class", "region", "warranty_version", "ship_date",
+    "shipped_tonnage", "unit_price",
 )
-claims = claims.withColumn(
+claims_enriched = claims_enriched.withColumn(
     "claimed_amount",
     (F.col("claimed_tonnage") * F.col("unit_price") + F.col("claimed_freight")).cast(
         "decimal(18,2)"
     ),
 )
-write("claims_history", claims)
+write(
+    "claims_history",
+    claims_enriched.select(
+        "claim_id", "coil_id", "customer_id", "claim_type", "claim_date", "install_date",
+        "environment", "installation", "coast_distance_km", "defect_code", "defect_narrative",
+        "claimed_tonnage", "claimed_freight",
+    ),
+)
 
 # Historical outcomes are synthetic ground truth, never an LLM's calculation. The
 # duration/full-coverage months and version boundaries come from warranty_schedule
 # (the authored policy, via run.py) so an edit to the policy propagates here. The
 # authoritative live coverage math is compute_coverage/compute_settlement reading
 # the params loaded into Lakebase, never this generator.
-claims = read("claims_history")
-adj = claims.withColumn("_duration_months", schedule_col("duration_months"))
+adj = claims_enriched.withColumn("_duration_months", schedule_col("duration_months"))
 adj = adj.withColumn("_full_coverage_months", schedule_col("full_coverage_months"))
 adj = adj.withColumn("elapsed_months", F.floor(F.months_between("claim_date", "ship_date")))
 adj = adj.withColumn(
@@ -275,11 +256,12 @@ adj = adj.withColumn(
     "verdict",
     F.when(
         F.col("ground_truth_label").isin(
-            "in_spec_should_deny", "out_of_warranty_or_environment_excluded", "duplicate"
+            "in_spec_should_deny", "out_of_warranty_or_environment_excluded"
         ),
         "DENY",
     )
-    .when(F.col("ground_truth_label") == "fraud_cluster", "PEND_INVESTIGATE")
+    .when(F.col("ground_truth_label") == "duplicate", "DENY")
+    .when(F.col("ground_truth_label") == "fraud_cluster", "PEND")
     .otherwise("APPROVE"),
 )
 adj = adj.withColumn(
@@ -305,7 +287,7 @@ write(
         "claim_id",
         "verdict",
         "verdict recommended_verdict",
-        "CASE WHEN verdict = 'APPROVE' THEN CASE WHEN ground_truth_label = 'supplier_attributable' THEN 'replacement' WHEN ground_truth_label = 'over_claim' THEN 'rework' ELSE 'credit' END ELSE cast(NULL as string) END disposition",
+        "CASE WHEN ground_truth_label = 'duplicate' THEN 'DUPLICATE' WHEN verdict = 'APPROVE' THEN CASE WHEN ground_truth_label = 'supplier_attributable' THEN 'REPLACEMENT' WHEN ground_truth_label = 'over_claim' THEN 'REWORK' ELSE 'CREDIT' END WHEN verdict = 'DENY' THEN 'DENY' ELSE 'PEND_INVESTIGATE' END disposition",
         "claimed_amount",
         "approved_amount",
         "CASE WHEN verdict = 'APPROVE' THEN shipped_tonnage ELSE cast(NULL as decimal(12,3)) END covered_tonnage",
@@ -315,8 +297,10 @@ write(
         "defect_code defect_failure_mode_code",
         "false override_flag",
         "'FINAL' decision_status",
+        "duplicate_of_claim_id",
+        "fraud_cluster_id",
         "concat('Synthetic adjudication: ',ground_truth_label) rationale",
-        "CASE WHEN claim_type = 'coating_warranty' THEN array(concat(warranty_id, ':coverage'),concat(warranty_id, ':exclusions'),concat(warranty_id, ':proration')) ELSE array(concat(spec_id, ':mechanical'),concat(spec_id, ':dimensions')) END cited_clause_ids",
+        "CASE WHEN claim_type = 'coating_warranty' THEN array(concat_ws('/',product_line,region,warranty_version,'coverage'),concat_ws('/',product_line,region,warranty_version,'exclusions')) ELSE array(concat_ws('/',grade,region,spec_edition,'mechanical'),concat_ws('/',grade,region,spec_edition,'dimensions')) END cited_clause_ids",
         "cast(date_add(claim_date, 2) as timestamp) finalized_at",
     ),
 )

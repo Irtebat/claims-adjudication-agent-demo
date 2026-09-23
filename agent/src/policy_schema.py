@@ -43,12 +43,13 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
     """
     source, digest = _load(path)
     notice = source["notice"]
-    regions = source["regions"]
-    coverage = source["coverage"]
+    specs = source["specs"]
+    warranties = source["warranties"]
+    coverage = warranties["coverage"]
 
     spec_params: list[dict] = []
     spec_clauses: list[dict] = []
-    for spec in source["standards"]:
+    for spec in specs["entries"]:
         chem = spec["chemistry"]
         mech = spec["mechanical"]
         carbon = _range(chem["carbon_pct"])
@@ -56,12 +57,9 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
         yield_r = _range(mech["yield_mpa"])
         tensile = _range(mech["tensile_mpa"])
         elong = _range(mech["elongation_pct"])
-        for region in regions:
-            spec_id = f"{spec['spec_id']}-{region}-{spec['spec_edition']}"
+        for region in specs["regions"]:
             spec_params.append(
                 {
-                    "spec_id": spec_id,
-                    "base_spec_id": spec["spec_id"],
                     "grade": spec["grade"],
                     "spec_edition": spec["spec_edition"],
                     "region": region,
@@ -97,9 +95,6 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
             for section in SPEC_SECTIONS:
                 spec_clauses.append(
                     {
-                        "clause_id": f"{spec_id}:{section}",
-                        "parent_clause_id": spec_id,
-                        "spec_id": spec_id,
                         "section_ref": section,
                         "grade": spec["grade"],
                         "spec_edition": spec["spec_edition"],
@@ -112,16 +107,14 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
 
     warranty_terms: list[dict] = []
     warranty_clauses: list[dict] = []
-    for product in source["products"]:
-        for version in source["warranty_versions"]:
+    for product in warranties["products"]:
+        for version in warranties["versions"]:
             duration = int(version["duration_months"])
             full = int(version["full_coverage_months"])
             min_coating = float(product["min_coating_g_m2"])
-            for region in regions:
-                warranty_id = f"W-{product['product_line']}-{region}-{version['version']}"
+            for region in warranties["regions"]:
                 warranty_terms.append(
                     {
-                        "warranty_id": warranty_id,
                         "product_line": product["product_line"],
                         "coating_class": product["coating_class"],
                         "region": region,
@@ -136,6 +129,7 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
                         "excluded_installations": list(coverage["excluded_installations"]),
                         "proration_method": coverage["proration_method"],
                         "freight_covered": bool(coverage["freight_covered"]),
+                        "freight_cap": float(coverage["freight_cap"]),
                         "source_sha256": digest,
                     }
                 )
@@ -153,16 +147,14 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
                 for section in WARRANTY_SECTIONS:
                     warranty_clauses.append(
                         {
-                            "clause_id": f"{warranty_id}:{section}",
-                            "parent_clause_id": warranty_id,
-                            "warranty_id": warranty_id,
                             "section_ref": section,
                             "product_line": product["product_line"],
                             "coating_class": product["coating_class"],
                             "region": region,
+                            "version": version["version"],
                             "effective_from": version["effective_from"],
                             "effective_to": version["effective_to"],
-                            "clause_text": f"{notice} {warranty_id}: {texts[section]}",
+                            "clause_text": f"{notice} {product['product_line']} {version['version']}: {texts[section]}",
                             "source_sha256": digest,
                         }
                     )
