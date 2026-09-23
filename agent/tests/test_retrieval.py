@@ -103,19 +103,28 @@ def test_retrieve_policy_clauses_uses_bm25_only():
 
 
 def test_find_similar_prior_claims_rrf_over_arms():
-    cols = ["claim_id", "arm", "rnk"]
+    cols = ["claim_id", "verdict", "approved_amount", "arm", "rnk"]
     rows = [
-        ("CLM-A", "trgm", 1),
-        ("CLM-B", "trgm", 2),
-        ("CLM-A", "fts", 1),
-        ("CLM-C", "fts", 2),
+        ("CLM-A", "APPROVE", 1250.0, "dense", 1),
+        ("CLM-B", "DENY", 0.0, "dense", 2),
+        ("CLM-A", "APPROVE", 1250.0, "fts", 1),
+        ("CLM-C", "PEND", 0.0, "fts", 2),
     ]
     cursor = _MultiCursor([{"rows": rows, "columns": cols}])
     conn = _FakeConn(cursor)
     results = find_similar_prior_claims(
-        conn, lambda texts: [[0.1] * 1024], text="edge failure", coil_id="COIL-1", filters={"grade": "ASTM A653 CS Type B"}
+        conn,
+        lambda texts: [[0.1] * 1024],
+        text="edge failure",
+        coil_id="COIL-1",
+        filters={"grade": "ASTM A653 CS Type B"},
     )
-    assert results[0]["claim_id"] == "CLM-A"  # in both arms at rank 1
+    assert results[0] == {
+        "claim_id": "CLM-A",
+        "rrf_score": 0.032787,
+        "verdict": "APPROVE",
+        "approved_amount": 1250.0,
+    }
     _, params = cursor.calls[0]
     assert params["coil_id"] == "COIL-1"
     assert params["grade"] == "ASTM A653 CS Type B"

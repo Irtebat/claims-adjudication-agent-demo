@@ -55,11 +55,14 @@ CREATE TABLE IF NOT EXISTS prior_claims (
   claim_id text PRIMARY KEY, coil_id text NOT NULL, grade text NOT NULL,
   coating_class text NOT NULL, defect_code text NOT NULL, defect_narrative text NOT NULL,
   claim_date date NOT NULL, verdict text NOT NULL, approved_amount numeric(18,2),
-  embedding vector(1024), narrative_tsv tsvector NOT NULL
+  embedding vector(1024), narrative_tsv tsvector NOT NULL,
+  data_provenance text NOT NULL
 );
 ALTER TABLE adjudications
   ADD COLUMN IF NOT EXISTS duplicate_of_claim_id text,
   ADD COLUMN IF NOT EXISTS fraud_cluster_id text;
+ALTER TABLE prior_claims
+  ADD COLUMN IF NOT EXISTS data_provenance text;
 ALTER TABLE claims
   DROP COLUMN IF EXISTS heat_no, DROP COLUMN IF EXISTS grade,
   DROP COLUMN IF EXISTS spec_edition,
@@ -108,17 +111,40 @@ ALTER TABLE claims_pending REPLICA IDENTITY FULL;
 """
 
 CLAIM_COLUMNS = [
-    "claim_id", "coil_id", "customer_id", "claim_type", "claim_date", "install_date", "environment",
-    "installation", "coast_distance_km", "defect_code", "defect_narrative",
-    "claimed_tonnage", "claimed_freight",
+    "claim_id",
+    "coil_id",
+    "customer_id",
+    "claim_type",
+    "claim_date",
+    "install_date",
+    "environment",
+    "installation",
+    "coast_distance_km",
+    "defect_code",
+    "defect_narrative",
+    "claimed_tonnage",
+    "claimed_freight",
 ]
 ADJUDICATION_COLUMNS = [
-    "adjudication_id", "claim_id", "verdict", "recommended_verdict",
-    "disposition", "claimed_amount", "approved_amount", "covered_tonnage",
-    "freight_covered", "supplier_attributable", "recovery_supplier_id",
-    "defect_failure_mode_code", "override_flag", "decision_status", "rationale",
-    "cited_clause_ids", "finalized_at",
-    "duplicate_of_claim_id", "fraud_cluster_id",
+    "adjudication_id",
+    "claim_id",
+    "verdict",
+    "recommended_verdict",
+    "disposition",
+    "claimed_amount",
+    "approved_amount",
+    "covered_tonnage",
+    "freight_covered",
+    "supplier_attributable",
+    "recovery_supplier_id",
+    "defect_failure_mode_code",
+    "override_flag",
+    "decision_status",
+    "rationale",
+    "cited_clause_ids",
+    "finalized_at",
+    "duplicate_of_claim_id",
+    "fraud_cluster_id",
 ]
 
 
@@ -135,7 +161,9 @@ def upsert_sql(table, columns, key):
 def rows(table, columns):
     for row in spark.table(table).select(*columns).toLocalIterator():
         values = row.asDict(recursive=True)
-        yield tuple(values[column] for column in columns) + ("synthetic_wave_2_baseline",)
+        yield tuple(values[column] for column in columns) + (
+            "synthetic_wave_2_baseline",
+        )
 
 
 with psycopg.connect(
@@ -154,6 +182,19 @@ with psycopg.connect(
             "DELETE FROM adjudications WHERE data_provenance = %s",
             ("synthetic_wave_2_baseline",),
         )
+        # Backfill provenance for corpus rows created before the column existed,
+        # then apply the same fixture-scoped replacement contract.
+        cursor.execute(
+            """
+            UPDATE prior_claims p SET data_provenance = c.data_provenance
+            FROM claims c
+            WHERE p.claim_id = c.claim_id AND p.data_provenance IS NULL
+            """
+        )
+        cursor.execute(
+            "DELETE FROM prior_claims WHERE data_provenance = %s",
+            ("synthetic_wave_2_baseline",),
+        )
         cursor.execute(
             "DELETE FROM claims WHERE data_provenance = %s",
             ("synthetic_wave_2_baseline",),
@@ -170,17 +211,19 @@ with psycopg.connect(
             """
             INSERT INTO prior_claims
               (claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
-               claim_date, verdict, approved_amount, narrative_tsv)
+               claim_date, verdict, approved_amount, narrative_tsv, data_provenance)
             SELECT c.claim_id, c.coil_id, h.grade, h.coating_class, c.defect_code,
                    c.defect_narrative, c.claim_date, a.verdict, a.approved_amount,
-                   to_tsvector('english', c.defect_narrative)
+                   to_tsvector('english', c.defect_narrative), c.data_provenance
             FROM claims c JOIN adjudications a USING (claim_id)
             JOIN reference.heats_coils h USING (coil_id)
+            WHERE a.decision_status = 'FINAL'
             ON CONFLICT (claim_id) DO UPDATE SET
               defect_narrative=EXCLUDED.defect_narrative,
               narrative_tsv=EXCLUDED.narrative_tsv,
               verdict=EXCLUDED.verdict,
-              approved_amount=EXCLUDED.approved_amount
+              approved_amount=EXCLUDED.approved_amount,
+              data_provenance=EXCLUDED.data_provenance
             """
         )
         cursor.execute("SELECT count(*) FROM claims")
@@ -223,7 +266,9 @@ result = {
     "claims": claim_count,
     "adjudications": adjudication_count,
     "source_claims": spark.table(f"`{catalog}`.gold.claims_history").count(),
-    "source_adjudications": spark.table(f"`{catalog}`.gold.adjudications_history").count(),
+    "source_adjudications": spark.table(
+        f"`{catalog}`.gold.adjudications_history"
+    ).count(),
     "extensions": extensions,
     "native_cdf_enabled": native_cdf_enabled,
     "provenance": "synthetic_wave_2_baseline",

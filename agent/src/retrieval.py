@@ -95,24 +95,26 @@ def retrieve_policy_clauses(
 SIMILAR_CLAIMS_SQL = """
 WITH filtered AS (
   SELECT claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
-         embedding, narrative_tsv, claim_date
+         embedding, narrative_tsv, claim_date, verdict, approved_amount
   FROM prior_claims
   WHERE coil_id <> %(coil_id)s {filters}
 ),
 dense AS (
-  SELECT claim_id, embedding <=> %(qvec)s::vector AS s
+  SELECT claim_id, verdict, approved_amount, embedding <=> %(qvec)s::vector AS s
   FROM filtered WHERE embedding IS NOT NULL ORDER BY s ASC LIMIT %(k)s
 ),
 fts AS (
-  SELECT claim_id,
+  SELECT claim_id, verdict, approved_amount,
          narrative_tsv <@> to_bm25query(to_tsvector('english', %(text)s),
                     'prior_claims_lb_bm25'::regclass) AS s
   FROM filtered WHERE narrative_tsv IS NOT NULL ORDER BY s ASC LIMIT %(k)s
 )
-SELECT claim_id, arm, rnk FROM (
-  SELECT claim_id, 'dense' arm, row_number() OVER (ORDER BY s ASC) rnk FROM dense
+SELECT claim_id, verdict, approved_amount, arm, rnk FROM (
+  SELECT claim_id, verdict, approved_amount, 'dense' arm,
+         row_number() OVER (ORDER BY s ASC) rnk FROM dense
   UNION ALL
-  SELECT claim_id, 'fts' arm, row_number() OVER (ORDER BY s DESC) rnk FROM fts
+  SELECT claim_id, verdict, approved_amount, 'fts' arm,
+         row_number() OVER (ORDER BY s ASC) rnk FROM fts
 ) ranked
 """
 
@@ -132,7 +134,10 @@ def find_similar_prior_claims(
     never denies money; that is the deterministic duplicate gate's job.
     """
     filters = filters or {}
-    extra, params = [], {"coil_id": coil_id, "text": text, "k": k, "qvec": _vector_literal(embed_fn([text])[0])}
+    extra, params = (
+        [],
+        {"coil_id": coil_id, "text": text, "k": k, "qvec": _vector_literal(embed_fn([text])[0])},
+    )
     for key in ("grade", "coating_class"):
         if filters.get(key) is not None:
             extra.append(f"AND {key} = %({key})s")
@@ -143,8 +148,16 @@ def find_similar_prior_claims(
         rows = [dict(zip([c.name for c in cur.description], r)) for r in cur.fetchall()]
 
     arms: dict[str, list[tuple[int, str]]] = {}
+    outcomes = {}
     for row in rows:
         arms.setdefault(row["arm"], []).append((row["rnk"], row["claim_id"]))
+        outcomes[row["claim_id"]] = {
+            "verdict": row["verdict"],
+            "approved_amount": row["approved_amount"],
+        }
     rankings = [[cid for _, cid in sorted(v)] for v in arms.values()]
     fused = rrf_fuse(rankings)
-    return [{"claim_id": cid, "rrf_score": round(score, 6)} for cid, score in fused[:final_n]]
+    return [
+        {"claim_id": cid, "rrf_score": round(score, 6), **outcomes[cid]}
+        for cid, score in fused[:final_n]
+    ]

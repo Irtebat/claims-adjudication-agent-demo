@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-09-23T17:02:46.814136+00:00",
+  "captured_at_utc": "2026-09-23T20:51:43.729150+00:00",
   "clause_bm25": {
     "query": "tensile mechanical requirements",
     "node_type": "Index Scan",
@@ -8,16 +8,17 @@
     "forced_seqscan_off_for_small_corpus_plan_proof": true
   },
   "prior_claim_hybrid": {
+    "captured_at_utc": "2026-09-23T20:51:06.048192+00:00",
     "query": "coating detaches during forming",
     "filter": {"grade": "ASTM A653 CS Type B"},
     "dense_plan": {"node_type": "Index Scan", "relation": "prior_claims", "index_name": "prior_claims_lb_ann"},
     "bm25_plan": {"node_type": "Index Scan", "relation": "prior_claims", "index_name": "prior_claims_lb_bm25"},
     "results": [
-      {"claim_id": "CLM-0001980", "rrf_score": 0.030579, "grade": "ASTM A653 CS Type B", "coating_class": "G90", "defect_code": "COATING_VOID", "defect_narrative": "Coating detaches during forming; coating voids visible along strip."},
-      {"claim_id": "CLM-0001890", "rrf_score": 0.030303, "grade": "ASTM A653 CS Type B", "coating_class": "G90", "defect_code": "COATING_VOID", "defect_narrative": "Coating detaches during forming; coating voids visible along strip."},
-      {"claim_id": "CLM-0001983", "rrf_score": 0.030118, "grade": "ASTM A653 CS Type B", "coating_class": "G90", "defect_code": "COATING_VOID", "defect_narrative": "Coating detaches during forming; coating voids visible along strip."},
-      {"claim_id": "CLM-0001893", "rrf_score": 0.029851, "grade": "ASTM A653 CS Type B", "coating_class": "G90", "defect_code": "COATING_VOID", "defect_narrative": "Coating detaches during forming; coating voids visible along strip."},
-      {"claim_id": "CLM-0001986", "rrf_score": 0.016393, "grade": "ASTM A653 CS Type B", "coating_class": "G90", "defect_code": "COATING_VOID", "defect_narrative": "Coating detaches during forming; coating voids visible along strip."}
+      {"claim_id": "CLM-0000180", "rrf_score": 0.032787, "verdict": "APPROVE", "approved_amount": 7300.0},
+      {"claim_id": "CLM-0000189", "rrf_score": 0.032258, "verdict": "APPROVE", "approved_amount": 10090.0},
+      {"claim_id": "CLM-0000087", "rrf_score": 0.031746, "verdict": "APPROVE", "approved_amount": 11470.0},
+      {"claim_id": "CLM-0000093", "rrf_score": 0.03125, "verdict": "APPROVE", "approved_amount": 7830.0},
+      {"claim_id": "CLM-0000183", "rrf_score": 0.030769, "verdict": "APPROVE", "approved_amount": 8230.0}
     ]
   }
 }

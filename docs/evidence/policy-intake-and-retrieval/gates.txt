@@ -1,13 +1,16 @@
-Captured 2026-09-23
+Captured 2026-09-24 IST
 
 uv run --with pytest --with pyyaml --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' pytest agent/tests pipelines/tests
 collected 57 cases: 55 passed, 2 skipped
 
-PATH="../workstream-a/.venv/bin:$PATH" ruff check agent
+uv run --with ruff ruff check agent
 All checks passed!
 
-PATH="../workstream-a/.venv/bin:$PATH" ruff check pipelines
+uv run --with ruff ruff check pipelines
 All checks passed!
+
+uv run --with ruff ruff format --check agent/src/retrieval.py agent/tests/test_retrieval.py lakebase/src/setup_and_seed.py pipelines/tests/test_bootstrap_idempotency.py
+4 files already formatted
 
 databricks bundle validate --strict -t prod --profile fe-bar  (pipelines)
 Validation OK!
@@ -17,3 +20,9 @@ Validation OK!
 
 databricks bundle validate --strict -t prod --profile fe-bar  (agent)
 Validation OK!
+
+databricks bundle run setup_and_seed -t prod --profile fe-bar  (lakebase)
+run 78284721156195: TERMINATED SUCCESS; claims=5000, adjudications=5000
+
+uv run --with mypy --with types-PyYAML mypy --config-file pipelines/pyproject.toml pipelines/run.py pipelines/evidence.py pipelines/src/checks.py
+Known pre-existing failure outside this change: pipelines/run.py:44 has two var-annotated errors.
