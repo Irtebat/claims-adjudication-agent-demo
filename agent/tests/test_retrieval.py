@@ -1,11 +1,21 @@
 """RRF fusion, metadata pre-filters folded into both arms, parent-clause hybrid retrieval."""
 
+from pathlib import Path
+
 from retrieval import (
     _build_filters,
     find_similar_prior_claims,
     retrieve_policy_clauses,
     rrf_fuse,
 )
+
+
+def test_similar_claims_rank_assignments_are_distance_ascending():
+    source = (Path(__file__).parents[1] / "src" / "retrieval.py").read_text()
+    rank_assignments = source.split("SELECT claim_id, verdict, approved_amount, arm, rnk FROM (")[1]
+
+    assert rank_assignments.count("row_number() OVER (ORDER BY s ASC)") == 2
+    assert "row_number() OVER (ORDER BY s DESC)" not in rank_assignments
 
 
 def test_rrf_fuse_orders_by_reciprocal_rank():

@@ -92,6 +92,8 @@ def retrieve_policy_clauses(
     return kw_rows[:final_n]
 
 
+# Both <=> cosine distance and <@> BM25 return smaller scores for better matches,
+# so candidate selection and row-number rank assignment intentionally use ASC.
 SIMILAR_CLAIMS_SQL = """
 WITH filtered AS (
   SELECT claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
