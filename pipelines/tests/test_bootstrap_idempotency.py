@@ -45,6 +45,7 @@ def test_history_uses_native_cdf_auto_cdc_scd2():
         assert "_pg_change_type = 'delete'" in source
         assert '!= "update_preimage"' in source
         assert "stored_as_scd_type=2" in source
+        assert "identifier.replace('`', '``')" in source
         for column in metadata:
             assert f'"{column}"' in source
 

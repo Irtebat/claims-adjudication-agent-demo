@@ -8,7 +8,10 @@ spark = SparkSession.getActiveSession()
 catalog = spark.conf.get("claims.catalog")
 
 
-cdf_table = spark.conf.get("claims.cdf_adjudications_table")
+cdf_table = ".".join(
+    f"`{identifier.replace('`', '``')}`"
+    for identifier in spark.conf.get("claims.cdf_adjudications_table").split(".")
+)
 
 
 @dp.temporary_view(name="adjudications_cdf_changes")
