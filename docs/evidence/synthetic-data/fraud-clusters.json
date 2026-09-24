@@ -1,6 +1,6 @@
 {
-  "captured_at_utc": "2026-09-22T09:39:32.035057+00:00",
-  "query": "SELECT fraud_cluster_id, count(*) claims, count(DISTINCT customer_id) customers, count(DISTINCT heat_no) heats FROM `fe-bar-ir`.gold.claims_history WHERE ground_truth_label='fraud_cluster' GROUP BY fraud_cluster_id ORDER BY fraud_cluster_id",
+  "captured_at_utc": "2026-09-23T17:01:50.175144+00:00",
+  "query": "SELECT a.fraud_cluster_id, count(*) claims, count(DISTINCT c.customer_id) customers, count(DISTINCT h.heat_no) heats FROM `fe-bar-ir`.gold.adjudications_history a JOIN `fe-bar-ir`.gold.claims_history c USING(claim_id) JOIN `fe-bar-ir`.silver.heats_coils h USING(coil_id) WHERE a.fraud_cluster_id IS NOT NULL GROUP BY a.fraud_cluster_id ORDER BY a.fraud_cluster_id",
   "result": [
     {
       "claims": "5",

@@ -87,7 +87,7 @@ def main():
                 "duration_months": v["duration_months"],
                 "full_coverage_months": v["full_coverage_months"],
             }
-            for v in policy_source["warranty_versions"]
+            for v in policy_source["warranties"]["versions"]
         ]
     )
     env = dict(

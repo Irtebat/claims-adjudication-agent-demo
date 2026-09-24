@@ -1,11 +1,21 @@
 """RRF fusion, metadata pre-filters folded into both arms, parent-clause hybrid retrieval."""
 
+from pathlib import Path
+
 from retrieval import (
     _build_filters,
     find_similar_prior_claims,
     retrieve_policy_clauses,
     rrf_fuse,
 )
+
+
+def test_similar_claims_rank_assignments_are_distance_ascending():
+    source = (Path(__file__).parents[1] / "src" / "retrieval.py").read_text()
+    rank_assignments = source.split("SELECT claim_id, verdict, approved_amount, arm, rnk FROM (")[1]
+
+    assert rank_assignments.count("row_number() OVER (ORDER BY s ASC)") == 2
+    assert "row_number() OVER (ORDER BY s DESC)" not in rank_assignments
 
 
 def test_rrf_fuse_orders_by_reciprocal_rank():
@@ -74,19 +84,13 @@ class _FakeConn:
         return self._cursor
 
 
-def test_retrieve_policy_clauses_fuses_both_arms():
-    cols = ["clause_id", "parent_clause_id", "section_ref", "clause_text"]
-    vector_rows = [
-        ("W-galvanized-NA-V2:coverage", "W-galvanized-NA-V2", "coverage", "Coverage lasts ..."),
-        ("W-galvanized-NA-V2:proration", "W-galvanized-NA-V2", "proration", "Full coverage ..."),
-    ]
+def test_retrieve_policy_clauses_uses_bm25_only():
+    cols = ["citation_key", "section_ref", "clause_text"]
     keyword_rows = [
-        ("W-galvanized-NA-V2:exclusions", "W-galvanized-NA-V2", "exclusions", "Does not cover ..."),
-        ("W-galvanized-NA-V2:coverage", "W-galvanized-NA-V2", "coverage", "Coverage lasts ..."),
+        ("galvanized/NA/V2/exclusions", "exclusions", "Does not cover ..."),
+        ("galvanized/NA/V2/coverage", "coverage", "Coverage lasts ..."),
     ]
-    cursor = _MultiCursor(
-        [{"rows": vector_rows, "columns": cols}, {"rows": keyword_rows, "columns": cols}]
-    )
+    cursor = _MultiCursor([{"rows": keyword_rows, "columns": cols}])
     conn = _FakeConn(cursor)
     results = retrieve_policy_clauses(
         conn,
@@ -100,29 +104,37 @@ def test_retrieve_policy_clauses_fuses_both_arms():
             "ship_date": "2018-01-01",
         },
     )
-    # coverage appears in both arms -> should fuse to the top
-    assert results[0]["clause_id"] == "W-galvanized-NA-V2:coverage"
-    assert results[0]["in_vector_arm"] and results[0]["in_keyword_arm"]
-    # both executed queries carried the folded metadata filter
+    assert results[0]["citation_key"] == "galvanized/NA/V2/exclusions"
+    assert "embedding" not in cursor.calls[0][0]
+    assert "lakebase_bm25" not in cursor.calls[0][0] or "to_bm25query" in cursor.calls[0][0]
     for _, params in cursor.calls:
         assert params["product_line"] == "galvanized"
         assert params["ship_date"] == "2018-01-01"
 
 
 def test_find_similar_prior_claims_rrf_over_arms():
-    cols = ["claim_id", "arm", "rnk"]
+    cols = ["claim_id", "verdict", "approved_amount", "arm", "rnk"]
     rows = [
-        ("CLM-A", "trgm", 1),
-        ("CLM-B", "trgm", 2),
-        ("CLM-A", "fts", 1),
-        ("CLM-C", "fts", 2),
+        ("CLM-A", "APPROVE", 1250.0, "dense", 1),
+        ("CLM-B", "DENY", 0.0, "dense", 2),
+        ("CLM-A", "APPROVE", 1250.0, "fts", 1),
+        ("CLM-C", "PEND", 0.0, "fts", 2),
     ]
     cursor = _MultiCursor([{"rows": rows, "columns": cols}])
     conn = _FakeConn(cursor)
     results = find_similar_prior_claims(
-        conn, text="edge failure", coil_id="COIL-1", filters={"grade": "ASTM A653 CS Type B"}
+        conn,
+        lambda texts: [[0.1] * 1024],
+        text="edge failure",
+        coil_id="COIL-1",
+        filters={"grade": "ASTM A653 CS Type B"},
     )
-    assert results[0]["claim_id"] == "CLM-A"  # in both arms at rank 1
+    assert results[0] == {
+        "claim_id": "CLM-A",
+        "rrf_score": 0.032787,
+        "verdict": "APPROVE",
+        "approved_amount": 1250.0,
+    }
     _, params = cursor.calls[0]
     assert params["coil_id"] == "COIL-1"
     assert params["grade"] == "ASTM A653 CS Type B"

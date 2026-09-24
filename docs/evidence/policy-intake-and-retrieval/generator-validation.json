@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-09-23T17:00:10Z",
+  "profile": "fe-bar",
+  "job_run_id": "492311846242682",
+  "result": "TERMINATED SUCCESS",
+  "mode": "validate_only_no_data_landed",
+  "tables": {
+    "customers": {"rows": 200, "serialized_bytes": 25185},
+    "suppliers": {"rows": 12, "serialized_bytes": 1036},
+    "defect_codes": {"rows": 3, "serialized_bytes": 294},
+    "heats_coils": {"rows": 4500, "serialized_bytes": 2532734},
+    "mill_test_certs": {"rows": 4500, "serialized_bytes": 1044750},
+    "claims_history": {"rows": 5000, "serialized_bytes": 2077750},
+    "adjudications_history": {"rows": 5000, "serialized_bytes": 2692396}
+  },
+  "integrity_checks_passed": 10
+}

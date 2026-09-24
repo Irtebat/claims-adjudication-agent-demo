@@ -1,6 +1,6 @@
 # agent
 
-Policy intake, the deterministic adjudication authorities, hybrid clause
+Policy intake, deterministic adjudication authorities, clause citation, and prior-claim hybrid
 retrieval, duplicate detection, and the fraud-graph risk job. **Deterministic
 tools decide money; the LLM only informs and cites** (PLAN §3, §6). The Mosaic AI
 `ResponsesAgent` that orchestrates these tools is a later workstream; this package
@@ -28,11 +28,11 @@ clause text.
 | File | Role |
 | --- | --- |
 | `src/gateway_embed.py` | Shared GTE embedding helper via the Unity Gateway model service `system.ai.gte-large-en` (`/ai-gateway/mlflow/v1/embeddings`); OAuth token from the SDK refreshed per batch, ~16/batch, 429 retry with backoff + Retry-After, 1024-dim L2-normalized (cosine). No `dimensions` param; `ai_query` deliberately not used. Used by BOTH intake and retrieval. |
-| `src/policy_intake.py` | **Sole** creator + populator of the four policy tables in Lakebase: creates `pg_trgm`/`vector`/`lakebase_vector`/`lakebase_text` extensions (raises if any fails — no silent fallback), the param + clause tables (`vector(1024)` + `tsvector`), embeds clauses, upserts + **reconciles** stale rows in a transaction, then builds the real Lakebase Search indexes (`lakebase_ann`, `lakebase_bm25`) **after** backfill and **verifies** the actual access method from the catalog. |
+| `src/policy_intake.py` | **Sole** creator + populator of the four natural-key policy tables; clause tables contain `tsvector` and verified `lakebase_bm25` indexes only. |
 | `src/authorities.py` | Pure `compute_conformance` (incl. gauge + width) / `compute_coverage` / `compute_settlement`. **The single source of the money math**, exercised by the offline test suite and called in-process by the runtime adapter — no longer deployed/registered as UC functions (that added ~5-6 warehouse round-trips per adjudication for math that runs in <1µs in-process). |
 | `src/authorities_runtime.py` | Runtime adapter: fetches the structured params (`public.spec_params` / `public.warranty_terms`) and the coil MTC (`reference.heats_coils` / `reference.mill_test_certs`) over the SAME Lakebase psycopg (5432) path as retrieval/duplicate (`db.py`), with parameterized queries, then calls the `authorities.py` functions **in-process**. No warehouse / Statement Execution API on the decision path. |
 | `src/duplicate.py` | `check_duplicate_claim` — deterministic record linkage (block by coil + date window, match on defect/amount/tonnage + `pg_trgm` narrative). A leakage gate that can deny money. |
-| `src/retrieval.py` | `retrieve_policy_clauses` (RRF hybrid: `lakebase_ann` dense `<=>` + `lakebase_bm25` lexical `<@> to_bm25query`, metadata filters folded into both arms) and `find_similar_prior_claims` (advisory). Runs at agent/app runtime (psycopg + gateway), NOT as a UC Python UDF. |
+| `src/retrieval.py` | Metadata-filtered BM25 clause citation plus dense+BM25 RRF over the separate `prior_claims` index. Runs at agent/app runtime (psycopg + gateway), not as a UC Python UDF. |
 | `src/fraud_graph.py` + `src/fraud_graph_job.py` | Connected-components cluster risk over shared **heats**, scored by customer concentration → `gold.customer_heat_risk`. |
 | `src/db.py` | Lakebase psycopg connection with an SDK OAuth credential. |
 

@@ -6,7 +6,7 @@ INCOMING = {
     "claim_id": "CLM-0000060",
     "coil_id": "COIL-0000005",
     "defect_code": "MECH_TENSILE",
-    "claimed_amount": 12345.67,
+    "claimed_freight": 500.0,
     "claimed_tonnage": 12.345,
     "claim_date": "2026-01-02",
     "defect_narrative": "Tensile response during forming differs from ordered requirements.",
@@ -15,7 +15,7 @@ CANDIDATE = {
     "claim_id": "CLM-0000005",
     "coil_id": "COIL-0000005",
     "defect_code": "MECH_TENSILE",
-    "claimed_amount": 12345.67,
+    "claimed_freight": 500.0,
     "claimed_tonnage": 12.345,
     "claim_date": "2026-01-01",
 }
@@ -25,6 +25,7 @@ def test_true_duplicate_detected():
     decision = duplicate_decision(INCOMING, CANDIDATE, narrative_similarity=1.0)
     assert decision["is_duplicate"] is True
     assert decision["duplicate_of_claim_id"] == "CLM-0000005"
+    assert (decision["verdict"], decision["disposition"], decision["decision_status"]) == ("DENY", "DUPLICATE", "FINAL")
 
 
 def test_low_narrative_similarity_is_not_duplicate():
@@ -84,13 +85,13 @@ def test_check_duplicate_claim_applies_rule_over_blocking_candidates():
         "claim_id",
         "coil_id",
         "defect_code",
-        "claimed_amount",
+        "claimed_freight",
         "claimed_tonnage",
         "claim_date",
         "narrative_similarity",
     ]
     rows = [
-        ("CLM-0000005", "COIL-0000005", "MECH_TENSILE", 12345.67, 12.345, "2026-01-01", 1.0),
+        ("CLM-0000005", "COIL-0000005", "MECH_TENSILE", 500.0, 12.345, "2026-01-01", 1.0),
     ]
     conn = _FakeConn(rows, columns)
     result = check_duplicate_claim(conn, INCOMING)

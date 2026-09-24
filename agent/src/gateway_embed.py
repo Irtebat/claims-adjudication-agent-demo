@@ -14,6 +14,7 @@ retry/backoff are unit-testable without the network.
 
 from __future__ import annotations
 
+import http.client
 import json
 import math
 import random
@@ -124,6 +125,11 @@ def embed_texts(
                 if err.code == 429 and attempt < max_retries:
                     retry_after = parse_retry_after(err.headers.get("Retry-After"))
                     sleep_fn(backoff_delay(attempt, retry_after))
+                    continue
+                raise
+            except (http.client.IncompleteRead, http.client.RemoteDisconnected, urllib.error.URLError):
+                if attempt < max_retries:
+                    sleep_fn(backoff_delay(attempt, None))
                     continue
                 raise
     return out

@@ -48,12 +48,12 @@ def duplicate_decision(
     same_defect = incoming.get("defect_code") == candidate.get("defect_code")
     if not same_defect:
         reasons.append("different_defect_code")
-    amount_close = (
-        abs(float(incoming["claimed_amount"]) - float(candidate["claimed_amount"]))
-        <= cfg["amount_tolerance"]
-    )
-    if not amount_close:
-        reasons.append("amount_differs")
+    freight_close = abs(
+        float(incoming.get("claimed_freight", 0))
+        - float(candidate.get("claimed_freight", 0))
+    ) <= cfg["amount_tolerance"]
+    if not freight_close:
+        reasons.append("freight_differs")
     tonnage_close = (
         abs(float(incoming["claimed_tonnage"]) - float(candidate["claimed_tonnage"]))
         <= cfg["tonnage_tolerance"]
@@ -68,7 +68,7 @@ def duplicate_decision(
         same_coil
         and within_window
         and same_defect
-        and amount_close
+        and freight_close
         and tonnage_close
         and narrative_match
     )
@@ -78,13 +78,16 @@ def duplicate_decision(
         "narrative_similarity": round(float(narrative_similarity), 4),
         "date_diff_days": date_diff,
         "reasons": [] if is_duplicate else reasons,
+        "verdict": "DENY" if is_duplicate else None,
+        "disposition": "DUPLICATE" if is_duplicate else None,
+        "decision_status": "FINAL" if is_duplicate else None,
     }
 
 
 # The blocking query: same coil, a bounded forward date window, exclude the claim
 # itself, and surface pg_trgm narrative similarity for the decision step.
 BLOCKING_SQL = """
-SELECT claim_id, coil_id, defect_code, claimed_amount, claimed_tonnage, claim_date,
+SELECT claim_id, coil_id, defect_code, claimed_freight, claimed_tonnage, claim_date,
        similarity(defect_narrative, %(narrative)s) AS narrative_similarity
 FROM claims
 WHERE coil_id = %(coil_id)s

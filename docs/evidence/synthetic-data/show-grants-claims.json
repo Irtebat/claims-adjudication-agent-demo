@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-09-22T09:39:14.403387+00:00",
+  "captured_at_utc": "2026-09-23T17:01:32.344210+00:00",
   "query": "SHOW GRANTS ON TABLE `fe-bar-ir`.gold.claims_history",
   "result": [
     {

@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-09-23T17:02:46.814136+00:00",
+  "samples": [
+    {
+      "coil_id": "COIL-0000000",
+      "coil": {"grade": "ASTM A653 CS Type B", "spec_edition": "DEMO-1990", "region": "EU", "product_line": "galvanized", "coating_class": "G90", "ship_date": "2014-01-01"},
+      "spec_provenance": {"grade": "ASTM A653 CS Type B", "spec_edition": "DEMO-1990", "region": "EU"},
+      "warranty_provenance": {"product_line": "galvanized", "region": "EU", "version": "V1"},
+      "warranty_effective_window": {"effective_from": "1990-01-01", "effective_to": "2015-01-01"},
+      "freight_cap": 500.0
+    },
+    {
+      "coil_id": "COIL-0000001",
+      "coil": {"grade": "ASTM A792 AZ50", "spec_edition": "DEMO-1990", "region": "NA", "product_line": "galvalume", "coating_class": "AZ50", "ship_date": "2018-01-01"},
+      "spec_provenance": {"grade": "ASTM A792 AZ50", "spec_edition": "DEMO-1990", "region": "NA"},
+      "warranty_provenance": {"product_line": "galvalume", "region": "NA", "version": "V2"},
+      "warranty_effective_window": {"effective_from": "2015-01-01", "effective_to": "2100-01-01"},
+      "freight_cap": 500.0
+    },
+    {
+      "coil_id": "COIL-0000002",
+      "coil": {"grade": "EN 10346 DX51D+Z275", "spec_edition": "DEMO-1990", "region": "NA", "product_line": "prepainted", "coating_class": "Z275", "ship_date": "2014-01-01"},
+      "spec_provenance": {"grade": "EN 10346 DX51D+Z275", "spec_edition": "DEMO-1990", "region": "NA"},
+      "warranty_provenance": {"product_line": "prepainted", "region": "NA", "version": "V1"},
+      "warranty_effective_window": {"effective_from": "1990-01-01", "effective_to": "2015-01-01"},
+      "freight_cap": 500.0
+    }
+  ]
+}

@@ -1,41 +1,24 @@
 {
-  "query": "does the galvanized coating warranty cover premature red rust in marine coastal environments",
-  "filters": {
-    "product_line": "galvanized",
-    "coating_class": "G90",
-    "region": "NA",
-    "ship_date": "2018-01-01"
+  "captured_at_utc": "2026-09-23T20:51:43.729150+00:00",
+  "clause_bm25": {
+    "query": "tensile mechanical requirements",
+    "node_type": "Index Scan",
+    "relation": "spec_clauses",
+    "index_name": "spec_clauses_lb_bm25",
+    "forced_seqscan_off_for_small_corpus_plan_proof": true
   },
-  "embedding_dim": 1024,
-  "lakebase_ann_vector_only_top3": [
-    "W-galvanized-NA-V2:exclusions",
-    "W-galvanized-NA-V2:proration",
-    "W-galvanized-NA-V2:coverage"
-  ],
-  "lakebase_bm25_only_top3": [
-    "W-galvanized-NA-V2:exclusions",
-    "W-galvanized-NA-V2:coverage",
-    "W-galvanized-NA-V2:proration"
-  ],
-  "bm25_index_used": true,
-  "hybrid_rrf_top3": [
-    {
-      "clause_id": "W-galvanized-NA-V2:exclusions",
-      "in_vector_arm": true,
-      "in_keyword_arm": true,
-      "rrf_score": 0.032787
-    },
-    {
-      "clause_id": "W-galvanized-NA-V2:coverage",
-      "in_vector_arm": true,
-      "in_keyword_arm": true,
-      "rrf_score": 0.032002
-    },
-    {
-      "clause_id": "W-galvanized-NA-V2:proration",
-      "in_vector_arm": true,
-      "in_keyword_arm": true,
-      "rrf_score": 0.032002
-    }
-  ]
+  "prior_claim_hybrid": {
+    "captured_at_utc": "2026-09-23T20:51:06.048192+00:00",
+    "query": "coating detaches during forming",
+    "filter": {"grade": "ASTM A653 CS Type B"},
+    "dense_plan": {"node_type": "Index Scan", "relation": "prior_claims", "index_name": "prior_claims_lb_ann"},
+    "bm25_plan": {"node_type": "Index Scan", "relation": "prior_claims", "index_name": "prior_claims_lb_bm25"},
+    "results": [
+      {"claim_id": "CLM-0000180", "rrf_score": 0.032787, "verdict": "APPROVE", "approved_amount": 7300.0},
+      {"claim_id": "CLM-0000189", "rrf_score": 0.032258, "verdict": "APPROVE", "approved_amount": 10090.0},
+      {"claim_id": "CLM-0000087", "rrf_score": 0.031746, "verdict": "APPROVE", "approved_amount": 11470.0},
+      {"claim_id": "CLM-0000093", "rrf_score": 0.03125, "verdict": "APPROVE", "approved_amount": 7830.0},
+      {"claim_id": "CLM-0000183", "rrf_score": 0.030769, "verdict": "APPROVE", "approved_amount": 8230.0}
+    ]
+  }
 }

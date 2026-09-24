@@ -82,7 +82,6 @@ def compute_conformance(spec_params: dict, measured: dict) -> dict:
     return {
         "conforms": len(nonconforming) == 0,
         "nonconforming_properties": nonconforming,
-        "spec_id": spec_params.get("spec_id"),
     }
 
 
@@ -118,7 +117,6 @@ def compute_coverage(warranty_terms: dict, claim: dict) -> dict:
         "elapsed_months": elapsed,
         "proration_factor": round(proration, 6),
         "exclusions_hit": exclusions_hit,
-        "warranty_id": warranty_terms.get("warranty_id"),
     }
 
 

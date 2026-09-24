@@ -1,12 +1,12 @@
 {
   "notice": "Entirely synthetic demo policies; not authoritative ASTM/EN requirements or real warranties.",
+  "specs": {
   "regions": [
     "NA",
     "EU"
   ],
-  "standards": [
+  "entries": [
     {
-      "spec_id": "S-A653",
       "grade": "ASTM A653 CS Type B",
       "spec_edition": "DEMO-1990",
       "chemistry": {
@@ -39,7 +39,6 @@
       "coating_adhesion_required": true
     },
     {
-      "spec_id": "S-A792",
       "grade": "ASTM A792 AZ50",
       "spec_edition": "DEMO-1990",
       "chemistry": {
@@ -72,7 +71,6 @@
       "coating_adhesion_required": true
     },
     {
-      "spec_id": "S-EN10346",
       "grade": "EN 10346 DX51D+Z275",
       "spec_edition": "DEMO-1990",
       "chemistry": {
@@ -104,7 +102,10 @@
       "min_coating_g_m2": 275.0,
       "coating_adhesion_required": true
     }
-  ],
+  ]
+  },
+  "warranties": {
+  "regions": ["NA", "EU"],
   "products": [
     {
       "product_line": "galvanized",
@@ -122,7 +123,7 @@
       "min_coating_g_m2": 275.0
     }
   ],
-  "warranty_versions": [
+  "versions": [
     {
       "version": "V1",
       "effective_from": "1990-01-01",
@@ -149,6 +150,8 @@
     ],
     "min_coast_distance_km": 2.0,
     "proration_method": "linear_remaining_months_after_full_coverage",
-    "freight_covered": false
+    "freight_covered": false,
+    "freight_cap": 500.0
+  }
   }
 }

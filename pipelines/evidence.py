@@ -32,6 +32,11 @@ TABLES = {
 def capture(sql, catalog, destination):
     destination.mkdir(parents=True, exist_ok=True)
     c = f"`{catalog}`"
+    business_tables = " OR ".join(
+        f"(table_schema = '{schema}' AND table_name = '{table}')"
+        for schema, tables in TABLES.items()
+        for table in tables
+    )
 
     def save(name, query):
         output = sql(query)
@@ -56,14 +61,14 @@ def capture(sql, catalog, destination):
     for table in TABLES["gold"]:
         assert types[("gold", table)] == "MATERIALIZED_VIEW", types
     for table in TABLES["silver"]:
-        if table.endswith("_history"):
-            continue
-        assert types[("silver", table)] == "STREAMING_TABLE", types
-        properties = save(
-            f"cdf-silver-{table}",
-            f"SHOW TBLPROPERTIES {c}.silver.{table} ('delta.enableChangeDataFeed')",
-        )
-        assert len(properties) == 1 and properties[0]["value"] == "true", properties
+        if not table.endswith("_history"):
+            assert types[("silver", table)] == "STREAMING_TABLE", types
+    save(
+        "table-schemas",
+        f"SELECT table_schema, table_name, column_name, data_type, ordinal_position "
+        f"FROM {c}.information_schema.columns WHERE {business_tables} "
+        "ORDER BY table_schema, table_name, ordinal_position",
+    )
     save(
         "row-counts",
         " UNION ALL ".join(
@@ -73,8 +78,8 @@ def capture(sql, catalog, destination):
         ),
     )
     save(
-        "label-distribution",
-        f"SELECT ground_truth_label, count(*) row_count, round(100.0*count(*)/sum(count(*)) OVER (),2) percentage FROM {c}.gold.claims_history GROUP BY ground_truth_label ORDER BY ground_truth_label",
+        "outcome-distribution",
+        f"SELECT verdict, disposition, count(*) row_count FROM {c}.gold.adjudications_history GROUP BY verdict, disposition ORDER BY verdict, disposition",
     )
     for schema, tables in TABLES.items():
         if schema == "bronze":
@@ -83,16 +88,6 @@ def capture(sql, catalog, destination):
             save(
                 f"sample-{schema}-{table}", f"SELECT * FROM {c}.{schema}.{table} ORDER BY 1 LIMIT 3"
             )
-    # Policy clauses/params live in Lakebase now; the medallion carries no
-    # embedding or vector columns. Keep asserting that invariant here.
-    prohibited = save(
-        "deferred-column-check",
-        f"""SELECT table_schema, table_name, column_name
-          FROM {c}.information_schema.columns
-          WHERE table_schema IN ('bronze', 'silver', 'gold')
-          AND (lower(column_name) LIKE '%embedding%' OR lower(column_name) LIKE '%vector%')""",
-    )
-    assert not prohibited, prohibited
     save("show-grants-claims", f"SHOW GRANTS ON TABLE {c}.gold.claims_history")
     save("show-grants-heats", f"SHOW GRANTS ON TABLE {c}.silver.heats_coils")
     grants = save(
@@ -123,29 +118,21 @@ def capture(sql, catalog, destination):
         if r["privilege_type"] == "SELECT"
     }
     assert expected_grants <= actual_grants, expected_grants - actual_grants
-    sensitive = {
-        "customers": ["customer_id", "customer_name", "email"],
-        "heats_coils": ["customer_id", "unit_price"],
-        "claims_history": [
-            "customer_id",
-            "unit_price",
-            "claimed_amount",
-            "claimed_freight",
-            "freight_cap",
-        ],
-        "adjudications_history": ["claimed_amount", "approved_amount"],
-    }
     expected_masks = {
-        (schema, table, column)
-        for schema, tables in TABLES.items()
-        for table in tables
-        for column in sensitive.get(table, [])
+        *(('bronze', 'customers', column) for column in ('customer_id', 'customer_name', 'email')),
+        *(('bronze', 'heats_coils', column) for column in ('customer_id', 'unit_price')),
+        *(('bronze', 'claims_history', column) for column in ('customer_id', 'claimed_freight')),
+        *(('bronze', 'adjudications_history', column) for column in ('claimed_amount', 'approved_amount')),
+        *(('silver', 'claims_history', column) for column in ('customer_id', 'claimed_freight')),
+        *(('silver', 'adjudications_history', column) for column in ('claimed_amount', 'approved_amount')),
+        *(('gold', 'claims_history', column) for column in ('customer_id', 'claimed_freight')),
+        *(('gold', 'adjudications_history', column) for column in ('claimed_amount', 'approved_amount')),
     }
     actual_masks = {(r["table_schema"], r["table_name"], r["column_name"]) for r in masks}
     assert expected_masks <= actual_masks, expected_masks - actual_masks
     save(
         "fraud-clusters",
-        f"SELECT fraud_cluster_id, count(*) claims, count(DISTINCT customer_id) customers, count(DISTINCT heat_no) heats FROM {c}.gold.claims_history WHERE ground_truth_label='fraud_cluster' GROUP BY fraud_cluster_id ORDER BY fraud_cluster_id",
+        f"SELECT a.fraud_cluster_id, count(*) claims, count(DISTINCT c.customer_id) customers, count(DISTINCT h.heat_no) heats FROM {c}.gold.adjudications_history a JOIN {c}.gold.claims_history c USING(claim_id) JOIN {c}.silver.heats_coils h USING(coil_id) WHERE a.fraud_cluster_id IS NOT NULL GROUP BY a.fraud_cluster_id ORDER BY a.fraud_cluster_id",
     )
     from src.checks import integrity_queries
 

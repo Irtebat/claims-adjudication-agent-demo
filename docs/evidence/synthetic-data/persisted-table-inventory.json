@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-09-22T09:37:39.556761+00:00",
+  "captured_at_utc": "2026-09-23T17:00:34.565489+00:00",
   "query": "SELECT table_schema, table_name, table_type FROM `fe-bar-ir`.information_schema.tables WHERE table_schema IN ('bronze','silver','gold') ORDER BY table_schema, table_name",
   "result": [
     {
@@ -9,11 +9,6 @@
     },
     {
       "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_claims_history_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_coating_warranty_terms_1",
       "table_schema": "bronze",
       "table_type": "MANAGED"
     },
@@ -38,57 +33,7 @@
       "table_type": "MANAGED"
     },
     {
-      "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_spec_standards_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
       "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_suppliers_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_adjudications_history_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_claims_history_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_coating_warranty_terms_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_customers_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_defect_codes_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_heats_coils_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_mill_test_certs_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_spec_standards_1",
-      "table_schema": "bronze",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_suppliers_1",
       "table_schema": "bronze",
       "table_type": "MANAGED"
     },
@@ -99,11 +44,6 @@
     },
     {
       "table_name": "claims_history",
-      "table_schema": "bronze",
-      "table_type": "MATERIALIZED_VIEW"
-    },
-    {
-      "table_name": "coating_warranty_terms",
       "table_schema": "bronze",
       "table_type": "MATERIALIZED_VIEW"
     },
@@ -128,11 +68,6 @@
       "table_type": "MATERIALIZED_VIEW"
     },
     {
-      "table_name": "spec_standards",
-      "table_schema": "bronze",
-      "table_type": "MATERIALIZED_VIEW"
-    },
-    {
       "table_name": "suppliers",
       "table_schema": "bronze",
       "table_type": "MATERIALIZED_VIEW"
@@ -144,16 +79,6 @@
     },
     {
       "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_claims_history_1",
-      "table_schema": "gold",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_adjudications_history_1",
-      "table_schema": "gold",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_claims_history_1",
       "table_schema": "gold",
       "table_type": "MANAGED"
     },
@@ -174,11 +99,6 @@
     },
     {
       "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_claims_history_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_coating_warranty_terms_1",
       "table_schema": "silver",
       "table_type": "MANAGED"
     },
@@ -203,57 +123,7 @@
       "table_type": "MANAGED"
     },
     {
-      "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_spec_standards_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
       "table_name": "__materialization_mat_495e25a1_d984_4993_8a07_7b9ba7c33467_suppliers_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_adjudications_history_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_claims_history_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_coating_warranty_terms_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_customers_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_defect_codes_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_heats_coils_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_mill_test_certs_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_spec_standards_1",
-      "table_schema": "silver",
-      "table_type": "MANAGED"
-    },
-    {
-      "table_name": "__materialization_mat_b218eb47_d448_4b76_8961_440c15e46fbf_suppliers_1",
       "table_schema": "silver",
       "table_type": "MANAGED"
     },
@@ -266,11 +136,6 @@
       "table_name": "claims_history",
       "table_schema": "silver",
       "table_type": "MATERIALIZED_VIEW"
-    },
-    {
-      "table_name": "coating_warranty_terms",
-      "table_schema": "silver",
-      "table_type": "STREAMING_TABLE"
     },
     {
       "table_name": "customers",
@@ -294,11 +159,6 @@
     },
     {
       "table_name": "mill_test_certs",
-      "table_schema": "silver",
-      "table_type": "STREAMING_TABLE"
-    },
-    {
-      "table_name": "spec_standards",
       "table_schema": "silver",
       "table_type": "STREAMING_TABLE"
     },

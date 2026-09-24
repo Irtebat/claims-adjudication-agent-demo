@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-09-22T09:37:53.317317+00:00",
-  "query": "SHOW TBLPROPERTIES `fe-bar-ir`.silver.suppliers ('delta.enableChangeDataFeed')",
-  "result": [
-    {
-      "value": "true"
-    }
-  ]
-}
