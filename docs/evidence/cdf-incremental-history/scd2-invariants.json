@@ -1,0 +1,24 @@
+{
+  "captured_at_utc": "2026-09-23T23:14:27Z",
+  "query_source": "pipelines/src/checks.py:integrity_queries, UNION ALL with check_name and violations",
+  "checks": [
+    {"check_name": "cdf_metadata_in_gold", "violations": "0"},
+    {"check_name": "invalid_adjudication_intervals", "violations": "0"},
+    {"check_name": "invalid_claim_intervals", "violations": "0"},
+    {"check_name": "invalid_duplicate", "violations": "0"},
+    {"check_name": "invalid_final_status", "violations": "0"},
+    {"check_name": "invalid_money", "violations": "0"},
+    {"check_name": "missing_adjudication", "violations": "0"},
+    {"check_name": "missing_coil", "violations": "0"},
+    {"check_name": "missing_customer", "violations": "0"},
+    {"check_name": "missing_defect", "violations": "0"},
+    {"check_name": "missing_mtc", "violations": "0"},
+    {"check_name": "missing_raw_supplier", "violations": "0"},
+    {"check_name": "missing_supplier", "violations": "0"},
+    {"check_name": "multiple_current_adjudications", "violations": "0"},
+    {"check_name": "multiple_current_claims", "violations": "0"},
+    {"check_name": "orphan_current_adjudication", "violations": "0"},
+    {"check_name": "overlapping_adjudication_intervals", "violations": "0"},
+    {"check_name": "overlapping_claim_intervals", "violations": "0"}
+  ]
+}

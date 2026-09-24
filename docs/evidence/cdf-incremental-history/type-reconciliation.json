@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-09-23T23:14:27Z",
+  "query": "SELECT column_name, full_data_type FROM `fe-bar-ir`.information_schema.columns WHERE table_schema='silver' AND table_name='adjudications_history' AND column_name IN ('cited_clause_ids','finalized_at') ORDER BY column_name",
+  "result": [
+    {"column_name": "cited_clause_ids", "full_data_type": "array<string>"},
+    {"column_name": "finalized_at", "full_data_type": "timestamp"}
+  ],
+  "array_shape_query": "SELECT count(*) rows, count_if(cited_clause_ids IS NULL) null_arrays, count_if(size(cited_clause_ids)=0) empty_arrays, count_if(size(cited_clause_ids)>0) populated_arrays, min(size(cited_clause_ids)) min_size, max(size(cited_clause_ids)) max_size FROM `fe-bar-ir`.silver.adjudications_history WHERE __END_AT IS NULL",
+  "array_shape_result": {
+    "rows": "5000",
+    "null_arrays": "1250",
+    "empty_arrays": "0",
+    "populated_arrays": "3750",
+    "min_size": "2",
+    "max_size": "2"
+  },
+  "decisions": [
+    "Parse native-CDF cited_clause_ids STRING into ARRAY<STRING> to preserve evaluator and Wave 4 consumer compatibility.",
+    "Cast native-CDF finalized_at TIMESTAMP_NTZ to the prior TIMESTAMP contract.",
+    "Exclude native-only data_provenance and baseline_loaded_at operational seed metadata from both silver histories.",
+    "Keep all remaining CDF-native types because strings, decimals, booleans, and dates exactly match the prior contract."
+  ]
+}

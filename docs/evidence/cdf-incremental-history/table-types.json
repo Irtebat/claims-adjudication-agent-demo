@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-09-23T23:14:27Z",
+  "query": "SELECT table_schema, table_name, table_type FROM `fe-bar-ir`.information_schema.tables WHERE (table_schema='silver' AND table_name IN ('claims_history','adjudications_history')) OR (table_schema='gold' AND table_name IN ('claims_current','adjudications_current','claims_history','adjudications_history')) ORDER BY table_schema, table_name",
+  "result": [
+    {"table_name": "adjudications_current", "table_schema": "gold", "table_type": "VIEW"},
+    {"table_name": "adjudications_history", "table_schema": "gold", "table_type": "VIEW"},
+    {"table_name": "claims_current", "table_schema": "gold", "table_type": "VIEW"},
+    {"table_name": "claims_history", "table_schema": "gold", "table_type": "VIEW"},
+    {"table_name": "adjudications_history", "table_schema": "silver", "table_type": "STREAMING_TABLE"},
+    {"table_name": "claims_history", "table_schema": "silver", "table_type": "STREAMING_TABLE"}
+  ]
+}
+

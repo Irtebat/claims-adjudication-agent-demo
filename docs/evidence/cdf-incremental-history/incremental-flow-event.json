@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-09-23T23:14:27Z",
+  "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+  "job_run_id": "722033785388452",
+  "update_id": "5423ccb3-ddd4-446c-a877-e4f5d68c7553",
+  "full_refresh_used": false,
+  "complete_recompute_events": 0,
+  "events": [
+    {"timestamp": "2026-09-23T23:09:36.431Z", "event_type": "flow_definition", "message": "Flow `fe-bar-ir`.`silver`.`adjudications_history` defined as CHANGE."},
+    {"timestamp": "2026-09-23T23:10:35.687Z", "event_type": "flow_progress", "message": "Completed a streaming update of 'fe-bar-ir.silver.adjudications_history'."},
+    {"timestamp": "2026-09-23T23:10:35.736Z", "event_type": "flow_progress", "message": "Flow 'fe-bar-ir.silver.adjudications_history' has COMPLETED."},
+    {"timestamp": "2026-09-23T23:10:36.485Z", "event_type": "update_progress", "message": "Update 5423cc is COMPLETED."}
+  ]
+}
