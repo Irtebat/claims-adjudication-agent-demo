@@ -39,3 +39,46 @@ Policy intake
 Money/decision guardrail
   command: git diff -- agent/src/authorities.py agent/src/authorities_runtime.py
   result: empty
+
+Added coil-master correction scope
+
+Pytest collection
+  command: uv run --with pytest pytest --collect-only -q agent/tests
+  result: 50 test cases collected
+  command: uv run --with pytest --with pyyaml pytest --collect-only -q pipelines/tests
+  result: 11 test cases collected
+
+Pytest execution
+  command: uv run --with pytest pytest agent/tests -q
+  result: 48 passed, 2 skipped
+  command: uv run --with pytest --with pyyaml pytest pipelines/tests -q
+  result: 11 passed
+
+Ruff lint
+  command: uv run --with ruff ruff check agent pipelines
+  result: All checks passed!
+
+Ruff format (pipelines full scope)
+  command: uv run --with ruff ruff format --check pipelines
+  result: 20 files already formatted
+
+Ruff format (agent documented scope)
+  command: uv run --with ruff ruff format --check agent
+  result: pre-existing failure in seven out-of-scope files; protected agent/src/authorities_runtime.py was not changed
+
+Mypy
+  command: uv run --with mypy --with types-PyYAML mypy --config-file pipelines/pyproject.toml pipelines/run.py pipelines/evidence.py pipelines/src/checks.py
+  result: pre-existing missing annotations for executable and skipped in pipelines/run.py:45; formatting-only scope preserved
+
+Compilation and bundle
+  command: python3 -m compileall -q agent/src pipelines
+  result: passed
+  command: cd pipelines && databricks bundle validate --strict -t prod --profile fe-bar
+  result: Validation OK!
+  graph validation update: c1c084fa-9876-47b1-af9b-2051031d74c7 COMPLETED
+  selective silver full refresh: 6bb8b62d-6a17-49e9-b80e-ed6f678a4205 COMPLETED
+  Lakebase synced-table full refresh: 6c5f1d3a-aad8-4ff8-b33f-744a570966d3 COMPLETED
+
+Money/decision guardrail
+  command: git diff 28a07d7 -- agent/src/authorities.py agent/src/authorities_runtime.py
+  result: empty

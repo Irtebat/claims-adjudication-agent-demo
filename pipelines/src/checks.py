@@ -11,6 +11,8 @@ against the same Wave-1 injected label patterns using the authored params.
 
 def integrity_queries(c):
     return {
+        "duplicate_coil_id": f"SELECT count(*) n FROM (SELECT coil_id FROM {c}.silver.heats_coils GROUP BY coil_id HAVING count(*) > 1)",
+        "multiple_heats_per_coil": f"SELECT count(*) n FROM (SELECT coil_id FROM {c}.silver.heats_coils GROUP BY coil_id HAVING count(DISTINCT heat_no) > 1)",
         "missing_coil": f"SELECT count(*) n FROM {c}.gold.claims_current c LEFT ANTI JOIN {c}.silver.heats_coils m USING(coil_id)",
         "missing_mtc": f"SELECT count(*) n FROM {c}.silver.heats_coils m LEFT ANTI JOIN {c}.silver.mill_test_certs t USING(coil_id)",
         "missing_customer": f"SELECT count(*) n FROM {c}.gold.claims_current c LEFT ANTI JOIN {c}.silver.customers d USING(customer_id)",

@@ -149,9 +149,7 @@ def main():
     def preview_status():
         # This Beta endpoint is feature-gated by the workspace preview. A successful
         # read (including an empty list) verifies enablement without creating state.
-        result = cli_json(
-            "postgres", "list-cdf-configs", database, allow_failure=True
-        )
+        result = cli_json("postgres", "list-cdf-configs", database, allow_failure=True)
         return {"enabled": result is not None, "cdf_configs": result}
 
     if args.action == "preview-status":
@@ -183,16 +181,13 @@ def main():
             cli("bundle", "deploy", "--target", "prod", cwd=lakebase_root)
             cli("bundle", "run", "setup_and_seed", "--target", "prod", cwd=lakebase_root)
         elif not isinstance(existing, list) or len(existing) != 1:
-            raise RuntimeError(
-                f"Resume requires exactly one existing CDF config; found {existing}"
-            )
+            raise RuntimeError(f"Resume requires exactly one existing CDF config; found {existing}")
 
         warehouses = cli_json("warehouses", "list")
         warehouse = next(
             item["id"]
             for item in warehouses
-            if item["name"] == db["warehouse_name"]
-            and item["enable_serverless_compute"]
+            if item["name"] == db["warehouse_name"] and item["enable_serverless_compute"]
         )
         if args.action == "run":
             cli(
@@ -227,9 +222,7 @@ def main():
                 or row.get("table_name") in {"claims", "adjudications"}
             ]
             states = {
-                str(row.get("status") or row.get("state", ""))
-                .upper()
-                .removeprefix("CDF_STATE_")
+                str(row.get("status") or row.get("state", "")).upper().removeprefix("CDF_STATE_")
                 for row in relevant
             }
             if len(relevant) == 2 and states == {"STREAMING"}:
@@ -242,7 +235,9 @@ def main():
             )
 
         table_response = cli_json("tables", "list", catalog, cdf_schema)
-        tables = table_response if isinstance(table_response, list) else table_response.get("tables", [])
+        tables = (
+            table_response if isinstance(table_response, list) else table_response.get("tables", [])
+        )
 
         def cdf_table(source):
             prefix = f"lb_{source}_history"
@@ -321,7 +316,7 @@ def main():
             groups = json.loads(cli("api", "get", endpoint).stdout)
             if not groups.get("Resources"):
                 print(
-                        cli(
+                    cli(
                         "api",
                         "post",
                         "/api/2.0/account/scim/v2/Groups",
@@ -332,7 +327,7 @@ def main():
                                 "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
                             }
                         ),
-                        ).stdout
+                    ).stdout
                 )
         gov = config.get("governance", {}) or {}
         app_principal = (

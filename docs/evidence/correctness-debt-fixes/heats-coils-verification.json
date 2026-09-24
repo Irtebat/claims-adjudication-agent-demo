@@ -1,0 +1,34 @@
+{
+  "captured_at": "2026-09-24T17:08:00+05:30",
+  "profile": "fe-bar",
+  "pipeline": {
+    "graph_validation_update_id": "c1c084fa-9876-47b1-af9b-2051031d74c7",
+    "selective_full_refresh_update_id": "6bb8b62d-6a17-49e9-b80e-ed6f678a4205",
+    "lakebase_sync_full_refresh_update_id": "6c5f1d3a-aad8-4ff8-b33f-744a570966d3"
+  },
+  "after": {
+    "silver_total_rows": 4500,
+    "silver_distinct_coil_id": 4500,
+    "duplicate_coil_ids": 0,
+    "coils_with_multiple_heats": 0,
+    "current_claims_join_rows": 5000,
+    "current_claims_join_distinct_claim_id": 5000,
+    "lakebase_reference_total_rows": 4500,
+    "lakebase_reference_distinct_coil_id": 4500,
+    "lakebase_synced_delta_commit_version": 7
+  },
+  "resolution_proofs": [
+    {
+      "coil_id": "COIL-0000000",
+      "spec_matches": 1,
+      "warranty_matches": 1,
+      "resolved": "ASTM A653 CS Type B / V1"
+    },
+    {
+      "coil_id": "COIL-0000001",
+      "spec_matches": 1,
+      "warranty_matches": 1,
+      "resolved": "ASTM A792 AZ50 / V2"
+    }
+  ]
+}

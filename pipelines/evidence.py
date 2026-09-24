@@ -119,14 +119,23 @@ def capture(sql, catalog, destination):
     }
     assert expected_grants <= actual_grants, expected_grants - actual_grants
     expected_masks = {
-        *(('bronze', 'customers', column) for column in ('customer_id', 'customer_name', 'email')),
-        *(('bronze', 'heats_coils', column) for column in ('customer_id', 'unit_price')),
-        *(('bronze', 'claims_history', column) for column in ('customer_id', 'claimed_freight')),
-        *(('bronze', 'adjudications_history', column) for column in ('claimed_amount', 'approved_amount')),
-        *(('silver', 'claims_history', column) for column in ('customer_id', 'claimed_freight')),
-        *(('silver', 'adjudications_history', column) for column in ('claimed_amount', 'approved_amount')),
-        *(('gold', 'claims_history', column) for column in ('customer_id', 'claimed_freight')),
-        *(('gold', 'adjudications_history', column) for column in ('claimed_amount', 'approved_amount')),
+        *(("bronze", "customers", column) for column in ("customer_id", "customer_name", "email")),
+        *(("bronze", "heats_coils", column) for column in ("customer_id", "unit_price")),
+        *(("bronze", "claims_history", column) for column in ("customer_id", "claimed_freight")),
+        *(
+            ("bronze", "adjudications_history", column)
+            for column in ("claimed_amount", "approved_amount")
+        ),
+        *(("silver", "claims_history", column) for column in ("customer_id", "claimed_freight")),
+        *(
+            ("silver", "adjudications_history", column)
+            for column in ("claimed_amount", "approved_amount")
+        ),
+        *(("gold", "claims_history", column) for column in ("customer_id", "claimed_freight")),
+        *(
+            ("gold", "adjudications_history", column)
+            for column in ("claimed_amount", "approved_amount")
+        ),
     }
     actual_masks = {(r["table_schema"], r["table_name"], r["column_name"]) for r in masks}
     assert expected_masks <= actual_masks, expected_masks - actual_masks
