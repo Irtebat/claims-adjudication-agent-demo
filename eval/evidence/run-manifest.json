@@ -1,18 +1,18 @@
 {
-  "built_at_utc": "2026-09-24T22:53:13.622276+00:00",
+  "built_at_utc": "2026-09-24T23:51:13.395875+00:00",
   "dataset": {
-    "build_time_utc": "2026-09-24T22:39:21.755988+00:00",
+    "build_time_utc": "2026-09-24T23:32:07.378756+00:00",
     "judge_record_count": 30,
     "record_count": 75,
     "resolver_sha": "b766af26f2ba0bee15a237f438ae1fe3fc1344d5370dccd2d022cd1e46b29f59",
     "source_fingerprint": "b370080608d3b33af07640fb86dad21a379d426b83f3031970149485dbedd557",
     "split_logic": "entity-time-v1"
   },
-  "exact_run_id": "9a8ef9a9b9f94785b7db4665008afe70",
+  "exact_run_id": "27f522bb152f4103bbb3ba5b089e0524",
   "experiment": "/Shared/claims-adjudication-offline-evaluation",
-  "git_sha": "dae0d38f77a8ffa12d79664af65e53c04202d4d0",
+  "git_sha": "ab4ea275f12ef307bb0db7eeeeac9ffcd799cade",
   "judge_run_id": "1fe662a0ea8c48b28428f3edf25ff584",
-  "mlflow_run_link": "https://fe-sandbox-fe-bar-ir.cloud.databricks.com/ml/experiments/92045222604778/runs/9a8ef9a9b9f94785b7db4665008afe70",
+  "mlflow_run_link": "https://fe-sandbox-fe-bar-ir.cloud.databricks.com/ml/experiments/92045222604778/runs/27f522bb152f4103bbb3ba5b089e0524",
   "model_name": "fe-bar-ir.default.claims_adjudication_agent",
   "model_uri": "models:/fe-bar-ir.default.claims_adjudication_agent@prod",
   "model_version": "2",

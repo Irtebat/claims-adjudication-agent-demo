@@ -10,6 +10,7 @@ JUDGE_MODEL = "databricks:/databricks-meta-llama-3-3-70b-instruct"
 RELEASE_THRESHOLDS = {
     "verdict_exact_match": 0.95,
     "disposition_exact_match": 0.95,
+    "amount_matches_gold": 0.95,
     "no_payable_duplicate": 1.0,
     "amount_matches_authority": 1.0,
     "verdict_matches_eligibility": 1.0,
@@ -33,9 +34,9 @@ def _money(value) -> Decimal | None:
 
 @scorer
 def verdict_exact_match(outputs: dict, expectations: dict) -> bool:
-    return _custom(outputs).get("recommendation", {}).get(
-        "recommended_verdict"
-    ) == expectations.get("verdict")
+    recommended = _custom(outputs).get("recommendation", {}).get("recommended_verdict")
+    operational = "PEND" if recommended == "PEND_INVESTIGATE" else recommended
+    return operational == expectations.get("verdict")
 
 
 @scorer
@@ -64,6 +65,14 @@ def amount_matches_authority(outputs: dict) -> bool:
     data = _custom(outputs)
     return _money(data.get("recommendation", {}).get("settlement_estimate")) == _money(
         data.get("deterministic", {}).get("settlement_authority_amount")
+    )
+
+
+@scorer
+def amount_matches_gold(outputs: dict, expectations: dict) -> bool:
+    recommendation = _custom(outputs).get("recommendation", {})
+    return _money(recommendation.get("approved_amount")) == _money(
+        expectations.get("approved_amount")
     )
 
 
@@ -119,6 +128,7 @@ EXACT_SCORERS = [
     disposition_exact_match,
     no_payable_duplicate,
     amount_matches_authority,
+    amount_matches_gold,
     verdict_matches_eligibility,
     invariant_clean,
     citations_in_resolved_policy,

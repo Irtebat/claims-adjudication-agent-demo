@@ -91,6 +91,11 @@ def _write(name: str, payload) -> None:
     (EVIDENCE / name).write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
 
 
+def _read_evidence(name: str, default):
+    path = EVIDENCE / name
+    return json.loads(path.read_text()) if path.exists() else default
+
+
 def run(args) -> dict:
     if args.profile != "fe-bar":
         raise ValueError("live evaluation is approved only for the explicit fe-bar profile")
@@ -112,17 +117,44 @@ def run(args) -> dict:
         "dataset_split": metadata["source_fingerprint"],
         "persist": "false",
     }
-    with mlflow.start_run(run_name="claims-eval-pilot", tags={**tags, "tier": "pilot"}):
-        pilot = mlflow.genai.evaluate(
-            data=records[:10], predict_fn=predict_fn, scorers=EXACT_SCORERS + PRIMARY_JUDGE_SCORERS
+    previous_manifest = _read_evidence("run-manifest.json", {})
+    previous_metrics = _read_evidence("aggregate-metrics.json", {})
+    previous_cost = _read_evidence("pilot-cost.json", {})
+    pilot = None
+    if args.scorer_tier != "exact":
+        with mlflow.start_run(run_name="claims-eval-pilot", tags={**tags, "tier": "pilot"}):
+            pilot = mlflow.genai.evaluate(
+                data=records[:10],
+                predict_fn=predict_fn,
+                scorers=EXACT_SCORERS + PRIMARY_JUDGE_SCORERS,
+            )
+        usage = _usage(pilot.run_id)
+        telemetry_available = bool(usage["cost_usd"] or usage["tokens"])
+        # Missing trace usage must not be interpreted as a zero-cost run.
+        pilot_cost = usage["cost_usd"] or (
+            usage["tokens"] / 1000 * 0.002 if usage["tokens"] else 1.0
         )
-    usage = _usage(pilot.run_id)
-    telemetry_available = bool(usage["cost_usd"] or usage["tokens"])
-    # Missing trace usage must not be interpreted as a zero-cost run.
-    pilot_cost = usage["cost_usd"] or (usage["tokens"] / 1000 * 0.002 if usage["tokens"] else 1.0)
-    # Pilot: 10 agent + 20 judge calls. Full: 105 agent + 60 judge calls.
-    projected = pilot_cost * (165 / 30)
-    run_judges = args.scorer_tier != "exact" and projected <= COST_LIMIT_USD
+        # Pilot: 10 agent + 20 judge calls. Full: 105 agent + 60 judge calls.
+        projected = pilot_cost * (165 / 30)
+        run_judges = projected <= COST_LIMIT_USD
+        cost = {
+            "pilot_records": 10,
+            "pilot_tokens": usage["tokens"],
+            "pilot_cost_usd": pilot_cost,
+            "trace_token_telemetry_available": telemetry_available,
+            "cost_method": (
+                "trace_reported" if telemetry_available else "conservative_$1_pilot_ceiling"
+            ),
+            "pilot_llm_invocations": 30,
+            "projected_llm_invocations": 165,
+            "projected_total_usd": projected,
+            "threshold_usd": COST_LIMIT_USD,
+            "judge_tier_ran": run_judges,
+            "judge_tier_deferred": not run_judges,
+        }
+    else:
+        run_judges = False
+        cost = previous_cost
     with mlflow.start_run(run_name="claims-eval-exact", tags={**tags, "tier": "exact"}):
         exact = mlflow.genai.evaluate(data=records, predict_fn=predict_fn, scorers=EXACT_SCORERS)
     judge = None
@@ -141,31 +173,52 @@ def run(args) -> dict:
         "model_uri": args.model_uri,
         "git_sha": tags["git_sha"],
         "dataset": metadata,
-        "pilot_run_id": pilot.run_id,
+        "pilot_run_id": pilot.run_id if pilot else previous_manifest.get("pilot_run_id"),
         "exact_run_id": exact.run_id,
-        "judge_run_id": judge.run_id if judge else None,
+        "judge_run_id": (judge.run_id if judge else previous_manifest.get("judge_run_id")),
         "mlflow_run_link": link,
         "persist": False,
-    }
-    cost = {
-        "pilot_records": 10,
-        "pilot_tokens": usage["tokens"],
-        "pilot_cost_usd": pilot_cost,
-        "trace_token_telemetry_available": telemetry_available,
-        "cost_method": (
-            "trace_reported" if telemetry_available else "conservative_$1_pilot_ceiling"
-        ),
-        "pilot_llm_invocations": 30,
-        "projected_llm_invocations": 165,
-        "projected_total_usd": projected,
-        "threshold_usd": COST_LIMIT_USD,
-        "judge_tier_ran": run_judges,
-        "judge_tier_deferred": not run_judges,
     }
     metrics = {
         "release_gate": _metric_summary(exact.metrics),
         "raw_exact_metrics": exact.metrics,
-        "raw_judge_metrics": judge.metrics if judge else {},
+        "diagnostic_judges": {
+            "authority_guidelines": {
+                "value": (
+                    judge.metrics.get("authority_guidelines/mean")
+                    if judge
+                    else previous_metrics.get("diagnostic_judges", {})
+                    .get("authority_guidelines", {})
+                    .get(
+                        "value",
+                        previous_metrics.get("raw_judge_metrics", {}).get(
+                            "authority_guidelines/mean"
+                        ),
+                    )
+                ),
+                "status": "measured",
+            },
+            "retrieval_groundedness": {
+                "value": (
+                    judge.metrics.get("retrieval_groundedness/mean")
+                    if judge
+                    else previous_metrics.get("diagnostic_judges", {})
+                    .get("retrieval_groundedness", {})
+                    .get(
+                        "value",
+                        previous_metrics.get("raw_judge_metrics", {}).get(
+                            "retrieval_groundedness/mean"
+                        ),
+                    )
+                ),
+                "status": "not_yet_measurable",
+                "limitation": (
+                    "RETRIEVER spans expose cited IDs but not retrieved clause text as outputs; "
+                    "0.0 is not a grounding-regression signal."
+                ),
+                "follow_up": "Enrich agent RETRIEVER span outputs with clause text.",
+            },
+        },
     }
     _write("run-manifest.json", manifest)
     _write("aggregate-metrics.json", metrics)
@@ -179,7 +232,11 @@ def run(args) -> dict:
                 "uv run ruff format --check src tests",
                 "uv run pytest -q",
             ],
-            "live": "DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar uv run python src/evaluate.py --profile fe-bar",
+            "live": (
+                "DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar "
+                "MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py "
+                f"--profile fe-bar --scorer-tier {args.scorer_tier}"
+            ),
         },
     )
     MlflowClient().set_tag(

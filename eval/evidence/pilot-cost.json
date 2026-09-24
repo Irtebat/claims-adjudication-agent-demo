@@ -8,6 +8,6 @@
   "pilot_tokens": 0,
   "projected_llm_invocations": 165,
   "projected_total_usd": 5.5,
-  "trace_token_telemetry_available": false,
-  "threshold_usd": 25.0
+  "threshold_usd": 25.0,
+  "trace_token_telemetry_available": false
 }

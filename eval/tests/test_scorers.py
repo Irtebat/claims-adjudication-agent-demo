@@ -2,6 +2,7 @@ import pytest
 
 from scorers import (
     amount_matches_authority,
+    amount_matches_gold,
     citation_recall,
     citation_reciprocal_rank,
     citations_in_resolved_policy,
@@ -38,6 +39,7 @@ def test_exact_and_invariant_scorers(output):
     expected = {
         "verdict": "DENY",
         "disposition": "DUPLICATE",
+        "approved_amount": "0.00",
         "oracle_clause_ids": ["policy/a", "policy/b", "policy/c"],
         "gold_cited_clause_ids": ["policy/b", "policy/c"],
     }
@@ -45,6 +47,7 @@ def test_exact_and_invariant_scorers(output):
     assert disposition_exact_match(outputs=output, expectations=expected)
     assert no_payable_duplicate(outputs=output)
     assert amount_matches_authority(outputs=output)
+    assert amount_matches_gold(outputs=output, expectations=expected)
     assert verdict_matches_eligibility(outputs=output)
     assert invariant_clean(outputs=output)
     assert citations_in_resolved_policy(outputs=output, expectations=expected)
@@ -55,3 +58,17 @@ def test_exact_and_invariant_scorers(output):
 def test_money_is_exact_to_cents(output):
     output["custom_outputs"]["recommendation"]["settlement_estimate"] = "12.31"
     assert not amount_matches_authority(outputs=output)
+
+
+def test_gold_money_is_exact(output):
+    assert amount_matches_gold(outputs=output, expectations={"approved_amount": "0.00"})
+    assert not amount_matches_gold(outputs=output, expectations={"approved_amount": "0.01"})
+
+
+def test_pend_verdict_normalizes_but_disposition_already_matches(output):
+    recommendation = output["custom_outputs"]["recommendation"]
+    recommendation["recommended_verdict"] = "PEND_INVESTIGATE"
+    recommendation["recommended_disposition"] = "PEND_INVESTIGATE"
+    expectations = {"verdict": "PEND", "disposition": "PEND_INVESTIGATE"}
+    assert verdict_exact_match(outputs=output, expectations=expectations)
+    assert disposition_exact_match(outputs=output, expectations=expectations)

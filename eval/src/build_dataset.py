@@ -180,10 +180,17 @@ def fingerprint(rows: list[dict], resolver_sha: str) -> str:
 
 
 def persist_managed_dataset(records: list[dict], experiment_id: str, metadata: dict):
-    dataset = mlflow.genai.datasets.create_dataset(
-        name=(f"fe-bar-ir.default.claims_adjudication_eval_{metadata['source_fingerprint'][:12]}"),
-        experiment_id=experiment_id,
-    )
+    name = f"fe-bar-ir.default.claims_adjudication_eval_{metadata['source_fingerprint'][:12]}"
+    try:
+        dataset = mlflow.genai.datasets.get_dataset(name=name)
+    except Exception as exc:
+        message = str(exc).lower()
+        if "does not exist" not in message and "not found" not in message:
+            raise
+        dataset = mlflow.genai.datasets.create_dataset(
+            name=name,
+            experiment_id=experiment_id,
+        )
     dataset.merge_records(records)
     return dataset
 
