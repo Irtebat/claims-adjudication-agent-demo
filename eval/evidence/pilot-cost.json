@@ -1,0 +1,13 @@
+{
+  "cost_method": "conservative_$1_pilot_ceiling",
+  "judge_tier_deferred": false,
+  "judge_tier_ran": true,
+  "pilot_cost_usd": 1.0,
+  "pilot_llm_invocations": 30,
+  "pilot_records": 10,
+  "pilot_tokens": 0,
+  "projected_llm_invocations": 165,
+  "projected_total_usd": 5.5,
+  "trace_token_telemetry_available": false,
+  "threshold_usd": 25.0
+}

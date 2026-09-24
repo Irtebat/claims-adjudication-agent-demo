@@ -1,0 +1,64 @@
+[
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "2c4ef723483b0de4"
+  },
+  {
+    "failed_scorers": [
+      "verdict_exact_match",
+      "disposition_exact_match"
+    ],
+    "request_hash": "e74274c2a2468f10"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "63fc516e46a9ce75"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "b1fab07be269491d"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "281a26f22b423e13"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "dd7a6995ac702173"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match",
+      "verdict_exact_match"
+    ],
+    "request_hash": "432c2e885287eaa3"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "6d99de9dc45a3a72"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "ba75eb1dd3e91f07"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "6668a26bf4ced350"
+  }
+]

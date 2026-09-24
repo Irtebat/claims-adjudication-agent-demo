@@ -1,0 +1,8 @@
+{
+  "live": "DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar uv run python src/evaluate.py --profile fe-bar",
+  "local_gates": [
+    "uv run ruff check src tests",
+    "uv run ruff format --check src tests",
+    "uv run pytest -q"
+  ]
+}

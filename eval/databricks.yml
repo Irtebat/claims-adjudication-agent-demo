@@ -1,0 +1,50 @@
+bundle:
+  name: fe-bar-agent-evaluation
+
+variables:
+  dataset_version: {default: latest}
+  model_uri: {default: "models:/fe-bar-ir.default.claims_adjudication_agent@prod"}
+  judge_endpoint: {default: databricks-meta-llama-3-3-70b-instruct}
+  scorer_tier: {default: auto}
+  experiment: {default: /Shared/claims-adjudication-offline-evaluation}
+
+resources:
+  jobs:
+    claims_adjudication_eval:
+      name: fe-bar-claims-adjudication-offline-eval
+      max_concurrent_runs: 1
+      parameters:
+        - {name: dataset_version, default: "${var.dataset_version}"}
+        - {name: model_uri, default: "${var.model_uri}"}
+        - {name: judge_endpoint, default: "${var.judge_endpoint}"}
+        - {name: scorer_tier, default: "${var.scorer_tier}"}
+        - {name: experiment, default: "${var.experiment}"}
+      tasks:
+        - task_key: offline_evaluation
+          spark_python_task:
+            python_file: ./src/evaluate.py
+            parameters: [--profile, fe-bar, --dataset-version, "{{job.parameters.dataset_version}}",
+              --model-uri, "{{job.parameters.model_uri}}", --judge-endpoint,
+              "{{job.parameters.judge_endpoint}}", --scorer-tier, "{{job.parameters.scorer_tier}}",
+              --experiment, "{{job.parameters.experiment}}"]
+          environment_key: eval_environment
+      environments:
+        - environment_key: eval_environment
+          spec:
+            client: "1"
+            dependencies:
+              - mlflow[databricks]>=3.5.0,<4
+              - databricks-agents>=1.1.0
+              - databricks-langchain
+              - databricks-sdk>=0.81.0
+              - langgraph
+              - psycopg[binary]
+              - pydantic>=2
+
+targets:
+  prod:
+    default: true
+    mode: production
+    workspace:
+      profile: fe-bar
+      root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/fe-bar-agent-evaluation/prod
