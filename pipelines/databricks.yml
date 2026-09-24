@@ -16,6 +16,9 @@ variables:
   cdf_adjudications_table:
     description: Fully qualified native Lakebase CDF table for adjudications
     default: fe-bar-ir.cdf.lb_adjudications_history
+  cdf_decision_records_table:
+    description: Fully qualified native Lakebase CDF table for adjudication decision records
+    default: fe-bar-ir.cdf.lb_adjudication_decision_records
 resources:
   pipelines:
     medallion:
@@ -33,6 +36,7 @@ resources:
         claims.catalog: ${var.catalog}
         claims.cdf_claims_table: ${var.cdf_claims_table}
         claims.cdf_adjudications_table: ${var.cdf_adjudications_table}
+        claims.cdf_decision_records_table: ${var.cdf_decision_records_table}
   jobs:
     validate_generator:
       name: steel-claims-validate-generator
