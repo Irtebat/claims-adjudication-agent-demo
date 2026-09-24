@@ -5,14 +5,14 @@ Builds a reproducible steel claims dataset in the catalog configured in
 `../config/config.example.yaml`; credentials stay in CLI authentication.
 The CLI wrapper always supplies the configured profile explicitly.
 
-The serverless bootstrap job writes Parquet to
-`/Volumes/<catalog>/bronze/raw_landing`. A triggered Lakeflow declarative
-pipeline creates seven bronze materialized views, five silver streaming tables
-with `delta.enableChangeDataFeed=true`, two silver history materialized views,
-and two gold history materialized views. The serve-down tables stream immutable
-Parquet files from bronze's landing volume using Auto Loader. No joins or
-aggregations are needed. Gold history is for evaluation/analytics; live claims
-originate in Lakebase. Policy standards and coating-warranty terms are **not**
+The serverless generator writes Parquet to
+`/Volumes/<catalog>/bronze/raw_landing`. The one-time baseline seed reads claims
+and adjudications directly from those files, then native Lakebase CDF snapshots
+the operational tables into `cdf.lb_*_history`. AUTO CDC incrementally maintains
+the two silver SCD Type 2 histories; gold current views filter on
+`__END_AT IS NULL`, while gold history views retain the full timeline for
+evaluation. The other serve-down tables continue to stream immutable Parquet
+files from bronze's landing volume using Auto Loader. Policy standards and coating-warranty terms are **not**
 produced here: they are authored in `agent/src/policy_source.json` and loaded
 directly into Lakebase by the policy intake (`agent/src/policy_intake.py`).
 
@@ -29,7 +29,8 @@ this bootstrap job against live data.
 | silver.mill_test_certs | Chemistry, mechanical measurements and coating adhesion result |
 | silver.customers / suppliers / defect_codes | Synthetic entities and defect taxonomy |
 | silver.claims_history / adjudications_history | Validated historical facts |
-| gold.claims_history / adjudications_history | Published claims and final labeled decisions |
+| gold.claims_current / adjudications_current | Current operational claims and decisions |
+| gold.claims_history / adjudications_history | Full SCD2 timelines for evaluation/audit |
 
 Policy standards and coating-warranty terms are authored in
 `agent/src/policy_source.json` and loaded into Lakebase by the policy intake, as
@@ -71,8 +72,11 @@ uv run --with pyyaml python pipelines/run.py govern
 uv run --with pyyaml python pipelines/run.py evidence
 ```
 
-The wrapper runs `databricks bundle validate --strict`, `bundle deploy`, and
-`bundle run bootstrap`, passing `--profile` and bundle variables from config.
+The wrapper runs `databricks bundle validate --strict`, deploys the bundles, and
+orchestrates raw generation, one-time Lakebase seeding, CDF creation/readiness,
+then the triggered AUTO CDC pipeline, always passing the configured profile.
+It refuses to reseed after a CDF config exists, because fixture replacement would
+emit artificial deletes/inserts and create spurious SCD2 versions.
 Set `synthetic.claim_count` once in `settings.yaml` to scale to 20,000–50,000,
 or deploy with `--claim-count 20000`. The minimum is 100 so every pattern is
 present. Seed controls Faker identities; the fact pattern allocation is fixed.

@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-09-23T23:14:27Z",
+  "query": "SELECT 'claims' entity, count(*) versions, count_if(__END_AT IS NULL) current_rows FROM `fe-bar-ir`.silver.claims_history UNION ALL SELECT 'adjudications', count(*), count_if(__END_AT IS NULL) FROM `fe-bar-ir`.silver.adjudications_history ORDER BY entity",
+  "result": [
+    {"current_rows": "5000", "entity": "adjudications", "versions": "5001"},
+    {"current_rows": "5000", "entity": "claims", "versions": "5000"}
+  ]
+}
+

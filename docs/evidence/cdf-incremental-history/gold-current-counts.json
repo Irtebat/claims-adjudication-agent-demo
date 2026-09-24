@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-09-23T23:14:27Z",
+  "query": "SELECT 'claims_current' view_name, count(*) row_count FROM `fe-bar-ir`.gold.claims_current UNION ALL SELECT 'adjudications_current', count(*) FROM `fe-bar-ir`.gold.adjudications_current ORDER BY view_name",
+  "result": [
+    {"row_count": "5000", "view_name": "adjudications_current"},
+    {"row_count": "5000", "view_name": "claims_current"}
+  ]
+}
+

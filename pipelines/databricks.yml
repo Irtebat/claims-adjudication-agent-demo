@@ -10,6 +10,12 @@ variables:
   warranty_schedule:
     description: Warranty version schedule JSON, sourced from the policy by run.py
     default: "[]"
+  cdf_claims_table:
+    description: Fully qualified native Lakebase CDF table for claims
+    default: fe-bar-ir.cdf.lb_claims_history
+  cdf_adjudications_table:
+    description: Fully qualified native Lakebase CDF table for adjudications
+    default: fe-bar-ir.cdf.lb_adjudications_history
 resources:
   pipelines:
     medallion:
@@ -25,6 +31,8 @@ resources:
             include: ./src/transformations/**
       configuration:
         claims.catalog: ${var.catalog}
+        claims.cdf_claims_table: ${var.cdf_claims_table}
+        claims.cdf_adjudications_table: ${var.cdf_adjudications_table}
   jobs:
     validate_generator:
       name: steel-claims-validate-generator
@@ -45,8 +53,8 @@ resources:
               validate_only: "true"
           timeout_seconds: 3600
           max_retries: 0
-    bootstrap:
-      name: steel-claims-bootstrap
+    generate_raw:
+      name: steel-claims-generate-raw
       max_concurrent_runs: 1
       parameters:
         - name: catalog
@@ -63,15 +71,13 @@ resources:
             notebook_path: ./src/generate.py
           timeout_seconds: 3600
           max_retries: 0
+    process_cdf:
+      name: steel-claims-process-cdf
+      max_concurrent_runs: 1
+      tasks:
         - task_key: medallion
-          depends_on:
-            - task_key: generate
           pipeline_task:
             pipeline_id: ${resources.pipelines.medallion.id}
-            # Synthetic landing files are replaced on every bootstrap. Reset the
-            # streaming tables/checkpoints so replacement files cannot append a
-            # second copy of the same deterministic fixture rows.
-            full_refresh: true
       queue:
         enabled: true
 targets:
