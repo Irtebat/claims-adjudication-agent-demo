@@ -52,7 +52,20 @@ from writer import write_adjudication
 LLM_ENDPOINT = "databricks-gpt-5-2"
 MODEL_NAME = "fe-bar-ir.default.claims_adjudication_agent"
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_AUTHORITIES_PATH = os.path.join(_HERE, "authorities.py")
+
+
+def _authorities_path() -> str:
+    """Resolve the imported authority module in source and MLflow artifact layouts.
+
+    Models-from-code keeps ``agent.py`` at the model root and adds each
+    ``code_paths`` entry under ``model/code`` to ``sys.path``. Consequently an
+    imported sibling's ``__file__`` is authoritative; joining against the model
+    file's directory is not.
+    """
+    import authorities
+
+    return authorities.__file__
+
 
 SYSTEM_PROMPT = (
     "You are a steel quality/warranty claims adjudication assistant. Deterministic "
@@ -212,7 +225,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
 
         return [
             StructuredTool.from_function(
-                func=frozen_result(name),
+                func=frozen_result(key),
                 name=name,
                 description=description,
             )
@@ -312,7 +325,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
     def adjudicate(self, claim: dict, persist: bool = True) -> dict:
         reproducibility = {
             "authorities_git_sha": _git_sha(),
-            "authorities_source_sha256": source_sha256(_AUTHORITIES_PATH),
+            "authorities_source_sha256": source_sha256(_authorities_path()),
             "agent_model_name": MODEL_NAME,
             "agent_model_version": self.model_version,
             "reasoning_endpoint": LLM_ENDPOINT,

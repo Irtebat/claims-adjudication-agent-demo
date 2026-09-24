@@ -7,7 +7,9 @@ sibling modules as ``code_paths``), with pinned deps and the passthrough-auth
 resources (the reasoning endpoint + Lakebase). It registers to
 ``fe-bar-ir.default.claims_adjudication_agent``, validates the isolated artifact
 with ``mlflow.models.predict(env_manager="uv")`` on a real sample claim
-(``persist=false`` — validation never writes), and sets the ``@prod`` alias. It
+(``persist=false`` — validation never writes), and only then registers and sets
+the ``@prod`` alias. A failed validation therefore never creates another partial
+UC model version. It
 does NOT create a serving endpoint (that is a later workstream).
 """
 
@@ -81,11 +83,20 @@ def _sample_claim(profile: str) -> dict:
     return {k: _coerce(v) for k, v in zip(columns, row)}
 
 
-def run(profile: str, experiment: str, validate: bool = True) -> dict:
+def register_validated(model_uri: str) -> dict:
+    """Register an already isolated-validated artifact and promote it to ``@prod``."""
     mlflow.set_tracking_uri("databricks")
     mlflow.set_registry_uri("databricks-uc")
-    client = MlflowClient(registry_uri="databricks-uc")
+    registered = mlflow.register_model(model_uri, MODEL_NAME)
+    MlflowClient(registry_uri="databricks-uc").set_registered_model_alias(
+        MODEL_NAME, "prod", registered.version
+    )
+    return {"model_uri": model_uri, "model_version": registered.version, "alias": "prod"}
 
+
+def run(profile: str, experiment: str, validate: bool = True, register: bool = True) -> dict:
+    mlflow.set_tracking_uri("databricks")
+    mlflow.set_registry_uri("databricks-uc")
     # A named NON-Git experiment (standard MLflow traces), parent dir pre-created.
     mlflow.set_experiment(experiment)
 
@@ -106,14 +117,12 @@ def run(profile: str, experiment: str, validate: bool = True) -> dict:
             resources=resources,
             input_example=input_example,
             pip_requirements=PIP_REQUIREMENTS,
-            registered_model_name=MODEL_NAME,
         )
         run_id = run_ctx.info.run_id
 
     result = {
         "run_id": run_id,
         "model_uri": info.model_uri,
-        "model_version": info.registered_model_version,
     }
 
     if validate:
@@ -127,8 +136,8 @@ def run(profile: str, experiment: str, validate: bool = True) -> dict:
         )
         result["validated"] = True
 
-    client.set_registered_model_alias(MODEL_NAME, "prod", info.registered_model_version)
-    result["alias"] = "prod"
+    if register:
+        result.update(register_validated(info.model_uri))
     return result
 
 
@@ -140,8 +149,25 @@ def main() -> None:
         default="/Users/irtebat.shaukat@databricks.com/claims_adjudication_agent",
     )
     parser.add_argument("--no-validate", action="store_true")
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Log and isolated-validate without creating a UC model version",
+    )
+    parser.add_argument(
+        "--register-model-uri",
+        help="Register and alias an artifact already validated by --validate-only",
+    )
     args = parser.parse_args()
-    summary = run(args.profile, args.experiment, validate=not args.no_validate)
+    if args.register_model_uri:
+        summary = register_validated(args.register_model_uri)
+    else:
+        summary = run(
+            args.profile,
+            args.experiment,
+            validate=not args.no_validate,
+            register=not args.validate_only,
+        )
     print(json.dumps(summary, indent=2, sort_keys=True))
 
 

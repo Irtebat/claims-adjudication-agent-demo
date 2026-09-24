@@ -25,13 +25,16 @@ import mlflow
 # Patterns and the SQL that picks a representative claim for each, joining the
 # seeded FINAL adjudications. Each returns a single claim_id.
 PATTERN_SQL = {
-    "clean_approve": "verdict = 'APPROVE' AND disposition IN ('CREDIT','REPLACEMENT','REWORK') AND (duplicate_of_claim_id IS NULL) AND approved_amount = claimed_amount",
-    "over_claim_partial": "verdict = 'APPROVE' AND approved_amount < claimed_amount AND duplicate_of_claim_id IS NULL",
-    "in_spec_or_warranty_deny": "verdict = 'DENY' AND disposition = 'DENY'",
-    "duplicate": "disposition = 'DUPLICATE'",
-    "pend_investigate": "verdict = 'PEND'",
-    "supplier_attributable": "supplier_attributable = true",
-    "fraud_cluster": "fraud_cluster_id IS NOT NULL",
+    label: f"rationale = 'Synthetic adjudication: {label}'"
+    for label in (
+        "clean",
+        "in_spec_should_deny",
+        "over_claim",
+        "duplicate",
+        "out_of_warranty_or_environment_excluded",
+        "supplier_attributable",
+        "fraud_cluster",
+    )
 }
 CLAIM_COLUMNS = [
     "claim_id",
@@ -159,6 +162,9 @@ def run(profile: str, experiment: str, destination: Path) -> dict:
         "results": results,
         "decision_records_readback": written,
     }
+    if set(sample) != set(PATTERN_SQL):
+        missing = sorted(set(PATTERN_SQL) - set(sample))
+        raise RuntimeError(f"Missing required injected label patterns: {missing}")
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "offline-validation.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n"
