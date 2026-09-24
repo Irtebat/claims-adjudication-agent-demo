@@ -85,6 +85,13 @@ def test_duplicate_is_denied_as_duplicate():
     assert out["approved_amount"] == 0.0 and out["duplicate_of_claim_id"] == "CLM-1"
 
 
+def test_unknown_claim_type_is_held_for_investigation():
+    out = deterministic_outcome("unknown_type", CONFORMS, COVERED, APPROVE_SETTLEMENT, NO_DUP)
+    assert out["verdict"] == "PEND_INVESTIGATE"
+    assert out["eligible"] is not True
+    assert out["approved_amount"] == 0.0
+
+
 # --- invariant enforcement (the LLM never wins) ----------------------------- #
 def test_duplicate_cannot_be_recommended_for_payment():
     det = deterministic_outcome(
@@ -103,6 +110,15 @@ def test_cannot_approve_an_in_spec_claim():
     )
     corrected, violations = enforce_invariants(_rec("APPROVE", "CREDIT", 5000.0), det)
     assert corrected["recommended_verdict"] == "DENY"
+    assert corrected["approved_amount"] == 0.0
+    assert "cannot_approve_ineligible_claim" in violations
+
+
+def test_cannot_approve_an_unknown_claim_type():
+    det = deterministic_outcome("unknown_type", CONFORMS, COVERED, APPROVE_SETTLEMENT, NO_DUP)
+    corrected, violations = enforce_invariants(_rec("APPROVE", "CREDIT", 5000.0), det)
+    assert corrected["recommended_verdict"] == det["verdict"]
+    assert corrected["recommended_disposition"] == det["disposition"]
     assert corrected["approved_amount"] == 0.0
     assert "cannot_approve_ineligible_claim" in violations
 

@@ -189,10 +189,13 @@ def enforce_invariants(recommendation: dict, deterministic: dict) -> tuple[dict,
         corrected["recommended_disposition"] = "DUPLICATE"
     else:
         det_verdict = deterministic["verdict"]
-        if det_verdict == "DENY" and corrected.get("recommended_verdict") == "APPROVE":
-            # An ineligible claim (in-spec / out-of-coverage) cannot be paid.
+        if (
+            deterministic.get("eligible") is not True
+            and corrected.get("recommended_verdict") == "APPROVE"
+        ):
+            # An ineligible or unresolved claim cannot be paid.
             violations.append("cannot_approve_ineligible_claim")
-            corrected["recommended_verdict"] = "DENY"
+            corrected["recommended_verdict"] = det_verdict
             corrected["recommended_disposition"] = deterministic["disposition"]
         elif det_verdict == "APPROVE" and corrected.get("recommended_verdict") == "DENY":
             # An eligible claim cannot be silently denied; hold it instead.
