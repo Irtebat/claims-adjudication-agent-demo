@@ -27,9 +27,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import Any, Generator
+from typing import Annotated, Any, Generator, Sequence, TypedDict
 
 import mlflow
+from langgraph.graph.message import add_messages
 from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import (
     ResponsesAgentRequest,
@@ -255,11 +256,8 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
         ]
 
     def _run_graph(self, core: dict, evidence: str) -> str:
-        from typing import Annotated, Sequence, TypedDict
-
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
         from langgraph.graph import END, StateGraph
-        from langgraph.graph.message import add_messages
         from langgraph.prebuilt.tool_node import ToolNode
 
         tools = self._tools(core)
@@ -375,7 +373,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                                 ),
                             }
                         )
-            self._tag_trace(claim, record, violations, llm_used)
+            self._tag_trace(root, claim, record, violations, llm_used)
         return {
             "record": record,
             "recommendation": corrected,
@@ -385,28 +383,32 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             "write_result": write_result,
         }
 
-    def _tag_trace(self, claim: dict, record: dict, violations: list[str], llm_used: bool) -> None:
+    def _tag_trace(
+        self,
+        root: Any,
+        claim: dict,
+        record: dict,
+        violations: list[str],
+        llm_used: bool,
+    ) -> None:
         # Searchable root attributes — NO credentials/PII.
-        try:
-            mlflow.update_current_trace(
-                tags={
-                    "claim_id": str(claim.get("claim_id")),
-                    "adjudication_id": record["adjudication_id"],
-                    "claim_type": str(claim.get("claim_type")),
-                    "deterministic_verdict": record["deterministic_verdict"],
-                    "duplicate_flag": str(record["duplicate_flag"]),
-                    "recommended_verdict": record["recommended_verdict"],
-                    "recommended_disposition": record["recommended_disposition"],
-                    "agent_model_name": MODEL_NAME,
-                    "agent_model_version": str(self.model_version),
-                    "authorities_git_sha": str(record.get("authorities_git_sha")),
-                    "cited_clause_ids": ",".join(record.get("cited_clause_ids") or []),
-                    "invariant_violations": ",".join(violations),
-                    "llm_used": str(llm_used),
-                }
-            )
-        except Exception:
-            pass
+        root.set_attributes(
+            {
+                "claim_id": str(claim.get("claim_id")),
+                "adjudication_id": record["adjudication_id"],
+                "claim_type": str(claim.get("claim_type")),
+                "deterministic_verdict": record["deterministic_verdict"],
+                "duplicate_flag": str(record["duplicate_flag"]),
+                "recommended_verdict": record["recommended_verdict"],
+                "recommended_disposition": record["recommended_disposition"],
+                "agent_model_name": MODEL_NAME,
+                "agent_model_version": str(self.model_version),
+                "authorities_git_sha": str(record.get("authorities_git_sha")),
+                "cited_clause_ids": ",".join(record.get("cited_clause_ids") or []),
+                "invariant_violations": ",".join(violations),
+                "llm_used": str(llm_used),
+            }
+        )
 
     # --- ResponsesAgent interface -----------------------------------------------
     def _extract_claim(self, request: ResponsesAgentRequest) -> dict:
