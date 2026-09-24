@@ -25,7 +25,11 @@ def test_true_duplicate_detected():
     decision = duplicate_decision(INCOMING, CANDIDATE, narrative_similarity=1.0)
     assert decision["is_duplicate"] is True
     assert decision["duplicate_of_claim_id"] == "CLM-0000005"
-    assert (decision["verdict"], decision["disposition"], decision["decision_status"]) == ("DENY", "DUPLICATE", "FINAL")
+    assert (decision["verdict"], decision["disposition"], decision["decision_status"]) == (
+        "DENY",
+        "DUPLICATE",
+        "FINAL",
+    )
 
 
 def test_low_narrative_similarity_is_not_duplicate():

@@ -60,6 +60,7 @@ def main():
             "deploy",
             "run",
             "resume",
+            "decision-records",
             "preview-status",
             "summary",
             "check-generator",
@@ -280,6 +281,77 @@ def main():
                     "cdf_config": created,
                     "claims_table": env["BUNDLE_VAR_cdf_claims_table"],
                     "adjudications_table": env["BUNDLE_VAR_cdf_adjudications_table"],
+                },
+                sort_keys=True,
+            )
+        )
+        raise SystemExit(0)
+
+    if args.action == "decision-records":
+        # Additive path: the append-only decision-record table is created by the
+        # lakebase migration and picked up by the EXISTING schema-scoped native CDF
+        # config. This verifies it reached STREAMING, then deploys and runs the
+        # pipeline flow that lands it in UC gold. It never reseeds or re-creates CDF.
+        status = preview_status()
+        if not status["enabled"] or not status["cdf_configs"]:
+            raise RuntimeError("No existing Lakebase CDF config; run the base flow first.")
+        cdf_schema = db["cdf_schema"]
+        cdf_config_name = status["cdf_configs"][0]["name"]
+        source = "adjudication_decision_records"
+        statuses = None
+        for _ in range(40):
+            statuses = cli_json("postgres", "list-cdf-statuses", cdf_config_name)
+            status_rows = statuses if isinstance(statuses, list) else statuses.get("statuses", [])
+            row = next(
+                (
+                    r
+                    for r in status_rows
+                    if r.get("postgres_table") == source or r.get("table_name") == source
+                ),
+                None,
+            )
+            state = (
+                str(row.get("status") or row.get("state", "")).upper().removeprefix("CDF_STATE_")
+                if row
+                else ""
+            )
+            if state == "STREAMING":
+                break
+            time.sleep(15)
+        else:
+            raise RuntimeError(
+                f"{source} did not reach CDF STREAMING; last status: {statuses}. "
+                "Confirm the lakebase migration created it with REPLICA IDENTITY FULL."
+            )
+
+        table_response = cli_json("tables", "list", catalog, cdf_schema)
+        tables = (
+            table_response if isinstance(table_response, list) else table_response.get("tables", [])
+        )
+
+        def cdf_table(src):
+            prefix = f"lb_{src}_history"
+            matches = [
+                row.get("full_name") or f"{catalog}.{cdf_schema}.{row['name']}"
+                for row in tables
+                if row.get("name", "").startswith(prefix)
+            ]
+            if len(matches) != 1:
+                raise RuntimeError(f"Expected one CDF table for {src}, found {matches}")
+            return matches[0]
+
+        env["BUNDLE_VAR_cdf_claims_table"] = cdf_table("claims")
+        env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table("adjudications")
+        env["BUNDLE_VAR_cdf_decision_records_table"] = cdf_table(source)
+        cli("bundle", "deploy", "--target", "prod")
+        cli("bundle", "run", "process_cdf", "--target", "prod")
+        print(
+            json.dumps(
+                {
+                    "cdf_config": cdf_config_name,
+                    "decision_records_state": "STREAMING",
+                    "decision_records_table": env["BUNDLE_VAR_cdf_decision_records_table"],
+                    "gold_table": f"{catalog}.gold.adjudication_decision_records",
                 },
                 sort_keys=True,
             )

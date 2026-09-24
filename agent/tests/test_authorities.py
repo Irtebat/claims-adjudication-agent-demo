@@ -10,9 +10,19 @@ from authorities import completed_months, compute_conformance, compute_coverage,
 from policy_schema import parse_policies
 
 PARSED = parse_policies()
-SPEC = next(r for r in PARSED["spec_params"] if r["grade"] == "ASTM A653 CS Type B" and r["region"] == "NA")
-W_V2 = next(r for r in PARSED["warranty_terms"] if r["product_line"] == "galvanized" and r["region"] == "NA" and r["version"] == "V2")
-W_V1 = next(r for r in PARSED["warranty_terms"] if r["product_line"] == "galvanized" and r["region"] == "NA" and r["version"] == "V1")
+SPEC = next(
+    r for r in PARSED["spec_params"] if r["grade"] == "ASTM A653 CS Type B" and r["region"] == "NA"
+)
+W_V2 = next(
+    r
+    for r in PARSED["warranty_terms"]
+    if r["product_line"] == "galvanized" and r["region"] == "NA" and r["version"] == "V2"
+)
+W_V1 = next(
+    r
+    for r in PARSED["warranty_terms"]
+    if r["product_line"] == "galvanized" and r["region"] == "NA" and r["version"] == "V1"
+)
 
 # The MTC values generate.py stamps: in-spec vs the injected tensile deviation.
 IN_SPEC = {

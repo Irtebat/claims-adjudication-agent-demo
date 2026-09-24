@@ -32,3 +32,23 @@ def integrity_queries(c):
         "orphan_current_adjudication": f"SELECT count(*) n FROM {c}.gold.adjudications_current a LEFT ANTI JOIN {c}.gold.claims_current c USING(claim_id)",
         "cdf_metadata_in_gold": f"SELECT count(*) n FROM {c}.information_schema.columns WHERE table_schema = 'gold' AND table_name IN ('claims_current','adjudications_current','claims_history','adjudications_history') AND column_name IN ('_pg_change_type','_pg_lsn','_pg_xid','_timestamp','_sort_by')",
     }
+
+
+def decision_record_queries(c):
+    """DQ for the append-only gold.adjudication_decision_records table.
+
+    ``duplicate_decision_record`` is the required assertion: exactly one immutable
+    row per ``(adjudication_id, record_version)`` (the SCD1 composite-key flow
+    guarantees this structurally; the check proves it). The others assert the
+    money invariants the record must carry: the persisted amount is deterministic
+    (the settlement authority amount only when APPROVE, else zero) and a duplicate
+    is never payable — proving the LLM never overrode an authority.
+    """
+    t = f"{c}.gold.adjudication_decision_records"
+    return {
+        "duplicate_decision_record": f"SELECT count(*) n FROM (SELECT adjudication_id, record_version FROM {t} GROUP BY adjudication_id, record_version HAVING count(*) > 1)",
+        "approved_amount_not_deterministic": f"SELECT count(*) n FROM {t} WHERE approved_amount < 0 OR (recommended_verdict = 'APPROVE' AND abs(approved_amount - settlement.approved_amount) > 0.005) OR (recommended_verdict <> 'APPROVE' AND approved_amount <> 0)",
+        "duplicate_recommended_for_payment": f"SELECT count(*) n FROM {t} WHERE duplicate_flag AND (recommended_verdict <> 'DENY' OR recommended_disposition <> 'DUPLICATE' OR approved_amount <> 0)",
+        "inspec_material_approved": f"SELECT count(*) n FROM {t} WHERE claim_type = 'material_nonconformance' AND conformance.conforms AND recommended_verdict = 'APPROVE'",
+        "uncovered_warranty_approved": f"SELECT count(*) n FROM {t} WHERE claim_type = 'coating_warranty' AND NOT coverage.covered AND recommended_verdict = 'APPROVE'",
+    }

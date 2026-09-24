@@ -58,8 +58,14 @@ frame = spark.createDataFrame(result["risk_rows"], schema).withColumn(
     "computed_at", F.lit(computed_at.isoformat()).cast("timestamp")
 )
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.gold")
-frame.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(
-    f"`{catalog}`.gold.customer_heat_risk"
+frame.write.mode("overwrite").option("overwriteSchema", "true").option(
+    "delta.enableChangeDataFeed", "true"
+).saveAsTable(f"`{catalog}`.gold.customer_heat_risk")
+# Delta CDF is required for the Triggered synced table that serves this risk down to
+# Lakebase reference.customer_heat_risk; keep it set so re-runs preserve it.
+spark.sql(
+    f"ALTER TABLE `{catalog}`.gold.customer_heat_risk "
+    "SET TBLPROPERTIES (delta.enableChangeDataFeed = true)"
 )
 
 summary = {

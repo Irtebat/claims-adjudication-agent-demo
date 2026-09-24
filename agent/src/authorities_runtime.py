@@ -81,6 +81,36 @@ def coerce(value, typ: str):
     return value
 
 
+class FrozenAdjudicationContext:
+    """A RESOLVE-ONCE frozen policy + MTC snapshot for a single adjudication.
+
+    Resolution and the coil MTC read happen once at the start of an adjudication;
+    every authority call then reuses this snapshot instead of re-resolving per
+    tool call. The three ``compute_*`` methods delegate to the pure authorities in
+    ``authorities.py`` — the LLM never participates in the money math.
+    """
+
+    def __init__(self, resolved: dict, measured: dict):
+        self.resolved = resolved
+        self.measured = measured
+
+    def conformance(self) -> dict:
+        return authorities.compute_conformance(self.resolved["spec_params"], self.measured)
+
+    def coverage(self, claim: dict) -> dict:
+        enriched = {**claim, "ship_date": self.resolved["coil"]["ship_date"]}
+        return authorities.compute_coverage(self.resolved["warranty_terms"], enriched)
+
+    def settlement(self, inputs: dict) -> dict:
+        enriched = {
+            **inputs,
+            "shipped_tonnage": self.resolved["coil"]["shipped_tonnage"],
+            "unit_price": self.resolved["coil"]["unit_price"],
+            "freight_cap": self.resolved["freight_cap"],
+        }
+        return authorities.compute_settlement(enriched)
+
+
 class AuthorityRuntime:
     """Fetches params + coil MTC over Lakebase psycopg and runs the in-process authorities.
 
@@ -92,6 +122,12 @@ class AuthorityRuntime:
     def __init__(self, conn: Any):
         self._conn = conn
         self._resolver = PolicyResolver(conn)
+
+    def freeze(self, coil_id: str) -> FrozenAdjudicationContext:
+        """Resolve the coil's policy snapshot and MTC ONCE, for reuse across all tools."""
+        measured = self.fetch_measured(coil_id)
+        resolved = self._resolver.resolve(coil_id)
+        return FrozenAdjudicationContext(resolved, measured)
 
     def _rows(self, statement: str, parameters: dict | None = None) -> list[dict]:
         with self._conn.cursor() as cur:
@@ -132,7 +168,11 @@ class AuthorityRuntime:
         resolved = self._resolver.resolve(claim["coil_id"])
         terms = resolved["warranty_terms"]
         enriched_claim = {**claim, "ship_date": resolved["coil"]["ship_date"]}
-        return {"warranty_terms": terms, "warranty_provenance": resolved["warranty_provenance"], "verdict": authorities.compute_coverage(terms, enriched_claim)}
+        return {
+            "warranty_terms": terms,
+            "warranty_provenance": resolved["warranty_provenance"],
+            "verdict": authorities.compute_coverage(terms, enriched_claim),
+        }
 
     def compute_settlement(self, inputs: dict) -> dict:
         resolved = self._resolver.resolve(inputs["coil_id"])

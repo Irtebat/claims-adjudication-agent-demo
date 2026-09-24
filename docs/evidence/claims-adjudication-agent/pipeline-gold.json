@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-09-24T20:06:37Z",
+  "table": "fe-bar-ir.gold.adjudication_decision_records",
+  "row_count": 8,
+  "distinct_adjudications": 8,
+  "offline_validation_records": 7,
+  "payable_duplicates": 0,
+  "authority_amount_overrides": 0,
+  "authority_verdict_overrides": 0,
+  "latest_seven_match_offline_validation": true,
+  "pipeline_update_id": "9dacbf50-0a92-4434-babe-dcd744145bd7",
+  "pipeline_state": "COMPLETED"
+}
