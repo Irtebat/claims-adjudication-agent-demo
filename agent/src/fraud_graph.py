@@ -2,13 +2,16 @@
 
 Organized fraud and systemic quality problems show up as *clusters*: claims that
 share a heat (the traceability batch), often filed under a small set of reused
-customer identities (collusion) — PLAN §6.3. This clusters claims by shared
-``heat_no`` with connected components (union-find) and scores each by customer
-concentration, producing ``gold.customer_heat_risk`` for the agent's ``get_risk``
-tool. It is advisory context, not a money authority.
+customer identities (collusion) — PLAN §6.3. The plan names supplier-lot patterns
+as another possible signal, but this implementation deliberately links only shared
+``heat_no`` values because supplier lots span broad, otherwise unrelated production
+blocks. It scores each heat cluster by customer concentration and produces
+``gold.customer_heat_risk`` for the agent's ``get_risk`` tool. It is advisory
+context, not a money authority.
 
 Pure functions here (unit-tested); the thin Spark driver in ``fraud_graph_job.py``
-reads ``gold.claims_history``, runs these, and writes the gold table.
+reads ``gold.claims_current``, resolves ``heat_no`` through ``silver.heats_coils``,
+runs these, and writes the gold table.
 """
 
 from __future__ import annotations

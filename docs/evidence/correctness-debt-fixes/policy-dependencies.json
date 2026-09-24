@@ -1,0 +1,18 @@
+{
+  "profile": "fe-bar",
+  "project": "fe-bar-operational-plane",
+  "database": "databricks_postgres",
+  "tables": ["spec_params", "spec_clauses", "warranty_terms", "warranty_clauses"],
+  "cascade_owned_dependents": [
+    {"table": "spec_clauses", "object": "spec_clauses_lb_bm25", "kind": "index", "access_method": "lakebase_bm25"},
+    {"table": "warranty_clauses", "object": "warranty_clauses_lb_bm25", "kind": "index", "access_method": "lakebase_bm25"},
+    {"table": "spec_params", "object": "spec_params_pkey", "kind": "primary_key"},
+    {"table": "spec_clauses", "object": "spec_clauses_pkey", "kind": "primary_key"},
+    {"table": "warranty_terms", "object": "warranty_terms_pkey", "kind": "primary_key"},
+    {"table": "warranty_clauses", "object": "warranty_clauses_pkey", "kind": "primary_key"},
+    {"table": "all four", "object": "PostgreSQL TOAST/storage objects", "kind": "internal storage"}
+  ],
+  "external_foreign_keys": [],
+  "dependent_views": [],
+  "decision": "preserve tables and indexes; upsert natural keys and reconcile stale source hashes"
+}

@@ -1,0 +1,41 @@
+Captured 2026-09-24 IST
+
+Pytest collection
+  command: uv run --with pytest --with pyyaml --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' pytest --collect-only -q agent/tests pipelines/tests
+  result: 60 test cases collected
+
+Pytest execution
+  command: uv run --with pytest --with pyyaml --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' pytest agent/tests pipelines/tests -q
+  result: 58 passed, 2 skipped
+
+Ruff lint
+  command: uv run --with ruff ruff check agent pipelines
+  result: All checks passed!
+
+Ruff format (changed files)
+  command: uv run --with ruff ruff format --check agent/src/fraud_graph.py agent/src/fraud_graph_job.py agent/src/policy_intake.py
+  result: 3 files already formatted
+
+Ruff format (exact README pipeline scope)
+  command: uv run --with ruff ruff format --check pipelines
+  result: pre-existing failure in pipelines/evidence.py, pipelines/run.py, pipelines/src/generate.py, and pipelines/tests/test_bootstrap_idempotency.py; none is part of this scoped diff
+
+Compilation
+  command: python3 -m compileall -q agent/src pipelines
+  result: passed
+
+Agent bundle
+  command: cd agent && databricks bundle validate --strict -t prod --profile fe-bar
+  result: Validation OK!
+  command: cd agent && databricks bundle deploy -t prod --profile fe-bar
+  result: deployed
+  command: cd agent && databricks bundle run fraud_graph -t prod --profile fe-bar
+  result: run 355068363829515 TERMINATED SUCCESS
+
+Policy intake
+  command: uv run --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' python agent/src/policy_intake.py --profile fe-bar
+  result: passed; four table counts verified and both BM25 indexes retained
+
+Money/decision guardrail
+  command: git diff -- agent/src/authorities.py agent/src/authorities_runtime.py
+  result: empty

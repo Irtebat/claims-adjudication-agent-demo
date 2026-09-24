@@ -1,0 +1,20 @@
+{
+  "profile": "fe-bar",
+  "counts": {
+    "spec_clauses": 18,
+    "spec_params": 6,
+    "warranty_clauses": 36,
+    "warranty_terms": 12
+  },
+  "extensions": {"lakebase_text": "0.1.2", "pg_trgm": "1.6"},
+  "index_methods": {
+    "spec_clauses_lb_bm25": "lakebase_bm25",
+    "warranty_clauses_lb_bm25": "lakebase_bm25"
+  },
+  "reconciled_deletes": {
+    "spec_clauses": 0,
+    "spec_params": 0,
+    "warranty_clauses": 0,
+    "warranty_terms": 0
+  }
+}
