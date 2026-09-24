@@ -1,0 +1,18 @@
+{
+  "all_public_tables_streaming": [
+    "adjudication_decision_records",
+    "adjudications",
+    "claims",
+    "claims_pending",
+    "investigation_cases",
+    "outbox",
+    "settlements",
+    "supplier_recovery_cases"
+  ],
+  "captured_at_utc": "2026-09-24T15:21:11.154662+00:00",
+  "cdf_config": "projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres/cdf-configs/public",
+  "decision_record_cdf_state": "CDF_STATE_STREAMING",
+  "landed_uc_table": "fe-bar-ir.cdf.lb_adjudication_decision_records_history",
+  "new_beta_enablement": false,
+  "reused_existing_config": true
+}

@@ -1,0 +1,261 @@
+{
+  "authority_never_overridden": true,
+  "decision_records_readback": [
+    {
+      "adjudication_id": "ADJ-0ca0d9d3c3389d89daad",
+      "approved_amount": 24860.0,
+      "claim_id": "CLM-0000065",
+      "duplicate_flag": false,
+      "invariant_violations": [],
+      "n_citations": 3,
+      "over_claim_flag": true,
+      "recommended_verdict": "APPROVE",
+      "record_version": 1,
+      "schema_version": "adjudication-decision-record/v1"
+    },
+    {
+      "adjudication_id": "ADJ-2ad0b9cca75d5d84627f",
+      "approved_amount": 11577.0,
+      "claim_id": "CLM-0000001",
+      "duplicate_flag": false,
+      "invariant_violations": [],
+      "n_citations": 3,
+      "over_claim_flag": false,
+      "recommended_verdict": "APPROVE",
+      "record_version": 1,
+      "schema_version": "adjudication-decision-record/v1"
+    },
+    {
+      "adjudication_id": "ADJ-37ca65cb6f5872140f06",
+      "approved_amount": 0.0,
+      "claim_id": "CLM-0000040",
+      "duplicate_flag": false,
+      "invariant_violations": [],
+      "n_citations": 3,
+      "over_claim_flag": false,
+      "recommended_verdict": "DENY",
+      "record_version": 1,
+      "schema_version": "adjudication-decision-record/v1"
+    },
+    {
+      "adjudication_id": "ADJ-826945686ad92d7f7b40",
+      "approved_amount": 0.0,
+      "claim_id": "CLM-0000020",
+      "duplicate_flag": false,
+      "invariant_violations": [
+        "settlement_estimate_overridden"
+      ],
+      "n_citations": 3,
+      "over_claim_flag": false,
+      "recommended_verdict": "DENY",
+      "record_version": 1,
+      "schema_version": "adjudication-decision-record/v1"
+    },
+    {
+      "adjudication_id": "ADJ-d02cea4b5a4a72c54b41",
+      "approved_amount": 22320.0,
+      "claim_id": "CLM-0000080",
+      "duplicate_flag": false,
+      "invariant_violations": [],
+      "n_citations": 3,
+      "over_claim_flag": false,
+      "recommended_verdict": "APPROVE",
+      "record_version": 1,
+      "schema_version": "adjudication-decision-record/v1"
+    },
+    {
+      "adjudication_id": "ADJ-e41514302b96b689e9fd",
+      "approved_amount": 0.0,
+      "claim_id": "CLM-0000055",
+      "duplicate_flag": true,
+      "invariant_violations": [],
+      "n_citations": 3,
+      "over_claim_flag": false,
+      "recommended_verdict": "DENY",
+      "record_version": 1,
+      "schema_version": "adjudication-decision-record/v1"
+    },
+    {
+      "adjudication_id": "ADJ-ff6ca6e15f04e7f48608",
+      "approved_amount": 0.0,
+      "claim_id": "CLM-0000095",
+      "duplicate_flag": false,
+      "invariant_violations": [],
+      "n_citations": 3,
+      "over_claim_flag": false,
+      "recommended_verdict": "DENY",
+      "record_version": 1,
+      "schema_version": "adjudication-decision-record/v1"
+    }
+  ],
+  "decision_records_written": 7,
+  "llm_used_count": 7,
+  "patterns": [
+    "clean",
+    "duplicate",
+    "fraud_cluster",
+    "in_spec_should_deny",
+    "out_of_warranty_or_environment_excluded",
+    "over_claim",
+    "supplier_attributable"
+  ],
+  "results": [
+    {
+      "adjudication_id": "ADJ-2ad0b9cca75d5d84627f",
+      "approved_amount": 11577.0,
+      "approved_amount_matches_authority": true,
+      "authority_never_overridden": true,
+      "cited_clause_ids": [
+        "galvalume/NA/V2/exclusions",
+        "galvalume/NA/V2/coverage",
+        "galvalume/NA/V2/proration"
+      ],
+      "claim_id": "CLM-0000001",
+      "claim_type": "coating_warranty",
+      "deterministic_disposition": "CREDIT",
+      "deterministic_verdict": "APPROVE",
+      "duplicate_never_paid": true,
+      "invariant_violations": [],
+      "llm_used": true,
+      "pattern": "clean",
+      "recommended_disposition": "CREDIT",
+      "recommended_verdict": "APPROVE",
+      "settlement_authority_amount": 11577.0
+    },
+    {
+      "adjudication_id": "ADJ-826945686ad92d7f7b40",
+      "approved_amount": 0.0,
+      "approved_amount_matches_authority": true,
+      "authority_never_overridden": true,
+      "cited_clause_ids": [
+        "EN 10346 DX51D+Z275/EU/DEMO-1990/mechanical",
+        "EN 10346 DX51D+Z275/EU/DEMO-1990/chemistry",
+        "EN 10346 DX51D+Z275/EU/DEMO-1990/dimensions"
+      ],
+      "claim_id": "CLM-0000020",
+      "claim_type": "material_nonconformance",
+      "deterministic_disposition": "DENY",
+      "deterministic_verdict": "DENY",
+      "duplicate_never_paid": true,
+      "invariant_violations": [
+        "settlement_estimate_overridden"
+      ],
+      "llm_used": true,
+      "pattern": "in_spec_should_deny",
+      "recommended_disposition": "DENY",
+      "recommended_verdict": "DENY",
+      "settlement_authority_amount": 17280.0
+    },
+    {
+      "adjudication_id": "ADJ-0ca0d9d3c3389d89daad",
+      "approved_amount": 24860.0,
+      "approved_amount_matches_authority": true,
+      "authority_never_overridden": true,
+      "cited_clause_ids": [
+        "EN 10346 DX51D+Z275/NA/DEMO-1990/mechanical",
+        "EN 10346 DX51D+Z275/NA/DEMO-1990/chemistry",
+        "EN 10346 DX51D+Z275/NA/DEMO-1990/dimensions"
+      ],
+      "claim_id": "CLM-0000065",
+      "claim_type": "material_nonconformance",
+      "deterministic_disposition": "CREDIT",
+      "deterministic_verdict": "APPROVE",
+      "duplicate_never_paid": true,
+      "invariant_violations": [],
+      "llm_used": true,
+      "pattern": "over_claim",
+      "recommended_disposition": "CREDIT",
+      "recommended_verdict": "APPROVE",
+      "settlement_authority_amount": 24860.0
+    },
+    {
+      "adjudication_id": "ADJ-e41514302b96b689e9fd",
+      "approved_amount": 0.0,
+      "approved_amount_matches_authority": true,
+      "authority_never_overridden": true,
+      "cited_clause_ids": [
+        "galvanized/EU/V1/exclusions",
+        "galvanized/EU/V1/coverage",
+        "galvanized/EU/V1/proration"
+      ],
+      "claim_id": "CLM-0000055",
+      "claim_type": "coating_warranty",
+      "deterministic_disposition": "DUPLICATE",
+      "deterministic_verdict": "DENY",
+      "duplicate_never_paid": true,
+      "invariant_violations": [],
+      "llm_used": true,
+      "pattern": "duplicate",
+      "recommended_disposition": "DUPLICATE",
+      "recommended_verdict": "DENY",
+      "settlement_authority_amount": 3466.66
+    },
+    {
+      "adjudication_id": "ADJ-37ca65cb6f5872140f06",
+      "approved_amount": 0.0,
+      "approved_amount_matches_authority": true,
+      "authority_never_overridden": true,
+      "cited_clause_ids": [
+        "galvalume/EU/V1/exclusions",
+        "galvalume/EU/V1/coverage",
+        "galvalume/EU/V1/proration"
+      ],
+      "claim_id": "CLM-0000040",
+      "claim_type": "coating_warranty",
+      "deterministic_disposition": "DENY",
+      "deterministic_verdict": "DENY",
+      "duplicate_never_paid": true,
+      "invariant_violations": [],
+      "llm_used": true,
+      "pattern": "out_of_warranty_or_environment_excluded",
+      "recommended_disposition": "DENY",
+      "recommended_verdict": "DENY",
+      "settlement_authority_amount": 0.0
+    },
+    {
+      "adjudication_id": "ADJ-d02cea4b5a4a72c54b41",
+      "approved_amount": 22320.0,
+      "approved_amount_matches_authority": true,
+      "authority_never_overridden": true,
+      "cited_clause_ids": [
+        "EN 10346 DX51D+Z275/EU/DEMO-1990/dimensions",
+        "EN 10346 DX51D+Z275/EU/DEMO-1990/chemistry",
+        "EN 10346 DX51D+Z275/EU/DEMO-1990/mechanical"
+      ],
+      "claim_id": "CLM-0000080",
+      "claim_type": "material_nonconformance",
+      "deterministic_disposition": "CREDIT",
+      "deterministic_verdict": "APPROVE",
+      "duplicate_never_paid": true,
+      "invariant_violations": [],
+      "llm_used": true,
+      "pattern": "supplier_attributable",
+      "recommended_disposition": "CREDIT",
+      "recommended_verdict": "APPROVE",
+      "settlement_authority_amount": 22320.0
+    },
+    {
+      "adjudication_id": "ADJ-ff6ca6e15f04e7f48608",
+      "approved_amount": 0.0,
+      "approved_amount_matches_authority": true,
+      "authority_never_overridden": true,
+      "cited_clause_ids": [
+        "EN 10346 DX51D+Z275/NA/DEMO-1990/chemistry",
+        "EN 10346 DX51D+Z275/NA/DEMO-1990/mechanical",
+        "EN 10346 DX51D+Z275/NA/DEMO-1990/dimensions"
+      ],
+      "claim_id": "CLM-0000095",
+      "claim_type": "material_nonconformance",
+      "deterministic_disposition": "DENY",
+      "deterministic_verdict": "DENY",
+      "duplicate_never_paid": true,
+      "invariant_violations": [],
+      "llm_used": true,
+      "pattern": "fraud_cluster",
+      "recommended_disposition": "DENY",
+      "recommended_verdict": "DENY",
+      "settlement_authority_amount": 20280.0
+    }
+  ],
+  "sample_size": 7
+}

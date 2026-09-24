@@ -207,6 +207,9 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                 rec = self._structured_call(evidence, reasoning)
             return rec, True
         except Exception as exc:  # endpoint unreachable / invalid output -> safe fallback
+            message = str(exc).lower()
+            if "403" in message or "forbidden" in message or "ip acl" in message:
+                raise
             mlflow.get_current_active_span() and mlflow.get_current_active_span().set_attribute(
                 "llm_fallback_reason", str(exc)[:200]
             )

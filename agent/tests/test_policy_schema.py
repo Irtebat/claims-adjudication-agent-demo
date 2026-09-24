@@ -21,7 +21,9 @@ def test_params_and_clauses_share_one_source(tmp_path):
     clause = next(
         c
         for c in parsed["spec_clauses"]
-        if c["grade"] == spec["grade"] and c["region"] == spec["region"] and c["section_ref"] == "mechanical"
+        if c["grade"] == spec["grade"]
+        and c["region"] == spec["region"]
+        and c["section_ref"] == "mechanical"
     )
     assert "512.5" in clause["clause_text"]
 
@@ -30,7 +32,10 @@ def test_params_and_clauses_share_one_source(tmp_path):
     coverage_clause = next(
         c
         for c in parsed["warranty_clauses"]
-        if c["product_line"] == v1["product_line"] and c["region"] == v1["region"] and c["version"] == v1["version"] and c["section_ref"] == "coverage"
+        if c["product_line"] == v1["product_line"]
+        and c["region"] == v1["region"]
+        and c["version"] == v1["version"]
+        and c["section_ref"] == "coverage"
     )
     assert "252 months" in coverage_clause["clause_text"]
 
@@ -38,7 +43,15 @@ def test_params_and_clauses_share_one_source(tmp_path):
 def test_clause_identity_and_metadata():
     parsed = parse_policies()
     clauses = parsed["spec_clauses"] + parsed["warranty_clauses"]
-    keys = [(c.get("grade", c.get("product_line")), c["region"], c.get("spec_edition", c.get("version")), c["section_ref"]) for c in clauses]
+    keys = [
+        (
+            c.get("grade", c.get("product_line")),
+            c["region"],
+            c.get("spec_edition", c.get("version")),
+            c["section_ref"],
+        )
+        for c in clauses
+    ]
     assert len(set(keys)) == len(clauses)
 
     # spec params: three grades x two regions; ranges ordered; specs carry no product_line

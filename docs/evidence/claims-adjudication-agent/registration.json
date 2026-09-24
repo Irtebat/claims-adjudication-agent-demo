@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-09-24T20:06:37Z",
+  "model": "fe-bar-ir.default.claims_adjudication_agent",
+  "alias": "prod",
+  "version": 2,
+  "status": "READY",
+  "model_version_id": "cc5f9a30-f9f2-4423-aba2-5910832f5a4f",
+  "run_id": "b76c78bf39554d05aa69c530a24f51fe",
+  "serving_endpoint_created": false
+}

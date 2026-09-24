@@ -48,10 +48,10 @@ def duplicate_decision(
     same_defect = incoming.get("defect_code") == candidate.get("defect_code")
     if not same_defect:
         reasons.append("different_defect_code")
-    freight_close = abs(
-        float(incoming.get("claimed_freight", 0))
-        - float(candidate.get("claimed_freight", 0))
-    ) <= cfg["amount_tolerance"]
+    freight_close = (
+        abs(float(incoming.get("claimed_freight", 0)) - float(candidate.get("claimed_freight", 0)))
+        <= cfg["amount_tolerance"]
+    )
     if not freight_close:
         reasons.append("freight_differs")
     tonnage_close = (

@@ -30,6 +30,10 @@ node_modules/
 
 # Databricks
 .databricks/
+mlflow.db
+mlflow.db-*
+mlruns/
+.mlflow/
 
 # OS and editor
 .DS_Store

@@ -165,6 +165,9 @@ def run(profile: str, experiment: str, destination: Path) -> dict:
     if set(sample) != set(PATTERN_SQL):
         missing = sorted(set(PATTERN_SQL) - set(sample))
         raise RuntimeError(f"Missing required injected label patterns: {missing}")
+    if not all(r["llm_used"] for r in results):
+        failed = [r["pattern"] for r in results if not r["llm_used"]]
+        raise RuntimeError(f"Reasoning endpoint fallback during offline validation: {failed}")
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "offline-validation.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n"

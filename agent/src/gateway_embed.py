@@ -127,7 +127,11 @@ def embed_texts(
                     sleep_fn(backoff_delay(attempt, retry_after))
                     continue
                 raise
-            except (http.client.IncompleteRead, http.client.RemoteDisconnected, urllib.error.URLError):
+            except (
+                http.client.IncompleteRead,
+                http.client.RemoteDisconnected,
+                urllib.error.URLError,
+            ):
                 if attempt < max_retries:
                     sleep_fn(backoff_delay(attempt, None))
                     continue

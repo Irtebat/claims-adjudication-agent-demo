@@ -1,0 +1,34 @@
+{
+  "captured_at_utc": "2026-09-24T20:06:37Z",
+  "pipeline_id": "495e25a1-d984-4993-8a07-7b9ba7c33467",
+  "pipeline_name": "steel-claims",
+  "diagnosis": {
+    "affected_source": "fe-bar-ir.cdf.lb_adjudications_history",
+    "version_3_operation": "wal2delta.resnapshot",
+    "version_3_timestamp": "2026-09-24T14:57:40Z",
+    "version_4_operation": "wal2delta.resnapshot",
+    "version_4_timestamp": "2026-09-24T15:06:41Z",
+    "subsequent_operations": "wal2delta.append at versions 5 through 12",
+    "cause": "The additive decision-record migration widened public.adjudications. Native Lakebase CDF re-snapshotted that changed source schema before resuming append-only WAL commits.",
+    "claims_affected": false,
+    "claims_history": "Only the original version-1 baseline wal2delta.resnapshot; no later non-append commit.",
+    "transformation_source_unchanged": "fe-bar-ir.cdf.lb_adjudications_history"
+  },
+  "recovery": {
+    "scope": ["fe-bar-ir.silver.adjudications_history"],
+    "selective_full_refresh_update_id": "6ad7affe-e329-4078-821f-398d019e017f",
+    "selective_full_refresh_state": "COMPLETED",
+    "incremental_proof_update_id": "9dacbf50-0a92-4434-babe-dcd744145bd7",
+    "incremental_proof_state": "COMPLETED"
+  },
+  "scd2": {
+    "adjudications_versions": 5008,
+    "adjudications_current_rows": 5008,
+    "adjudications_distinct_entities": 5008,
+    "adjudications_invalid_intervals": 0,
+    "claims_versions": 5000,
+    "claims_current_rows": 5000,
+    "claims_distinct_entities": 5000,
+    "claims_invalid_intervals": 0
+  }
+}

@@ -87,7 +87,9 @@ MEASURED_ROW = (
     Decimal("280.0"),
 )
 SPEC_COLUMNS = [
-    "grade", "spec_edition", "region",
+    "grade",
+    "spec_edition",
+    "region",
     "carbon_pct_min",
     "carbon_pct_max",
     "manganese_pct_min",
@@ -104,7 +106,9 @@ SPEC_COLUMNS = [
     "coating_adhesion_required",
 ]
 SPEC_ROW = (
-    "ASTM A653 CS Type B", "DEMO-1990", "NA",
+    "ASTM A653 CS Type B",
+    "DEMO-1990",
+    "NA",
     Decimal("0.02"),
     Decimal("0.15"),
     Decimal("0.20"),
@@ -121,7 +125,10 @@ SPEC_ROW = (
     True,
 )
 WARRANTY_COLUMNS = [
-    "product_line", "region", "version", "freight_cap",
+    "product_line",
+    "region",
+    "version",
+    "freight_cap",
     "duration_months",
     "full_coverage_months",
     "excluded_environments",
@@ -129,15 +136,38 @@ WARRANTY_COLUMNS = [
     "min_coast_distance_km",
 ]
 WARRANTY_ROW = (
-    "galvanized", "NA", "V2", Decimal("500.0"),
+    "galvanized",
+    "NA",
+    "V2",
+    Decimal("500.0"),
     240,
     60,
     ["marine"],
     ["standing_water"],
     Decimal("1.0"),
 )
-COIL_COLUMNS = ["coil_id", "grade", "spec_edition", "region", "product_line", "coating_class", "ship_date", "shipped_tonnage", "unit_price"]
-COIL_ROW = ("COIL-0000005", "ASTM A653 CS Type B", "DEMO-1990", "NA", "galvanized", "G90", "2018-01-01", Decimal("10.0"), Decimal("1000.0"))
+COIL_COLUMNS = [
+    "coil_id",
+    "grade",
+    "spec_edition",
+    "region",
+    "product_line",
+    "coating_class",
+    "ship_date",
+    "shipped_tonnage",
+    "unit_price",
+]
+COIL_ROW = (
+    "COIL-0000005",
+    "ASTM A653 CS Type B",
+    "DEMO-1990",
+    "NA",
+    "galvanized",
+    "G90",
+    "2018-01-01",
+    Decimal("10.0"),
+    Decimal("1000.0"),
+)
 
 
 def _runtime():
@@ -182,7 +212,9 @@ def test_coverage_fetches_public_and_matches_in_process_reference():
     sql, params = rt._conn.cursor_obj.calls[2]
     assert "public.warranty_terms" in sql and params["product_line"] == "galvanized"
 
-    local = authorities.compute_coverage(result["warranty_terms"], {**claim, "ship_date": "2018-01-01"})
+    local = authorities.compute_coverage(
+        result["warranty_terms"], {**claim, "ship_date": "2018-01-01"}
+    )
     assert result["verdict"] == local
     assert result["verdict"]["covered"] is False
     assert "environment:marine" in result["verdict"]["exclusions_hit"]

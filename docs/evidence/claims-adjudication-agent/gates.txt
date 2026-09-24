@@ -1,0 +1,24 @@
+Final verification (2026-09-25)
+
+PASS: uv run --with pytest --with pyyaml --with pydantic pytest agent/tests pipelines/tests -q
+Collected test cases: 88
+Passed test cases: 86
+Skipped test cases: 2
+Test functions may be parametrized; counts above are collected test cases.
+
+PASS: uv run --with ruff ruff check agent pipelines
+Result: All checks passed.
+
+PASS: uv run --with ruff ruff format --check agent pipelines
+Result: 54 files already formatted.
+
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (agent/)
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (pipelines/)
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (lakebase/)
+
+PASS: git diff --exit-code origin/main -- agent/src/authorities.py
+Result: empty diff; deterministic money math is untouched.
+
+Diagnostic-only initial attempts (superseded by the passing commands above):
+- pytest without pydantic stopped during collection because the ephemeral uv environment omitted a declared runtime dependency.
+- ruff format --check found six pre-existing agent files needing current Ruff formatting; Ruff applied mechanical formatting and the complete gates were rerun green.

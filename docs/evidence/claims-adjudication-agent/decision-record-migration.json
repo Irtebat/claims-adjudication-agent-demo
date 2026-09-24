@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-09-24T20:06:37Z",
+  "table": "public.adjudication_decision_records",
+  "replica_identity": "FULL",
+  "cdf_state": "CDF_STATE_STREAMING",
+  "cdf_table": "fe-bar-ir.cdf.lb_adjudication_decision_records_history",
+  "cdf_create_time": "2026-09-24T15:07:20.721Z",
+  "existing_schema_scoped_config_reused": true,
+  "updates_deletes_truncates_revoked": true,
+  "uncdcable_vector_columns": 0
+}

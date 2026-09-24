@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-09-24T15:20:35.966684+00:00",
+  "missing_lookup_is_neutral": {
+    "cluster_id": null,
+    "cluster_size": null,
+    "customer_id": "NO_SUCH",
+    "found": false,
+    "heat_no": "NO_SUCH",
+    "repeat_customers": false,
+    "risk_score": 0.0
+  },
+  "reference_customer_heat_risk_rows": 4400,
+  "sample_lookup": {
+    "cluster_id": "CLM-0000000",
+    "cluster_size": 10,
+    "computed_at": "2026-09-24 10:52:02.539774+00:00",
+    "customer_id": "CUST-0000",
+    "distinct_customers_in_cluster": 5,
+    "distinct_heats_in_cluster": 1,
+    "found": true,
+    "heat_no": "HEAT-000000",
+    "repeat_customers": true,
+    "risk_score": 0.75
+  },
+  "scheduling_policy": "TRIGGERED",
+  "source": "fe-bar-ir.gold.customer_heat_risk",
+  "synced_table": "fe_bar_operational.reference.customer_heat_risk"
+}
