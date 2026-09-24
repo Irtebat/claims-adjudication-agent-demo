@@ -1,17 +1,15 @@
-# Policy intake, resolution, and retrieval evidence
+# Evidence — policy intake and retrieval
 
-Captured 2026-09-24 IST (2026-09-23 UTC) from Lakebase project
-`fe-bar-operational-plane`, database `databricks_postgres`, using profile
-`fe-bar`.
+Live evidence that the authored policy JSON was parsed into Lakebase params and
+clause tables, that resolution and the in-process deterministic authorities produce
+correct outputs, and that clause and prior-claim retrieval work. Captured against
+the `fe-bar` profile.
 
-- `intake-and-indexes.json`: live policy/prior-claim counts, index methods, and
-  proof that the precedent corpus contains only finalized adjudications.
-- `resolution-samples.json`: live atomic coil-to-spec and ship-date-to-warranty bindings.
-- `retrieval-sanity.json`: clause BM25 and prior-claim ANN+BM25 index plans plus
-  hybrid rankings with the precedent verdict and approved amount.
-- `authorities-in-process.json`: live psycopg resolution and deterministic authority outputs.
-- `generator-validation.json`: successful no-landing generator validation run and row metrics.
-- `gates.txt`: final local test and lint results.
-
-Clause tables contain metadata, text, and lexical search state only. Dense
-embeddings and cosine ANN are confined to the separate prior-claims corpus.
+| File | Demonstrates |
+| --- | --- |
+| `intake-and-indexes.json` | Policy / prior-claim counts, embedding details, actual BM25/ANN index methods |
+| `resolution-samples.json` | Atomic coil -> specification and ship-date -> warranty-version resolution |
+| `authorities-in-process.json` | Lakebase psycopg param resolution followed by in-process authority outputs |
+| `retrieval-sanity.json` | BM25 and ANN index plans and hybrid prior-claim rankings |
+| `generator-validation.json` | Generator validation run and integrity metrics (no data landed) |
+| `gates.txt` | Tests, lint, bundle validation, Lakebase run, and the known pre-existing mypy note |

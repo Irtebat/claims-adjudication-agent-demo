@@ -1,68 +1,79 @@
-# Synthetic claims data, pipeline, and governance
+# pipelines — synthetic data, medallion pipeline, and governance
 
-Builds a reproducible steel claims dataset in the catalog configured in
-`settings.yaml`. This uses the `databricks` mapping from
-`../config/config.example.yaml`; credentials stay in CLI authentication.
-The CLI wrapper always supplies the configured profile explicitly.
+Builds the synthetic steel-claims dataset in Unity Catalog `fe-bar-ir`, publishes
+reference and master data through a medallion pipeline (bronze -> silver -> gold),
+ingests the live claims/adjudications history from Lakebase via native Change Data
+Feed (CDF), and applies Unity Catalog governance. All compute is serverless. The
+CLI wrapper always passes the `fe-bar` profile explicitly and reads settings from
+`settings.yaml` (see `../config/config.example.yaml`); credentials stay in CLI
+authentication and are never committed.
 
-The serverless generator writes Parquet to
-`/Volumes/<catalog>/bronze/raw_landing`. The one-time baseline seed reads claims
-and adjudications directly from those files, then native Lakebase CDF snapshots
-the operational tables into `cdf.lb_*_history`. AUTO CDC incrementally maintains
-the two silver SCD Type 2 histories; gold current views filter on
-`__END_AT IS NULL`, while gold history views retain the full timeline for
-evaluation. The other serve-down tables continue to stream immutable Parquet
-files from bronze's landing volume using Auto Loader. Policy standards and coating-warranty terms are **not**
-produced here: they are authored in `agent/src/policy_source.json` and loaded
-directly into Lakebase by the policy intake (`agent/src/policy_intake.py`).
+Policy standards and coating-warranty terms are **not** produced here — they are
+authored in `agent/src/policy_source.json` and loaded into Lakebase by
+`agent/src/policy_intake.py`. This layer produces only the reference, master, and
+history fact data.
 
-The default bundle target is `prod` (production mode), profile `fe-bar`, catalog
-`fe-bar-ir`. Its workspace root is `/Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod`.
-Run only `databricks bundle run medallion --profile fe-bar` from `pipelines/` to
-consume already-landed files. A bootstrap rerun replaces the raw synthetic snapshot;
-follow it with a full pipeline refresh to reset streaming checkpoints. Do not use
-this bootstrap job against live data.
+## Objects created
 
-| Curated dataset | Meaning |
-| --- | --- |
-| silver.heats_coils | Coil/heat, ordered and measured dimensions, coating, dates, supplier lots, customer and price |
-| silver.mill_test_certs | Chemistry, mechanical measurements and coating adhesion result |
-| silver.customers / suppliers / defect_codes | Synthetic entities and defect taxonomy |
-| silver.claims_history / adjudications_history | Validated historical facts |
-| gold.claims_current / adjudications_current | Current operational claims and decisions |
-| gold.claims_history / adjudications_history | Full SCD2 timelines for evaluation/audit |
+Schemas in `fe-bar-ir`: `bronze`, `silver`, `gold`, `cdf`.
+Volume: `bronze.raw_landing` — the serverless generator writes raw Parquet here.
 
-Policy standards and coating-warranty terms are authored in
-`agent/src/policy_source.json` and loaded into Lakebase by the policy intake, as
-both the structured params the deterministic authorities read and the citable
-text clauses (`agent/README.md`). This generator only synthesizes the reference,
-master and history fact data above. The synthetic historical adjudications apply
-the warranty version schedule (effective windows + durations) **sourced from the
-authored policy** — `run.py` reads `agent/src/policy_source.json` and passes it to
-`generate.py` as a job parameter, so an edit to the policy propagates into the
-generated history and no policy numbers are hardcoded here. The authoritative live
-coverage/settlement math lives in the `compute_*` authorities, never in this
-generator. Money is stored as decimal values; a partial approval has a smaller
-approved amount; denials and investigations have zero approved amount and no
-disposition.
+| Object | Type | Source |
+| --- | --- | --- |
+| `bronze.{customers, suppliers, defect_codes, heats_coils, mill_test_certs}` | Materialized view | Raw Parquet |
+| `silver.{customers, suppliers, defect_codes, heats_coils, mill_test_certs}` | Streaming table | Auto Loader over raw Parquet |
+| `silver.claims_history`, `silver.adjudications_history` | Streaming table | native CDF + AUTO CDC (SCD Type 2) |
+| `cdf.lb_claims_history`, `cdf.lb_adjudications_history` | CDF landing | native Lakebase CDF change feed |
+| `gold.claims_current`, `gold.adjudications_current` | View | current SCD2 rows (`__END_AT IS NULL`) |
+| `gold.claims_history`, `gold.adjudications_history` | View | full SCD2 version timeline |
 
-Finalized adjudications record the injected pattern; claims carry no label. Each complete
-100-claim block contains 20 clean claims, 20 in-spec denials, 15 warranty or
-exclusion denials, 10 duplicates, 15 over-claims, 15 supplier-attributable
-claims and a five-claim fraud cluster. Clean claims include covered corrosion
-and actual tensile deviations. Duplicates reuse a prior claim's coil, customer,
-defect, tonnage, value and narrative within one day. Supplier cases share a
-coating lot and failed adhesion; fraud clusters share a heat and supplier lot
-across three customer identities. These labels are evaluation data, not inputs
-for a later production decision tool.
+Column-mask functions in `silver`: `mask_customer`, `mask_money`.
+
+## Resources configured
+
+- Bundle `steel-claims`; single target `prod` (production mode), profile `fe-bar`.
+- Lakeflow pipeline `medallion` — serverless, triggered; default schema `silver`;
+  processes every file under `src/transformations/**`.
+- Jobs: `steel-claims-validate-generator`, `steel-claims-generate-raw`,
+  `steel-claims-process-cdf`.
+- Governance (`governance.sql`): account groups `adjuster` and
+  `metallurgy_analyst` (created only when absent; no users enrolled); SELECT on
+  curated tables; column masks on customer identifiers and money — adjusters and
+  workspace admins see raw values, other readers get stable hashed identifiers and
+  NULL amounts. Bronze carries the same masks and no role is granted bronze or
+  volume access. App/agent service-principal grants are real, conditional
+  statements that run only when the principal variables are supplied.
+
+## Data flow
+
+```mermaid
+flowchart TD
+  gen["Serverless Faker/Spark generator"] --> vol["/Volume bronze.raw_landing/"]
+
+  vol --> bronze["bronze materialized views<br/>(reference & master)"]
+  bronze --> silverref["silver reference streaming tables"]
+  silverref -. "serve-down, see lakebase/" .-> lbref[("Lakebase reference.*")]
+
+  vol -. "one-time baseline seed" .-> lboltp[("Lakebase public.claims / public.adjudications")]
+  lboltp --> cdf["native Lakebase CDF"]
+  cdf --> land["cdf.lb_claims_history<br/>cdf.lb_adjudications_history"]
+  land --> scd["AUTO CDC SCD2<br/>silver.claims_history<br/>silver.adjudications_history"]
+  scd --> gcur["gold.claims_current<br/>gold.adjudications_current"]
+  scd --> ghist["gold.claims_history<br/>gold.adjudications_history"]
+```
+
+Reference/master data is generated once and flows down the medallion, then serves
+down to Lakebase (handled by `lakebase/`). Claims and adjudications are seeded into
+Lakebase once from the same raw Parquet, after which native CDF carries every
+insert/update/delete up into the `cdf` landing tables; AUTO CDC applies them into
+the two SCD Type 2 silver histories, and the gold views expose current-state and
+full-history projections.
 
 ## Run
 
-Requires authenticated Databricks CLI >=1.0, `uv`, an accessible UC managed
-storage root, and permission to create schemas, volumes and account groups.
-All compute is serverless. There is no schedule.
-
-From the repository root:
+Requires an authenticated Databricks CLI (>= 1.0), `uv`, an accessible UC managed
+storage root, and permission to create schemas, volumes, and account groups. All
+compute is serverless; there is no schedule. From the repository root:
 
 ```bash
 uv run --with pyyaml python pipelines/run.py validate
@@ -72,37 +83,24 @@ uv run --with pyyaml python pipelines/run.py govern
 uv run --with pyyaml python pipelines/run.py evidence
 ```
 
-The wrapper runs `databricks bundle validate --strict`, deploys the bundles, and
-orchestrates raw generation, one-time Lakebase seeding, CDF creation/readiness,
-then the triggered AUTO CDC pipeline, always passing the configured profile.
-It refuses to reseed after a CDF config exists, because fixture replacement would
-emit artificial deletes/inserts and create spurious SCD2 versions.
-Set `synthetic.claim_count` once in `settings.yaml` to scale to 20,000–50,000,
-or deploy with `--claim-count 20000`. The minimum is 100 so every pattern is
-present. Seed controls Faker identities; the fact pattern allocation is fixed.
-`--config path/to/config.yaml` selects a different file with the same mapping.
-Run `summary` for deployed resource links.
+`run` orchestrates raw generation, the one-time Lakebase seed, CDF
+creation/readiness, then the triggered AUTO CDC pipeline. It refuses to reseed once
+a CDF config exists, because replacing the fixture would emit artificial
+deletes/inserts and create spurious SCD2 versions. Set `synthetic.claim_count` in
+`settings.yaml` (minimum 100 so every label pattern is present; scale to
+20,000–50,000). `check-generator` runs the generator against temporary views as a
+diagnostic only — it does not land data. Do not run the bootstrap against live data.
 
-After any code change, deploy before running. `check-generator` runs the same
-Spark/Faker generator on serverless against temporary views, checking all
-column expressions without writing raw files. It is a diagnostic check, not a
-successful data load. The bootstrap run must still succeed.
+The synthetic historical adjudications apply the warranty version schedule sourced
+from the authored policy: `run.py` reads `agent/src/policy_source.json` and passes
+it to `generate.py`, so a policy edit propagates into the generated history and no
+policy numbers are hardcoded here. The authoritative live coverage/settlement math
+lives in the `agent/` `compute_*` authorities, never in this generator.
 
-`governance.sql` is rendered with the configured catalog by `govern`. It creates
-account groups only when absent and never enrolls users. Both human roles get
-SELECT on curated tables. Adjusters and workspace admins can see identifiers
-and money; other readers get stable hashed identifiers and NULL prices/amounts.
-Bronze receives the same masks, but no role receives bronze or volume access.
-App/agent SP grants are commented placeholders for future components. Reapply
-`govern` after a rebuild and verify the masks before granting any new access.
-End-to-end verification with a real nonprivileged user requires that user's
-membership and authenticated session; owner-level metadata inspection alone
-does not prove their effective access.
-
-Evidence capture writes SQL, UTC capture time, real result rows, role grants,
-masks, samples and relationship/pattern assertions to
-`docs/evidence/synthetic-data/`. It fails if any integrity check finds a violation.
-Do not treat planned row counts or temporary-view checks as persisted data.
+Each 100-claim block carries a fixed label mix (20 clean, 20 in-spec denials, 15
+warranty/exclusion denials, 10 duplicates, 15 over-claims, 15 supplier-attributable,
+and a 5-claim fraud cluster). The label is recorded on the finalized adjudication,
+never on the claim — it is evaluation ground truth, not an input to any decision.
 
 ## Development checks
 
@@ -113,7 +111,7 @@ uv run --with mypy --with types-PyYAML mypy --config-file pipelines/pyproject.to
 python3 -m compileall -q pipelines
 ```
 
-Mypy covers local orchestration. Spark expressions are analyzed and executed by
-the serverless generator and Lakeflow; pipeline expectations fail on invalid
-keys or economic invariants. The policy intake, retrieval, deterministic
-authorities and fraud-graph risk job live under `agent/` and Lakebase.
+Spark expressions are analyzed and executed by the serverless generator and
+Lakeflow; pipeline expectations fail on invalid keys or economic invariants. The
+policy intake, retrieval, deterministic authorities, and fraud-graph risk job live
+under `agent/` and Lakebase.

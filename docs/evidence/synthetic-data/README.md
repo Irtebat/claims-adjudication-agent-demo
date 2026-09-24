@@ -1,17 +1,24 @@
-# Synthetic data evidence
+# Evidence — synthetic data and governance
 
-Captured 2026-09-23 from catalog `fe-bar-ir` after clean bootstrap run
-`556871833171983` and governance reapplication.
+Live evidence that the synthetic steel-claims dataset was generated, governed, and
+landed correctly in Unity Catalog `fe-bar-ir`. Captured against the `fe-bar`
+profile with real query text, UTC capture times, and result rows.
 
-- `table-schemas.json`: columns and types for every current bronze, silver, and gold business table.
-- `row-counts.json`: clean per-table counts.
-- `outcome-distribution.json`: finalized adjudication verdict/disposition distribution.
-- `integrity-checks.json`: the ten checks from `pipelines/src/checks.py`, all with zero violations.
-- `persisted-table-inventory.json`: the current catalog inventory; retired policy and risk tables are absent.
-- `catalog-grants.json`, `schema-grants.json`, `grants.json`, `show-grants-claims.json`, and `show-grants-heats.json`: live governance grants.
-- `column-masks.json`: live masks. Claims have only the customer and filed-freight masks; adjudication amounts remain protected separately.
-- `fraud-clusters.json`: finalized investigation annotations joined to claim/customer/heat facts.
-- `sample-*.json`: live rows from every current silver and gold business table.
+> Note: this set predates the native-CDF SCD2 cutover. The claims/adjudications
+> object types in `persisted-table-inventory.json` and `table-schemas.json` reflect
+> the earlier Parquet-fed materializations; the current silver histories are
+> streaming tables and the gold objects are views (see the `cdf-incremental-history`
+> evidence).
 
-Claims are lean customer intake. Final adjudications carry outcome, duplicate,
-investigation, citation, and amount ground truth.
+| File | Demonstrates |
+| --- | --- |
+| `row-counts.json` | Row counts across bronze/silver/gold |
+| `outcome-distribution.json` | Verdict / disposition distribution of the injected label patterns |
+| `integrity-checks.json` | Ten fixture integrity checks, zero violations |
+| `fraud-clusters.json` | Injected 5-claim / 3-customer / single-heat fraud clusters |
+| `table-schemas.json` | Column/type inventory of the business objects (pre-cutover) |
+| `persisted-table-inventory.json` | Unity Catalog object inventory (pre-cutover) |
+| `grants.json`, `schema-grants.json`, `catalog-grants.json` | Curated-table, schema, and catalog privileges for the two human roles |
+| `column-masks.json` | Column-mask inventory at capture time |
+| `show-grants-claims.json`, `show-grants-heats.json` | Direct `SHOW GRANTS` output for gold claims history and silver heats/coils |
+| `sample-silver-*.json`, `sample-gold-*.json` | Sample rows from curated silver and gold tables |
