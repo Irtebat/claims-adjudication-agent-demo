@@ -22,7 +22,8 @@ Native Postgres tables in schema `public`:
 
 | Group | Tables | Notes |
 | --- | --- | --- |
-| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases`, `claims_pending` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite) |
+| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases`, `claims_pending` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite). `adjudications` is widened by the decision-record migration to carry the agent recommendation fields. |
+| Decision record (created by `src/decision_records_migration.py`) | `adjudication_decision_records` | Append-only canonical record per adjudication, PK `(adjudication_id, record_version)`, JSONB payload, `REPLICA IDENTITY FULL`; UPDATE/DELETE revoked (immutability by access) |
 | Precedent corpus | `prior_claims` | Finalized claims joined to adjudications + coil; embeddings + full-text |
 | Policy (created by `agent/` intake) | `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses` | Natural-key policy params + citable clauses |
 
@@ -38,8 +39,12 @@ Search / match indexes:
 | `warranty_clauses_lb_bm25` | `warranty_clauses` | `lakebase_bm25` |
 | `claims_defect_narrative_trgm` | `claims` | GIN / `pg_trgm` |
 
-Synced tables (Unity Catalog reference data served down), schema `reference` — five:
-`heats_coils`, `mill_test_certs`, `customers`, `suppliers`, `defect_codes`.
+Synced tables (Unity Catalog reference data served down), schema `reference` — six:
+`heats_coils`, `mill_test_certs`, `customers`, `suppliers`, `defect_codes`, and
+`customer_heat_risk` (Triggered, sourced from `gold.customer_heat_risk` with
+composite key `(customer_id, heat_no)`; requires Delta CDF on the source, which the
+fraud-graph job now sets). The agent's `get_customer_heat_risk` tool reads it —
+advisory only.
 
 Native CDF: one schema-scoped config over `public` -> Unity Catalog schema
 `fe-bar-ir.cdf`, landing `lb_claims_history` and `lb_adjudications_history`.
@@ -102,6 +107,12 @@ intake / precedent build), not fed up through CDF. Three of them also carry
 `vector`/`tsvector` columns that CDF cannot serialize. Do not add
 `REPLICA IDENTITY FULL` to them — that would opt them into CDF, which is the
 opposite of intent.
+
+Conversely, `adjudication_decision_records` **is** given `REPLICA IDENTITY FULL`
+(and carries only JSONB/scalar columns, no `vector`/`tsvector`), so the same
+schema-scoped config streams it. A schema-scoped config detects a newly added table
+once it has committed WAL activity; the first decision-record write is what moves it
+to `CDF_STATE_STREAMING` and materializes `cdf.lb_adjudication_decision_records_history`.
 
 ## Run
 

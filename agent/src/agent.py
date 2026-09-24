@@ -188,7 +188,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
         evidence = _evidence_block(core)
         try:
             with mlflow.start_span(name="agent_reasoning", span_type="CHAT_MODEL"):
-                reasoning = self._run_graph(evidence)
+                reasoning = self._run_graph(core, evidence)
             with mlflow.start_span(name="structured_recommendation", span_type="CHAT_MODEL"):
                 rec = self._structured_call(evidence, reasoning)
             return rec, True
@@ -198,22 +198,50 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             )
             return agent_tools.default_recommendation(core), False
 
-    def _tools(self):
-        """StructuredTool wrappers exposed to the LLM loop (read-only, advisory reads)."""
+    def _tools(self, core: dict):
+        """Expose the required tools as read-only views of the frozen tool results.
+
+        The deterministic core has already resolved the policy snapshot and run every
+        tool exactly once. These wrappers let LangGraph reason with the named tools
+        without re-resolving policy or giving the LLM a path to rerun/change money.
+        """
         from langchain_core.tools import StructuredTool
 
-        def echo_evidence() -> str:
-            return "Deterministic evidence was provided in the system prompt."
+        def frozen_result(key: str):
+            return lambda: json.dumps(core[key], default=str, sort_keys=True)
 
         return [
             StructuredTool.from_function(
-                func=echo_evidence,
-                name="recall_evidence",
-                description="Recall the deterministic authority evidence for this claim.",
+                func=frozen_result(name),
+                name=name,
+                description=description,
             )
+            for name, description in (
+                ("compute_conformance", "Return the frozen deterministic conformance result."),
+                ("compute_coverage", "Return the frozen deterministic warranty coverage result."),
+                ("compute_settlement", "Return the frozen deterministic settlement amount."),
+                ("check_duplicate_claim", "Return the frozen deterministic duplicate-gate result."),
+                (
+                    "retrieve_policy_clauses",
+                    "Return clauses resolved from the frozen policy snapshot.",
+                ),
+                ("find_similar_prior_claims", "Return advisory similar prior claims."),
+                ("get_customer_heat_risk", "Return advisory customer/heat risk."),
+            )
+            for key in [
+                {
+                    "compute_conformance": "conformance",
+                    "compute_coverage": "coverage",
+                    "compute_settlement": "settlement",
+                    "check_duplicate_claim": "duplicate",
+                    "retrieve_policy_clauses": "citations",
+                    "find_similar_prior_claims": "precedent",
+                    "get_customer_heat_risk": "risk",
+                }[name]
+            ]
         ]
 
-    def _run_graph(self, evidence: str) -> str:
+    def _run_graph(self, core: dict, evidence: str) -> str:
         from typing import Annotated, Sequence, TypedDict
 
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -221,7 +249,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
         from langgraph.graph.message import add_messages
         from langgraph.prebuilt.tool_node import ToolNode
 
-        tools = self._tools()
+        tools = self._tools(core)
         llm_with_tools = self._llm_client().bind_tools(tools)
 
         class State(TypedDict):

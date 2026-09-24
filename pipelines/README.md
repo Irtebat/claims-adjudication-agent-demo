@@ -23,9 +23,10 @@ Volume: `bronze.raw_landing` — the serverless generator writes raw Parquet her
 | `bronze.{customers, suppliers, defect_codes, heats_coils, mill_test_certs}` | Materialized view | Raw Parquet |
 | `silver.{customers, suppliers, defect_codes, heats_coils, mill_test_certs}` | Streaming table | Auto Loader over raw Parquet |
 | `silver.claims_history`, `silver.adjudications_history` | Streaming table | native CDF + AUTO CDC (SCD Type 2) |
-| `cdf.lb_claims_history`, `cdf.lb_adjudications_history` | CDF landing | native Lakebase CDF change feed |
+| `cdf.lb_claims_history`, `cdf.lb_adjudications_history`, `cdf.lb_adjudication_decision_records_history` | CDF landing | native Lakebase CDF change feed |
 | `gold.claims_current`, `gold.adjudications_current` | View | current SCD2 rows (`__END_AT IS NULL`) |
 | `gold.claims_history`, `gold.adjudications_history` | View | full SCD2 version timeline |
+| `gold.adjudication_decision_records` | Streaming table | append-only, immutable canonical decision record per `(adjudication_id, record_version)` |
 
 Column-mask functions in `silver`: `mask_customer`, `mask_money`.
 
@@ -86,7 +87,22 @@ uv run --with pyyaml python pipelines/run.py evidence
 `run` orchestrates raw generation, the one-time Lakebase seed, CDF
 creation/readiness, then the triggered AUTO CDC pipeline. It refuses to reseed once
 a CDF config exists, because replacing the fixture would emit artificial
-deletes/inserts and create spurious SCD2 versions. Set `synthetic.claim_count` in
+deletes/inserts and create spurious SCD2 versions.
+
+`decision-records` is the additive path for the append-only agent decision record.
+The table is created by `lakebase/src/decision_records_migration.py` (with
+`REPLICA IDENTITY FULL`, so the EXISTING schema-scoped native CDF config over
+`public` picks it up once it has committed rows) and lands in UC as
+`cdf.lb_adjudication_decision_records_history`. This action verifies that table
+reached `CDF_STATE_STREAMING`, then deploys and runs the medallion flow that lands
+it as the immutable `gold.adjudication_decision_records` (SCD Type 1 keyed on
+`(adjudication_id, record_version)`, inserts only — no updates/deletes propagated;
+the JSONB payload is parsed into typed structs + VARIANT). It never reseeds or
+re-creates the CDF config. The decision-record DQ
+(`src/checks.py:decision_record_queries`) asserts exactly one record per
+`(adjudication_id, record_version)` and that no authority was overridden (a
+duplicate is never payable, the approved amount is the deterministic settlement
+amount, in-spec/out-of-coverage claims are never approved). Set `synthetic.claim_count` in
 `settings.yaml` (minimum 100 so every label pattern is present; scale to
 20,000–50,000). `check-generator` runs the generator against temporary views as a
 diagnostic only — it does not land data. Do not run the bootstrap against live data.

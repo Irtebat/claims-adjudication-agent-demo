@@ -51,6 +51,16 @@ PIP_REQUIREMENTS = [
 ]
 
 
+def _coerce(value):
+    from decimal import Decimal
+
+    if hasattr(value, "isoformat"):  # date / datetime -> ISO string
+        return str(value)
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
 def _sample_claim(profile: str) -> dict:
     """A real claim from Lakebase for the input example / isolated validation."""
     import sys
@@ -68,8 +78,7 @@ def _sample_claim(profile: str) -> dict:
             )
             columns = [c.name for c in cur.description]
             row = cur.fetchone()
-    claim = dict(zip(columns, row))
-    return {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in claim.items()}
+    return {k: _coerce(v) for k, v in zip(columns, row)}
 
 
 def run(profile: str, experiment: str, validate: bool = True) -> dict:

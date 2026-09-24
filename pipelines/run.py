@@ -330,7 +330,7 @@ def main():
         )
 
         def cdf_table(src):
-            prefix = f"lb_{src}_history" if src != source else f"lb_{source}"
+            prefix = f"lb_{src}_history"
             matches = [
                 row.get("full_name") or f"{catalog}.{cdf_schema}.{row['name']}"
                 for row in tables

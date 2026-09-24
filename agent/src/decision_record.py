@@ -151,12 +151,15 @@ def deterministic_outcome(
     }
 
 
-def _amounts_equal(a: Any, b: Any, tol: float = 0.005) -> bool:
+def _amounts_equal(a: Any, b: Any) -> bool:
+    """Compare authority money exactly using decimal text representations."""
+    from decimal import Decimal, InvalidOperation
+
     if a is None:
         return False
     try:
-        return abs(float(a) - float(b)) <= tol
-    except (TypeError, ValueError):
+        return Decimal(str(a)) == Decimal(str(b))
+    except (InvalidOperation, TypeError, ValueError):
         return False
 
 

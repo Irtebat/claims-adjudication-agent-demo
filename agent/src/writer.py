@@ -62,10 +62,24 @@ DECISION_RECORD_PK = ("adjudication_id", "record_version")
 DATA_PROVENANCE = "agent_recommendation"
 
 
+def _json_default(obj: Any):
+    """Serialize the Decimal/date values that psycopg returns inside the snapshots."""
+    from datetime import date, datetime
+    from decimal import Decimal
+
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    return str(obj)
+
+
 def _jsonb(value: Any):
+    import json
+
     from psycopg.types.json import Jsonb
 
-    return Jsonb(value)
+    return Jsonb(value, dumps=lambda v: json.dumps(v, default=_json_default))
 
 
 def _upsert_sql(table: str, columns: list[str], pk: str) -> str:
