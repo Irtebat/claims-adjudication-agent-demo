@@ -28,10 +28,6 @@ from policy_schema import parse_policies
 EXTENSIONS = ["pg_trgm", "lakebase_text"]
 
 DDL = """
-DROP TABLE IF EXISTS spec_clauses CASCADE;
-DROP TABLE IF EXISTS warranty_clauses CASCADE;
-DROP TABLE IF EXISTS spec_params CASCADE;
-DROP TABLE IF EXISTS warranty_terms CASCADE;
 CREATE TABLE IF NOT EXISTS spec_params (
   grade text NOT NULL, spec_edition text NOT NULL, region text NOT NULL,
   carbon_pct_min numeric, carbon_pct_max numeric,
@@ -186,12 +182,9 @@ def _create_extensions(cur) -> dict:
     return versions
 
 
-def _reconcile(cur, table: str, key: str, current_ids: list[str]) -> int:
-    """Delete rows whose key is no longer present in the authored source."""
-    if current_ids:
-        cur.execute(f"DELETE FROM {table} WHERE {key} <> ALL(%s)", (current_ids,))
-    else:
-        cur.execute(f"DELETE FROM {table}")
+def _reconcile(cur, table: str, source_sha256: str) -> int:
+    """Delete rows from an older version of the wholly-owned authored source."""
+    cur.execute(f"DELETE FROM {table} WHERE source_sha256 <> %s", (source_sha256,))
     return cur.rowcount
 
 
@@ -241,6 +234,10 @@ def run_intake(
     embed: bool = True,
 ) -> dict:
     parsed = parse_policies(source_path)
+    source_hashes = {row["source_sha256"] for rows in parsed.values() for row in rows}
+    if len(source_hashes) != 1:
+        raise ValueError("Policy source must produce exactly one non-empty source hash")
+    source_sha256 = source_hashes.pop()
     summary: dict = {"counts": {}, "reconciled_deletes": {}}
     with connect(profile, endpoint, database, autocommit=True) as conn:
         with conn.cursor() as cur:
@@ -250,21 +247,34 @@ def run_intake(
         with conn.transaction():
             with conn.cursor() as cur:
                 cur.executemany(
-                    upsert_sql("spec_params", SPEC_PARAM_COLUMNS, "grade, spec_edition, region"), parsed["spec_params"]
+                    upsert_sql("spec_params", SPEC_PARAM_COLUMNS, "grade, spec_edition, region"),
+                    parsed["spec_params"],
                 )
                 cur.executemany(
-                    upsert_sql("warranty_terms", WARRANTY_TERM_COLUMNS, "product_line, region, version"),
+                    upsert_sql(
+                        "warranty_terms", WARRANTY_TERM_COLUMNS, "product_line, region, version"
+                    ),
                     parsed["warranty_terms"],
                 )
                 cur.executemany(
-                    clause_upsert_sql("spec_clauses", SPEC_CLAUSE_COLUMNS, "grade, spec_edition, region, section_ref"),
+                    clause_upsert_sql(
+                        "spec_clauses",
+                        SPEC_CLAUSE_COLUMNS,
+                        "grade, spec_edition, region, section_ref",
+                    ),
                     parsed["spec_clauses"],
                 )
                 cur.executemany(
-                    clause_upsert_sql("warranty_clauses", WARRANTY_CLAUSE_COLUMNS, "product_line, region, version, section_ref"),
+                    clause_upsert_sql(
+                        "warranty_clauses",
+                        WARRANTY_CLAUSE_COLUMNS,
+                        "product_line, region, version, section_ref",
+                    ),
                     parsed["warranty_clauses"],
                 )
-                summary["reconciled_deletes"] = {name: 0 for name in parsed}
+                summary["reconciled_deletes"] = {
+                    table: _reconcile(cur, table, source_sha256) for table in parsed
+                }
         with conn.cursor() as cur:
             # Indexes are built AFTER the backfill so BM25 statistics see all rows.
             _build_indexes(cur)

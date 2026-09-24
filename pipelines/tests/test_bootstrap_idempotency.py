@@ -55,12 +55,32 @@ def test_history_uses_native_cdf_auto_cdc_scd2():
     assert views.count("WHERE __END_AT IS NULL") == 2
 
 
+def test_heats_coils_reconciles_snapshots_by_natural_key():
+    transforms = Path(__file__).parents[1] / "src" / "transformations"
+    source = (transforms / "silver_heats_coils.py").read_text()
+
+    assert "dp.create_streaming_table(" in source
+    assert "dp.create_auto_cdc_flow(" in source
+    assert 'keys=["coil_id"]' in source
+    assert 'sequence_by=F.struct("_source_modified_at", "_source_file")' in source
+    assert "stored_as_scd_type=1" in source
+    assert '@dp.temporary_view(name="heats_coils_changes")' in source
+    assert 'source="heats_coils_changes"' in source
+    assert 'except_column_list=["_source_modified_at", "_source_file"]' in source
+
+    checks = (transforms.parent / "checks.py").read_text()
+    assert '"duplicate_coil_id"' in checks
+    assert "HAVING count(*) > 1" in checks
+    assert '"multiple_heats_per_coil"' in checks
+    assert "HAVING count(DISTINCT heat_no) > 1" in checks
+
+
 def test_adjudication_cdf_restores_prior_silver_types():
     transforms = Path(__file__).parents[1] / "src" / "transformations"
     source = (transforms / "silver_adjudications_history.py").read_text()
 
     assert 'F.lit(None).cast("array<string>")' in source
-    assert 'F.from_json(' in source
+    assert "F.from_json(" in source
     assert '"array<string>"' in source
     assert 'F.lit("[")' in source and 'F.lit("]")' in source
     assert '.withColumn("finalized_at", F.col("finalized_at").cast("timestamp"))' in source

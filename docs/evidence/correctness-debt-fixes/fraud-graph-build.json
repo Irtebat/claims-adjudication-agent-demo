@@ -1,0 +1,25 @@
+{
+  "profile": "fe-bar",
+  "run_id": 355068363829515,
+  "run_url": "https://fe-sandbox-fe-bar-ir.cloud.databricks.com/jobs/310576676613808/runs/355068363829515?o=7474655183924919",
+  "state": "TERMINATED",
+  "result": "SUCCESS",
+  "job_summary": {
+    "catalog": "fe-bar-ir",
+    "claims_scored": 5000,
+    "clusters": 900,
+    "risk_rows": 4400,
+    "high_risk_rows": 650
+  },
+  "table_verification": {
+    "risk_rows": 4400,
+    "distinct_customer_heat_keys": 4400,
+    "high_risk_rows": 650,
+    "computed_at_utc": "2026-09-24T10:52:02.539Z"
+  },
+  "risk_score_distribution": [
+    {"risk_score": 0.75, "row_count": 500, "min_cluster_size": 10, "max_cluster_size": 10},
+    {"risk_score": 0.60, "row_count": 150, "min_cluster_size": 5, "max_cluster_size": 5},
+    {"risk_score": 0.00, "row_count": 3750, "min_cluster_size": 5, "max_cluster_size": 5}
+  ]
+}

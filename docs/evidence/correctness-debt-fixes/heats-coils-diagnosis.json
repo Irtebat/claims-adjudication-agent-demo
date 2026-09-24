@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-09-24T16:42:00+05:30",
+  "profile": "fe-bar",
+  "before": {
+    "silver_total_rows": 9000,
+    "silver_distinct_coil_id": 4500,
+    "silver_distinct_full_rows": 4500,
+    "coils_with_two_rows": 4500,
+    "conflicting_coil_attribute_mappings": 0,
+    "coils_with_multiple_heats": 0,
+    "bronze_total_rows": 4500,
+    "bronze_distinct_coil_id": 4500
+  },
+  "delta_history": [
+    {
+      "version": 2,
+      "operation": "STREAMING UPDATE",
+      "epoch_id": 0,
+      "num_output_rows": 4500,
+      "num_removed_files": 0
+    },
+    {
+      "version": 3,
+      "operation": "STREAMING UPDATE",
+      "epoch_id": 1,
+      "num_output_rows": 4500,
+      "num_removed_files": 0
+    }
+  ],
+  "conclusion": "The generator/raw/bronze snapshot is unique. Auto Loader appended a regenerated set of source files to an existing append-only silver target, producing two exact copies of every natural key. This is an overwrite/replay artifact, not CDF and not conflicting source data."
+}

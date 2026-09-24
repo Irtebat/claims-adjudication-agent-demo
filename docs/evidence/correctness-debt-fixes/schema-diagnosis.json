@@ -1,0 +1,16 @@
+{
+  "profile": "fe-bar",
+  "catalog": "fe-bar-ir",
+  "query_source": "catalog information_schema",
+  "claims_sources": {
+    "gold.claims_current": {"has_coil_id": true, "has_heat_no": false},
+    "gold.claims_history": {"has_coil_id": true, "has_heat_no": false},
+    "silver.claims_history": {"has_coil_id": true, "has_heat_no": false}
+  },
+  "heat_mapping_source": {
+    "table": "silver.heats_coils",
+    "has_coil_id": true,
+    "has_heat_no": true
+  },
+  "diagnosis": "fraud_graph_job selected a nonexistent heat_no from gold.claims_history and could not build"
+}

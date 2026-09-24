@@ -216,8 +216,15 @@ claims_enriched = base.selectExpr(
     "fraud_cluster_id",
     "CASE WHEN slot BETWEEN 55 AND 64 THEN concat('CLM-',lpad(cast(material_i as string),7,'0')) ELSE cast(NULL as string) END duplicate_of_claim_id",
     "coating_supplier_id",
-    "grade", "spec_edition", "product_line", "coating_class", "region", "warranty_version", "ship_date",
-    "shipped_tonnage", "unit_price",
+    "grade",
+    "spec_edition",
+    "product_line",
+    "coating_class",
+    "region",
+    "warranty_version",
+    "ship_date",
+    "shipped_tonnage",
+    "unit_price",
 )
 claims_enriched = claims_enriched.withColumn(
     "claimed_amount",
@@ -228,9 +235,19 @@ claims_enriched = claims_enriched.withColumn(
 write(
     "claims_history",
     claims_enriched.select(
-        "claim_id", "coil_id", "customer_id", "claim_type", "claim_date", "install_date",
-        "environment", "installation", "coast_distance_km", "defect_code", "defect_narrative",
-        "claimed_tonnage", "claimed_freight",
+        "claim_id",
+        "coil_id",
+        "customer_id",
+        "claim_type",
+        "claim_date",
+        "install_date",
+        "environment",
+        "installation",
+        "coast_distance_km",
+        "defect_code",
+        "defect_narrative",
+        "claimed_tonnage",
+        "claimed_freight",
     ),
 )
 

@@ -1,11 +1,13 @@
 # Databricks notebook source
 """Batch fraud/quality cluster-risk job -> gold.customer_heat_risk.
 
-Reads the published claim history, builds the shared-heat graph, runs connected
-components and customer-concentration cluster scoring (pure logic in fraud_graph.py),
-and overwrites the gold risk table the agent's get_risk tool reads (synced down to
-Lakebase separately). Serverless; no GraphFrames dependency — the edge set at demo
-scale is small enough to score on the driver.
+Reads current claims, resolves each claim's heat through the coil master, builds the
+shared-heat graph, runs connected components and customer-concentration cluster
+scoring (pure logic in fraud_graph.py), and overwrites the gold risk table the
+agent's get_risk tool reads (synced down to Lakebase separately). Supplier-lot
+linking is intentionally out of scope because those broad lots drown the heat-level
+collusion signal. Serverless; no GraphFrames dependency — the edge set at demo scale
+is small enough to score on the driver.
 """
 
 # COMMAND ----------
@@ -21,8 +23,20 @@ catalog = dbutils.widgets.get("catalog")
 if not catalog or "`" in catalog or "/" in catalog:
     raise ValueError("Invalid catalog")
 
-claims = spark.table(f"`{catalog}`.gold.claims_history").select(
-    "claim_id", "customer_id", "heat_no"
+heat_map = spark.table(f"`{catalog}`.silver.heats_coils").select("coil_id", "heat_no").distinct()
+ambiguous_coils = (
+    heat_map.groupBy("coil_id")
+    .agg(F.countDistinct("heat_no").alias("heat_count"))
+    .filter(F.col("heat_count") != 1)
+)
+if ambiguous_coils.limit(1).count():
+    raise ValueError("silver.heats_coils contains an ambiguous coil_id -> heat_no mapping")
+
+claims = (
+    spark.table(f"`{catalog}`.gold.claims_current")
+    .select("claim_id", "customer_id", "coil_id")
+    .join(heat_map, on="coil_id", how="inner")
+    .select("claim_id", "customer_id", "heat_no")
 )
 rows = [r.asDict() for r in claims.collect()]
 result = score_clusters(rows)
