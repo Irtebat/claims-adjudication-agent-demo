@@ -1,0 +1,78 @@
+{
+  "diagnostic_judges": {
+    "authority_guidelines": {
+      "status": "measured",
+      "value": 0.41379310344827586
+    },
+    "retrieval_groundedness": {
+      "follow_up": "Enrich agent RETRIEVER span outputs with clause text.",
+      "limitation": "RETRIEVER spans expose cited IDs but not retrieved clause text as outputs; 0.0 is not a grounding-regression signal.",
+      "status": "not_yet_measurable",
+      "value": 0.0
+    }
+  },
+  "raw_exact_metrics": {
+    "amount_matches_authority/mean": 1.0,
+    "amount_matches_gold/mean": 1.0,
+    "citation_recall/mean": 1.0,
+    "citation_reciprocal_rank/mean": 0.9733333333333334,
+    "citations_in_resolved_policy/mean": 1.0,
+    "disposition_exact_match/mean": 0.7333333333333333,
+    "invariant_clean/mean": 1.0,
+    "no_payable_duplicate/mean": 1.0,
+    "verdict_exact_match/mean": 0.9466666666666667,
+    "verdict_matches_eligibility/mean": 1.0
+  },
+  "release_gate": {
+    "amount_matches_authority": {
+      "passed": true,
+      "threshold": 1.0,
+      "value": 1.0
+    },
+    "amount_matches_gold": {
+      "passed": true,
+      "threshold": 0.95,
+      "value": 1.0
+    },
+    "citation_recall": {
+      "passed": true,
+      "threshold": 0.8,
+      "value": 1.0
+    },
+    "citation_reciprocal_rank": {
+      "passed": true,
+      "threshold": 0.8,
+      "value": 0.9733333333333334
+    },
+    "citations_in_resolved_policy": {
+      "passed": true,
+      "threshold": 1.0,
+      "value": 1.0
+    },
+    "disposition_exact_match": {
+      "passed": false,
+      "threshold": 0.95,
+      "value": 0.7333333333333333
+    },
+    "invariant_clean": {
+      "passed": true,
+      "threshold": 0.95,
+      "value": 1.0
+    },
+    "no_payable_duplicate": {
+      "passed": true,
+      "threshold": 1.0,
+      "value": 1.0
+    },
+    "verdict_exact_match": {
+      "passed": false,
+      "threshold": 0.95,
+      "value": 0.9466666666666667
+    },
+    "verdict_matches_eligibility": {
+      "passed": true,
+      "threshold": 1.0,
+      "value": 1.0
+    }
+  }
+}
