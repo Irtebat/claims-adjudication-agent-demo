@@ -1,0 +1,84 @@
+MLflow lifecycle hygiene — local gates (2026-09-26)
+Branch: eval-mlflow-hygiene (off main). All local; no live workspace calls made.
+
+Test-case counts below are collected test cases (pytest --collect-only), not test
+functions; some functions may be parametrized.
+
+Updated after cross-review of PR #11 (two BLOCKING fixes):
+  B1 — evaluate.py now pins the evaluated model URI to --candidate-version
+       (derives models:/<name>/<candidate>; rejects an explicit --model-uri that
+       resolves to a different version). DAB passes --candidate-version, not
+       --model-uri. New tests: eval/tests/test_evaluate.py.
+  B2 — promote.py fails closed on non-finite / out-of-range metrics: every required
+       metric (candidate AND prod) must be finite and within [0.0, 1.0], else no
+       promotion. New tests appended to eval/tests/test_promote.py.
+
+Updated after re-review (one residual BLOCKING fix):
+  B2b — money-safety invariants are now validated AND threshold-checked on BOTH
+        candidate AND prod in evaluate_gate. An invalid (missing/NaN/+inf/out-of-range)
+        or sub-threshold @prod safety metric now fails closed and blocks promotion;
+        previously prod was consulted only for the quality comparison. Added prod-side
+        gate tests + a non-dry-run orchestration test asserting the alias is NOT moved
+        when a prod money-safety metric is invalid.
+
+Updated after re-review (one precision BLOCKING fix):
+  B2c — money-safety threshold check is now STRICT (value >= threshold, no EPS) on both
+        candidate and prod, so a value a hair below threshold (e.g. 1.0 - EPS/2) fails.
+        EPS tolerance is retained ONLY in the relative quality "not worse than @prod"
+        comparison. Added a just-below-threshold candidate test (gate rejects) and an
+        exact-threshold test (gate still passes).
+
+── PART 1 + PART 2 scope guardrails ─────────────────────────────────────────────
+PASS: git diff main -- agent/src/authorities.py
+  Result: EMPTY diff — deterministic money math is untouched.
+
+PASS: scope check (git diff main --stat + git status)
+  Modified: agent/src/agent.py, eval/README.md, eval/src/evaluate.py
+  Added:    agent/tests/test_agent.py, eval/src/promote.py, eval/tests/test_promote.py,
+            eval/evidence/README.md
+  No changes under lakebase/src/* or pipelines/*.
+
+── Agent gates ──────────────────────────────────────────────────────────────────
+Pytest collection
+  command: uv run --with pytest --with pyyaml --with 'mlflow[databricks]>=3.5,<4' \
+    --with langgraph --with 'pydantic>=2' --with 'psycopg[binary]' \
+    --with 'databricks-sdk>=0.81.0' pytest agent/tests --collect-only -q
+  Result: 79 tests collected (77 base + 2 from tests/test_agent.py). Unchanged this round.
+
+Pytest execution
+  command: uv run --with pytest --with pyyaml --with 'mlflow[databricks]>=3.5,<4' \
+    --with langgraph --with 'pydantic>=2' --with 'psycopg[binary]' \
+    --with 'databricks-sdk>=0.81.0' pytest agent/tests -q
+  Result: PASS — 77 passed, 2 skipped.
+
+PASS: uv run --with ruff ruff check agent
+  Result: All checks passed!
+PASS: uv run --with ruff ruff format --check agent
+  Result: 33 files already formatted.
+
+── Eval gates (eval/ project env) ────────────────────────────────────────────────
+Pytest collection
+  command: (cd eval) uv run pytest --collect-only -q
+  Result: 41 tests collected (19 base + 7 test_evaluate.py [B1] + 15 test_promote.py [B2/B2b/B2c]).
+
+Pytest execution
+  command: (cd eval) uv run pytest -q
+  Result: PASS — 41 passed.
+
+PASS: uv run --with ruff ruff check eval
+  Result: All checks passed!
+PASS: uv run --with ruff ruff format --check eval
+  Result: 14 files already formatted.
+
+DAB (eval/databricks.yml): YAML parsed and asserted to pass --candidate-version and
+NOT --model-uri. `databricks bundle validate` was NOT run — it requires a live
+fe-bar profile and this task makes no live workspace calls.
+
+── Notes ─────────────────────────────────────────────────────────────────────────
+- MLflow version grounded against: 3.16.1 (installed in eval/.venv). API shapes for
+  span.set_inputs/set_outputs, mlflow.update_current_trace(request_preview/response_preview),
+  mlflow.get_trace / get_last_active_trace_id, mlflow.search_runs,
+  MlflowClient.get_model_version_by_alias / set_registered_model_alias, and
+  mlflow.set_active_model were verified by introspection, not guessed.
+- No live evaluation was run and the live @prod alias was NOT moved. promote.py tests
+  mock search_runs and the registry client, so no workspace call and no alias mutation.

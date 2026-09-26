@@ -340,6 +340,10 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             reproducibility["mlflow_trace_id"] = getattr(root, "trace_id", None) or getattr(
                 root, "request_id", None
             )
+            # Root-span inputs -> the trace's request. Setting these on the root AGENT
+            # span (the trace root) is the MLflow 3 mechanism that populates the trace
+            # request/response shown in the UI; without it future traces render null.
+            root.set_inputs({"claim": claim})
             with connect(profile=self.profile, autocommit=False) as conn:
                 core = self._deterministic_core(conn, claim)
                 raw_recommendation, llm_used = self._llm_recommendation(core)
@@ -376,6 +380,26 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                                 ),
                             }
                         )
+            # Root-span outputs -> the trace's response: the final (invariant-corrected)
+            # recommendation, not the raw LLM draft. Non-chat-shaped payload, so a
+            # compact request/response preview is set for the trace-list UI.
+            root.set_outputs(
+                {
+                    "recommended_verdict": record["recommended_verdict"],
+                    "recommended_disposition": record["recommended_disposition"],
+                    "approved_amount": record["approved_amount"],
+                    "deterministic_verdict": record["deterministic_verdict"],
+                    "invariant_violations": violations,
+                    "recommendation": corrected,
+                }
+            )
+            mlflow.update_current_trace(
+                request_preview=f"claim={claim.get('claim_id')} type={claim.get('claim_type')}",
+                response_preview=(
+                    f"{record['recommended_verdict']}/{record['recommended_disposition']} "
+                    f"approved={record['approved_amount']}"
+                ),
+            )
             self._tag_trace(root, claim, record, violations, llm_used)
         return {
             "record": record,
