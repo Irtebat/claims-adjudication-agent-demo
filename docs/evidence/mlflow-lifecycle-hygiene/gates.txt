@@ -4,6 +4,15 @@ Branch: eval-mlflow-hygiene (off main). All local; no live workspace calls made.
 Test-case counts below are collected test cases (pytest --collect-only), not test
 functions; some functions may be parametrized.
 
+Updated after cross-review of PR #11 (two BLOCKING fixes):
+  B1 — evaluate.py now pins the evaluated model URI to --candidate-version
+       (derives models:/<name>/<candidate>; rejects an explicit --model-uri that
+       resolves to a different version). DAB passes --candidate-version, not
+       --model-uri. New tests: eval/tests/test_evaluate.py.
+  B2 — promote.py fails closed on non-finite / out-of-range metrics: every required
+       metric (candidate AND prod) must be finite and within [0.0, 1.0], else no
+       promotion. New tests appended to eval/tests/test_promote.py.
+
 ── PART 1 + PART 2 scope guardrails ─────────────────────────────────────────────
 PASS: git diff main -- agent/src/authorities.py
   Result: EMPTY diff — deterministic money math is untouched.
@@ -19,7 +28,7 @@ Pytest collection
   command: uv run --with pytest --with pyyaml --with 'mlflow[databricks]>=3.5,<4' \
     --with langgraph --with 'pydantic>=2' --with 'psycopg[binary]' \
     --with 'databricks-sdk>=0.81.0' pytest agent/tests --collect-only -q
-  Result: 79 tests collected (was 77; +2 from tests/test_agent.py).
+  Result: 79 tests collected (77 base + 2 from tests/test_agent.py). Unchanged this round.
 
 Pytest execution
   command: uv run --with pytest --with pyyaml --with 'mlflow[databricks]>=3.5,<4' \
@@ -35,16 +44,20 @@ PASS: uv run --with ruff ruff format --check agent
 ── Eval gates (eval/ project env) ────────────────────────────────────────────────
 Pytest collection
   command: (cd eval) uv run pytest --collect-only -q
-  Result: 19 tests collected (was 9; +10 from tests/test_promote.py).
+  Result: 35 tests collected (was 19; +7 tests/test_evaluate.py [B1], +9 tests/test_promote.py [B2]).
 
 Pytest execution
   command: (cd eval) uv run pytest -q
-  Result: PASS — 19 passed.
+  Result: PASS — 35 passed.
 
 PASS: uv run --with ruff ruff check eval
   Result: All checks passed!
 PASS: uv run --with ruff ruff format --check eval
-  Result: 12 files already formatted.
+  Result: 14 files already formatted.
+
+DAB (eval/databricks.yml): YAML parsed and asserted to pass --candidate-version and
+NOT --model-uri. `databricks bundle validate` was NOT run — it requires a live
+fe-bar profile and this task makes no live workspace calls.
 
 ── Notes ─────────────────────────────────────────────────────────────────────────
 - MLflow version grounded against: 3.16.1 (installed in eval/.venv). API shapes for

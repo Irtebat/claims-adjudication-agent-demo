@@ -3,7 +3,10 @@ bundle:
 
 variables:
   dataset_version: {default: latest}
-  model_uri: {default: "models:/fe-bar-ir.default.claims_adjudication_agent@prod"}
+  # The UC registered-model version to evaluate. evaluate.py derives the pinned model
+  # URI (models:/<name>/<candidate_version>) from this, so the run provably scores that
+  # exact version rather than whatever @prod happens to point at.
+  candidate_version: {default: "2"}
   judge_endpoint: {default: databricks-meta-llama-3-3-70b-instruct}
   scorer_tier: {default: auto}
   experiment: {default: /Shared/claims-adjudication-offline-evaluation}
@@ -15,7 +18,7 @@ resources:
       max_concurrent_runs: 1
       parameters:
         - {name: dataset_version, default: "${var.dataset_version}"}
-        - {name: model_uri, default: "${var.model_uri}"}
+        - {name: candidate_version, default: "${var.candidate_version}"}
         - {name: judge_endpoint, default: "${var.judge_endpoint}"}
         - {name: scorer_tier, default: "${var.scorer_tier}"}
         - {name: experiment, default: "${var.experiment}"}
@@ -24,7 +27,7 @@ resources:
           spark_python_task:
             python_file: ./src/evaluate.py
             parameters: [--profile, fe-bar, --dataset-version, "{{job.parameters.dataset_version}}",
-              --model-uri, "{{job.parameters.model_uri}}", --judge-endpoint,
+              --candidate-version, "{{job.parameters.candidate_version}}", --judge-endpoint,
               "{{job.parameters.judge_endpoint}}", --scorer-tier, "{{job.parameters.scorer_tier}}",
               --experiment, "{{job.parameters.experiment}}"]
           environment_key: eval_environment

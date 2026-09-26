@@ -170,6 +170,7 @@ def test_candidate_already_prod_is_a_noop():
 
 
 def test_missing_eval_run_raises_actionable_error():
+    # Empty search result for the candidate -> refuse (raise), never promote.
     client = _client(prod_version="2")
     with pytest.raises(LookupError, match="no exact-tier eval run"):
         promote_if_beats_prod(
@@ -179,3 +180,78 @@ def test_missing_eval_run_raises_actionable_error():
             search_runs=_search_runs_for({"2": PROD}),  # candidate "4" absent
             dry_run=True,
         )
+
+
+# ---------------- fail-closed on non-finite / out-of-range metrics ----------- #
+
+INF = float("inf")
+NAN = float("nan")
+
+
+def test_gate_refuses_candidate_nan_money_safety():
+    gate = evaluate_gate({**CANDIDATE_WINS, "no_payable_duplicate": NAN}, PROD)
+    assert gate["wins"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["valid"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["passed"] is False
+
+
+def test_gate_refuses_candidate_inf_money_safety():
+    gate = evaluate_gate({**CANDIDATE_WINS, "amount_matches_authority": INF}, PROD)
+    assert gate["wins"] is False
+    assert gate["money_safety"]["amount_matches_authority"]["passed"] is False
+
+
+def test_gate_refuses_candidate_out_of_range_above_one_money_safety():
+    gate = evaluate_gate({**CANDIDATE_WINS, "no_payable_duplicate": 1.5}, PROD)
+    assert gate["wins"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["passed"] is False
+
+
+def test_gate_refuses_missing_money_safety_metric():
+    bad = {**CANDIDATE_WINS}
+    del bad["amount_matches_authority"]
+    gate = evaluate_gate(bad, PROD)
+    assert gate["wins"] is False
+    assert gate["money_safety"]["amount_matches_authority"]["passed"] is False
+
+
+def test_gate_refuses_candidate_inf_quality():
+    gate = evaluate_gate({**CANDIDATE_WINS, "verdict_exact_match": INF}, PROD)
+    assert gate["wins"] is False
+    assert gate["quality_comparison"]["verdict_exact_match"]["not_worse"] is False
+
+
+def test_gate_refuses_candidate_negative_out_of_range_quality():
+    gate = evaluate_gate({**CANDIDATE_WINS, "disposition_exact_match": -0.1}, PROD)
+    assert gate["wins"] is False
+    assert gate["quality_comparison"]["disposition_exact_match"]["not_worse"] is False
+
+
+def test_gate_refuses_prod_nan_quality():
+    gate = evaluate_gate(CANDIDATE_WINS, {**PROD, "verdict_exact_match": NAN})
+    assert gate["wins"] is False
+    assert gate["quality_comparison"]["verdict_exact_match"]["prod_valid"] is False
+    assert gate["quality_comparison"]["verdict_exact_match"]["not_worse"] is False
+
+
+def test_gate_refuses_prod_inf_quality():
+    gate = evaluate_gate(CANDIDATE_WINS, {**PROD, "amount_matches_gold": INF})
+    assert gate["wins"] is False
+    assert gate["quality_comparison"]["amount_matches_gold"]["not_worse"] is False
+
+
+def test_promotion_refuses_to_move_alias_on_nonfinite_metric_even_without_dry_run():
+    # A +inf candidate metric read from the run must never move the live alias.
+    client = _client(prod_version="2")
+    decision = promote_if_beats_prod(
+        "4",
+        "exp-1",
+        client=client,
+        search_runs=_search_runs_for(
+            {"2": PROD, "4": {**CANDIDATE_WINS, "no_payable_duplicate": INF}}
+        ),
+        dry_run=False,
+    )
+    assert decision["promoted"] is False
+    assert decision["gate"]["wins"] is False
+    client.set_registered_model_alias.assert_not_called()

@@ -102,8 +102,11 @@ content or PII.
 
 ## Manual DAB job
 
-The job is intentionally unscheduled and parameterized by dataset version, model
-URI, judge endpoint, scorer tier, and experiment.
+The job is intentionally unscheduled and parameterized by dataset version,
+candidate version, judge endpoint, scorer tier, and experiment. It passes
+`--candidate-version` (not `--model-uri`), so `evaluate.py` derives the pinned
+`models:/<name>/<candidate_version>` URI and the run provably scores that exact
+version.
 
 ```bash
 databricks bundle validate --strict -t prod --profile fe-bar

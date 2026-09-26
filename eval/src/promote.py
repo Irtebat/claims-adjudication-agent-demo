@@ -78,6 +78,22 @@ def _metric_from_row(row, name: str) -> float | None:
     return None
 
 
+def _valid_metric(value) -> bool:
+    """A usable score is present, finite, and within the valid [0.0, 1.0] range.
+
+    Fail-closed guard: None (missing), NaN, +/-inf, and out-of-range values are all
+    rejected so a bogus metric (e.g. +inf) can never satisfy the money-safety
+    threshold or look "not worse" than @prod.
+    """
+    return (
+        value is not None
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and 0.0 <= value <= 1.0
+    )
+
+
 def release_gate_metrics(
     search_runs, experiment_id: str, version: str, tier: str = "exact"
 ) -> dict:
@@ -115,10 +131,13 @@ def evaluate_gate(candidate_metrics: dict, prod_metrics: dict) -> dict:
     for name in MONEY_SAFETY_METRICS:
         value = candidate_metrics.get(name)
         threshold = RELEASE_THRESHOLDS[name]
+        valid = _valid_metric(value)
         money_safety[name] = {
             "value": value,
             "threshold": threshold,
-            "passed": value is not None and value >= threshold - EPS,
+            "valid": valid,
+            # Fail closed: an invalid (missing/non-finite/out-of-range) value never passes.
+            "passed": valid and value >= threshold - EPS,
         }
     money_safety_passed = all(item["passed"] for item in money_safety.values())
 
@@ -126,12 +145,17 @@ def evaluate_gate(candidate_metrics: dict, prod_metrics: dict) -> dict:
     for name in QUALITY_METRICS:
         candidate_value = candidate_metrics.get(name)
         prod_value = prod_metrics.get(name)
-        comparable = candidate_value is not None and prod_value is not None
+        candidate_valid = _valid_metric(candidate_value)
+        prod_valid = _valid_metric(prod_value)
+        # Both sides must be valid to compare; otherwise fail closed (not comparable).
+        comparable = candidate_valid and prod_valid
         quality[name] = {
             "candidate": candidate_value,
             "prod": prod_value,
+            "candidate_valid": candidate_valid,
+            "prod_valid": prod_valid,
             "delta": (candidate_value - prod_value) if comparable else None,
-            # "not worse than @prod": candidate >= prod. A missing value is not comparable.
+            # "not worse than @prod": candidate >= prod. Invalid on either side is not comparable.
             "not_worse": comparable and candidate_value >= prod_value - EPS,
         }
     quality_not_worse = all(item["not_worse"] for item in quality.values())
