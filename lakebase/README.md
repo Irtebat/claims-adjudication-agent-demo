@@ -117,18 +117,16 @@ to `CDF_STATE_STREAMING` and materializes `cdf.lb_adjudication_decision_records_
 ## Deploy and execute on the workspace
 
 ```bash
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy -t prod --profile fe-bar
-databricks bundle run setup_and_seed -t prod --profile fe-bar
 uv run --with pyyaml python lakebase/run.py validate
 uv run --with pyyaml python lakebase/run.py deploy
 uv run --with pyyaml python lakebase/run.py setup-and-seed
 uv run --with pyyaml python lakebase/run.py policy-intake
 uv run --with pyyaml python lakebase/run.py create-cdf
 uv run --with pyyaml python lakebase/run.py synced-tables
-lakebase/scripts/create_synced_tables.sh
 ```
 
-`setup_and_seed` accepts bundle variables `catalog`, `endpoint`, and
-`postgres_database` via `--var key=value`. Run it only before native CDF starts.
+The wrappers always use `-t prod --profile fe-bar`. The underlying bundle job key
+is `setup_and_seed`; `lakebase/scripts/create_synced_tables.sh` is the direct
+alternative to the `synced-tables` action. The setup action refuses before deploy
+or seed if native CDF already exists.
 The pending/retry queue remains a future services-wave responsibility.

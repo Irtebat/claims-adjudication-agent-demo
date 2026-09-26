@@ -10,11 +10,15 @@ PASS lakebase bundle
 
 PASS agent + lakebase test collection
   uv run --with pytest --with pyyaml --with pydantic pytest agent/tests lakebase/tests --collect-only -q
-  77 test cases collected
+  78 test cases collected
 
 PASS agent + lakebase tests
   uv run --with pytest --with pyyaml --with pydantic pytest agent/tests lakebase/tests -q
-  75 passed, 2 skipped
+  76 passed, 2 skipped
+
+PASS pipelines test collection
+  uv run --with pytest --with pyyaml pytest pipelines/tests --collect-only -q
+  13 test cases collected
 
 PASS pipelines tests
   uv run --with pytest --with pyyaml pytest pipelines/tests -q
@@ -25,7 +29,11 @@ PASS lint
 
 PASS formatting
   uv run --with ruff ruff format --check pipelines lakebase agent/tests/test_authorities.py scripts/bootstrap.py
-  30 files already formatted
+  31 files already formatted
+
+PASS reseed safety regression
+  lakebase/tests/test_run.py::test_setup_and_seed_refuses_before_mutation_when_cdf_exists
+  Existing native CDF causes refusal before deploy or setup_and_seed.
 
 PASS protected-file check
   git diff main -- agent/src/authorities.py agent/src/agent.py eval/

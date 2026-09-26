@@ -77,27 +77,34 @@ storage root, and permission to create schemas, volumes, and account groups. All
 compute is serverless; there is no schedule. From the repository root:
 
 ```bash
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy -t prod --profile fe-bar
-databricks bundle run validate_generator -t prod --profile fe-bar
-databricks bundle run generate_raw -t prod --profile fe-bar
-databricks bundle run refresh_medallion -t prod --profile fe-bar
-databricks bundle run medallion -t prod --profile fe-bar
-uv run --with pyyaml python pipelines/run.py generate
-uv run --with pyyaml python pipelines/run.py refresh
-uv run --with pyyaml python pipelines/run.py decision-records
-uv run --with pyyaml python pipelines/run.py preview-status
-uv run --with pyyaml python pipelines/run.py summary
-uv run --with pyyaml python pipelines/run.py check-generator
-uv run --with pyyaml python pipelines/run.py govern
-uv run --with pyyaml python pipelines/run.py evidence
 uv run --with pyyaml python scripts/bootstrap.py
 ```
 
+The bootstrap is the guarded end-to-end path. For validation, deployment,
+diagnostics, or an already-configured CDF source, use the wrapper actions:
+
+```bash
+uv run --with pyyaml python pipelines/run.py validate
+uv run --with pyyaml python pipelines/run.py deploy
+uv run --with pyyaml python pipelines/run.py check-generator
+uv run --with pyyaml python pipelines/run.py generate
+uv run --with pyyaml python pipelines/run.py preview-status
+uv run --with pyyaml python pipelines/run.py refresh
+uv run --with pyyaml python pipelines/run.py decision-records
+uv run --with pyyaml python pipelines/run.py summary
+uv run --with pyyaml python pipelines/run.py govern
+uv run --with pyyaml python pipelines/run.py evidence
+```
+
+The bundle resource keys are `validate_generator`, `generate_raw`,
+`refresh_medallion`, and pipeline `medallion`. The latter two require resolved
+`BUNDLE_VAR_cdf_claims_table` and `BUNDLE_VAR_cdf_adjudications_table`; normally
+invoke them through `run.py refresh`, which supplies those values.
+
 `scripts/bootstrap.py` orchestrates raw generation, the one-time Lakebase seed, CDF
-creation/readiness, then the triggered AUTO CDC pipeline. It refuses to reseed once
-a CDF config exists, because replacing the fixture would emit artificial
-deletes/inserts and create spurious SCD2 versions.
+creation/readiness, then the triggered AUTO CDC pipeline. If a CDF config exists,
+it refuses before Lakebase deployment or seeding because replacing the fixture
+would emit artificial deletes/inserts and create spurious SCD2 versions.
 
 `decision-records` is the additive path for the append-only agent decision record.
 The table is created by `lakebase/src/setup_and_seed.py` (with

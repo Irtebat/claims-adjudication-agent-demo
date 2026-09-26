@@ -24,6 +24,23 @@ def databricks(*parts, cwd=ROOT, capture=False):
     )
 
 
+def pipeline_databricks_config():
+    return yaml.safe_load((REPO / "pipelines/settings.yaml").read_text())["databricks"]
+
+
+def cdf_configs(database):
+    return json.loads(
+        databricks(
+            "postgres",
+            "list-cdf-configs",
+            database,
+            "--output",
+            "json",
+            capture=True,
+        ).stdout
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -44,6 +61,12 @@ def main():
     elif args.action == "deploy":
         databricks("bundle", "deploy", "-t", "prod")
     elif args.action == "setup-and-seed":
+        database = pipeline_databricks_config()["lakebase_database"]
+        if cdf_configs(database):
+            raise RuntimeError(
+                "Refusing to reseed Lakebase because fixture delete/upsert operations "
+                "would create spurious SCD2 versions."
+            )
         databricks("bundle", "deploy", "-t", "prod")
         databricks("bundle", "run", "setup_and_seed", "-t", "prod")
         command(
@@ -74,23 +97,13 @@ def main():
     elif args.action == "synced-tables":
         command("./scripts/create_synced_tables.sh")
     else:
-        config = yaml.safe_load((REPO / "pipelines/settings.yaml").read_text())
-        db = config["databricks"]
+        db = pipeline_databricks_config()
         catalog, schema, database = (
             db["catalog"],
             db["cdf_schema"],
             db["lakebase_database"],
         )
-        current = json.loads(
-            databricks(
-                "postgres",
-                "list-cdf-configs",
-                database,
-                "--output",
-                "json",
-                capture=True,
-            ).stdout
-        )
+        current = cdf_configs(database)
         if current:
             raise RuntimeError("A CDF config already exists; refusing to recreate it")
         warehouses = json.loads(

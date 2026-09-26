@@ -1,7 +1,7 @@
 {
   "mode": "TRIGGERED",
   "state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
-  "note": "Current sync set is FIVE reference tables. spec_standards and coating_warranty_terms were removed from the sync set once policy data moved to native Lakebase public (authored by agent/src/policy_intake.py); their two legacy synced relations (reference.spec_standards, reference.coating_warranty_terms) still linger in the reference schema, are unreferenced, and are safe to delete via `databricks postgres delete-synced-table`.",
+  "note": "Current sync set is FIVE reference tables. spec_standards and coating_warranty_terms were removed from the sync set once policy data moved to native Lakebase public (authored by lakebase/src/policy_intake.py); their two legacy synced relations (reference.spec_standards, reference.coating_warranty_terms) still linger in the reference schema, are unreferenced, and are safe to delete via `databricks postgres delete-synced-table`.",
   "tables": [
     {"name": "heats_coils", "pipeline_id": "9c74b0aa-8ccc-428a-a4d9-a1cc7e90ded3", "source_count": 4500, "target_count": 4500},
     {"name": "mill_test_certs", "pipeline_id": "2b6b5f16-b5b4-4302-b445-6f77afc65fdd", "source_count": 4500, "target_count": 4500},
