@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from promote import (
+    EPS,
     MODEL_NAME,
     MONEY_SAFETY_METRICS,
     QUALITY_METRICS,
@@ -205,6 +206,25 @@ def test_gate_refuses_candidate_out_of_range_above_one_money_safety():
     gate = evaluate_gate({**CANDIDATE_WINS, "no_payable_duplicate": 1.5}, PROD)
     assert gate["wins"] is False
     assert gate["money_safety"]["no_payable_duplicate"]["passed"] is False
+
+
+def test_money_safety_threshold_is_strict_no_epsilon_slack():
+    # A value a hair below the 1.0 threshold must FAIL — money-safety is pass/fail, so
+    # the EPS tolerance used for the relative quality compare must not apply here.
+    just_below = 1.0 - EPS / 2
+    assert just_below < 1.0
+    gate = evaluate_gate({**CANDIDATE_WINS, "no_payable_duplicate": just_below}, PROD)
+    assert gate["wins"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["candidate_valid"] is True
+    assert gate["money_safety"]["no_payable_duplicate"]["candidate_passed"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["passed"] is False
+
+
+def test_money_safety_exact_threshold_still_passes():
+    # Exactly at threshold (1.0) must still pass — strictness rejects only below.
+    gate = evaluate_gate(CANDIDATE_WINS, PROD)
+    assert gate["money_safety"]["no_payable_duplicate"]["passed"] is True
+    assert gate["wins"] is True
 
 
 def test_gate_refuses_missing_money_safety_metric():

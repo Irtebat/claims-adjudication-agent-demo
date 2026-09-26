@@ -137,9 +137,11 @@ def evaluate_gate(candidate_metrics: dict, prod_metrics: dict) -> dict:
         # Fail closed on BOTH sides: a money-safety metric that is missing, non-finite,
         # out-of-range, or below its absolute threshold on candidate OR prod blocks
         # promotion. Prod is checked too — an unverifiable @prod safety metric must never
-        # let a candidate through.
-        candidate_passed = candidate_valid and candidate_value >= threshold - EPS
-        prod_passed = prod_valid and prod_value >= threshold - EPS
+        # let a candidate through. The threshold is STRICT (no EPS): a money-safety
+        # invariant is pass/fail, so a value even a hair below threshold must fail. EPS
+        # tolerance belongs only in the relative quality "not worse than @prod" compare.
+        candidate_passed = candidate_valid and candidate_value >= threshold
+        prod_passed = prod_valid and prod_value >= threshold
         money_safety[name] = {
             "threshold": threshold,
             "candidate": candidate_value,

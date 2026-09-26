@@ -21,6 +21,13 @@ Updated after re-review (one residual BLOCKING fix):
         gate tests + a non-dry-run orchestration test asserting the alias is NOT moved
         when a prod money-safety metric is invalid.
 
+Updated after re-review (one precision BLOCKING fix):
+  B2c — money-safety threshold check is now STRICT (value >= threshold, no EPS) on both
+        candidate and prod, so a value a hair below threshold (e.g. 1.0 - EPS/2) fails.
+        EPS tolerance is retained ONLY in the relative quality "not worse than @prod"
+        comparison. Added a just-below-threshold candidate test (gate rejects) and an
+        exact-threshold test (gate still passes).
+
 ── PART 1 + PART 2 scope guardrails ─────────────────────────────────────────────
 PASS: git diff main -- agent/src/authorities.py
   Result: EMPTY diff — deterministic money math is untouched.
@@ -52,11 +59,11 @@ PASS: uv run --with ruff ruff format --check agent
 ── Eval gates (eval/ project env) ────────────────────────────────────────────────
 Pytest collection
   command: (cd eval) uv run pytest --collect-only -q
-  Result: 39 tests collected (19 base + 7 test_evaluate.py [B1] + 13 test_promote.py [B2/B2b]).
+  Result: 41 tests collected (19 base + 7 test_evaluate.py [B1] + 15 test_promote.py [B2/B2b/B2c]).
 
 Pytest execution
   command: (cd eval) uv run pytest -q
-  Result: PASS — 39 passed.
+  Result: PASS — 41 passed.
 
 PASS: uv run --with ruff ruff check eval
   Result: All checks passed!
