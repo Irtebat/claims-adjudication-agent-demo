@@ -49,6 +49,13 @@ MONEY_SAFETY_METRICS = tuple(
 # Quality metrics compared relatively: the candidate must be NOT WORSE than the
 # current @prod on verdict / disposition / amount.
 QUALITY_METRICS = ("verdict_exact_match", "disposition_exact_match", "amount_matches_gold")
+BOOTSTRAP_MONEY_SAFETY_METRICS = (
+    "no_payable_duplicate",
+    "amount_matches_authority",
+    "amount_matches_gold",
+    "verdict_matches_eligibility",
+    "invariant_clean",
+)
 
 
 def _first_row(runs):
@@ -209,6 +216,36 @@ def evaluate_gate(candidate_metrics: dict, prod_metrics: dict) -> dict:
     }
 
 
+def evaluate_bootstrap_gate(candidate_metrics: dict) -> dict:
+    """Fail closed unless every bootstrap money-safety metric is valid and exactly safe."""
+    checks = {}
+    for name in BOOTSTRAP_MONEY_SAFETY_METRICS:
+        value = candidate_metrics.get(name)
+        valid = _valid_metric(value)
+        passed = valid and value >= 1.0
+        checks[name] = {"candidate": value, "candidate_valid": valid, "passed": passed}
+    passed = all(item["passed"] for item in checks.values())
+    return {
+        "wins": passed,
+        "money_safety_passed": passed,
+        "money_safety": checks,
+        "reasons": []
+        if passed
+        else [
+            "bootstrap money-safety gate failed: "
+            + ", ".join(name for name, item in checks.items() if not item["passed"])
+        ],
+    }
+
+
+def _missing_alias(exc: Exception) -> bool:
+    error_code = getattr(exc, "error_code", None)
+    message = str(exc).lower()
+    return error_code == "RESOURCE_DOES_NOT_EXIST" or (
+        "alias" in message and any(marker in message for marker in ("not found", "does not exist"))
+    )
+
+
 def promote_if_beats_prod(
     candidate_version: str,
     experiment_id: str,
@@ -224,8 +261,13 @@ def promote_if_beats_prod(
     ``dry_run`` defaults to True so callers (and tests) never mutate the registry by
     accident; the CLI flips it to False only under ``--promote``.
     """
-    prod_version = str(client.get_model_version_by_alias(model_name, PROD_ALIAS).version)
     candidate_version = str(candidate_version)
+    try:
+        prod_version = str(client.get_model_version_by_alias(model_name, PROD_ALIAS).version)
+    except Exception as exc:
+        if not _missing_alias(exc):
+            raise
+        prod_version = None
     decision = {
         "model_name": model_name,
         "candidate_version": candidate_version,
@@ -235,6 +277,27 @@ def promote_if_beats_prod(
         "alias_from_version": prod_version,
         "alias_to_version": None,
     }
+    if prod_version is None:
+        candidate_metrics = release_gate_metrics(search_runs, experiment_id, candidate_version)
+        gate = evaluate_bootstrap_gate(candidate_metrics)
+        decision["gate"] = gate
+        if not gate["wins"]:
+            raise RuntimeError(
+                "bootstrap refused; @prod remains unset: " + "; ".join(gate["reasons"])
+            )
+        if dry_run:
+            decision["reason"] = (
+                "candidate passes the bootstrap gate; dry-run so @prod remains unset. "
+                "Re-run with --promote (profile fe-bar) to set the alias."
+            )
+            return decision
+        client.set_registered_model_alias(model_name, PROD_ALIAS, candidate_version)
+        decision["promoted"] = True
+        decision["alias_to_version"] = candidate_version
+        decision["reason"] = (
+            f"candidate passes the bootstrap gate; @prod set to {candidate_version}"
+        )
+        return decision
     if candidate_version == prod_version:
         decision["reason"] = "candidate is already @prod; nothing to promote"
         return decision

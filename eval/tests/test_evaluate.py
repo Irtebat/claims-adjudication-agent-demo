@@ -6,10 +6,13 @@ hermetic: alias resolution uses an injected fake client, so no workspace is
 touched.
 """
 
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+import evaluate
 from evaluate import MODEL_NAME, pinned_candidate_model_uri
 
 
@@ -61,3 +64,19 @@ def test_wrong_model_name_is_rejected():
 def test_non_uc_model_uri_is_rejected():
     with pytest.raises(ValueError, match="must be a UC model URI"):
         pinned_candidate_model_uri("runs:/abc123/agent", "4", MODEL_NAME)
+
+
+def test_candidate_version_is_required(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["evaluate.py"])
+    with pytest.raises(SystemExit) as exc:
+        evaluate.main()
+    assert exc.value.code == 2
+    error = capsys.readouterr().err
+    assert "--candidate-version" in error
+    assert "required" in error.lower()
+
+
+def test_evaluate_never_reads_prior_json_evidence():
+    source = Path(evaluate.__file__).read_text()
+    assert "_read_evidence" not in source
+    assert ".read_text(" not in source

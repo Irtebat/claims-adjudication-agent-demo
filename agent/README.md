@@ -80,7 +80,8 @@ cited clause keys, and the final recommendation — no credentials or PII.
 passthrough-auth resources (`DatabricksServingEndpoint("databricks-gpt-5-2")` +
 `DatabricksLakebase`), registers it to `fe-bar-ir.default.claims_adjudication_agent`,
 validates the isolated artifact with `mlflow.models.predict(env_manager="uv")` on a
-real sample claim (`persist=false` — validation never writes), and sets `@prod`. It
+real sample claim (`persist=false` — validation never writes), and sets `@candidate`. It
+never sets `@prod`; only `eval/src/promote.py` owns that alias. It
 does **not** create a serving endpoint. Traces land in a named, non-Git MLflow
 experiment.
 
@@ -99,7 +100,7 @@ experiment.
 | `src/decision_record.py` | The money-critical spine: the Pydantic recommendation schema + JSON-Schema, the deterministic outcome, `enforce_invariants` (the LLM never overrides an authority), and the canonical decision-record payload builder. |
 | `src/writer.py` | Atomic transactional writer — `adjudications` recommendation + `adjudication_decision_records` canonical row in one transaction, idempotent on `(adjudication_id, record_version)`. |
 | `src/agent.py` | The MLflow 3 `ResponsesAgent` orchestrator: LangGraph tool loop over `databricks-gpt-5-2`, structured recommendation, MLflow tracing, invariant enforcement, and persistence. |
-| `src/register_agent.py` | Log + register + isolated-uv validation + `@prod` alias. |
+| `src/register_agent.py` | Log + register + isolated-uv validation + `@candidate` alias. |
 | `src/offline_validation.py` | Runs the agent on a labeled sample spanning every injected pattern and captures the evidence (recommendation vs authority, decision records, no override). |
 | `src/fraud_graph.py` + `src/fraud_graph_job.py` | Connected-components cluster risk over shared heats, scored by customer concentration, written to `gold.customer_heat_risk`. |
 | `src/db.py` | Lakebase psycopg connection using an SDK OAuth credential. |
@@ -142,7 +143,8 @@ databricks bundle run fraud_graph -t prod --profile fe-bar    # gold.customer_he
 ## Development checks
 
 ```bash
-uv run --with pytest pytest agent/tests -q
+# Reuse the eval project's MLflow/runtime dependencies for agent imports.
+uv run --project eval pytest agent/tests -q
 uv run --with ruff ruff check agent && uv run --with ruff ruff format --check agent
 python3 -m compileall -q agent/src
 ```

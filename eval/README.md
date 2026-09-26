@@ -1,7 +1,7 @@
 # Claims-adjudication offline evaluation
 
 This package builds a leakage-free held-out evaluation dataset from the SCD2 gold
-claim and finalized adjudication histories, runs the in-process `ResponsesAgent`
+claim and finalized adjudication histories, loads and runs the packaged `ResponsesAgent`
 with persistence disabled, and records deterministic release metrics plus optional
 diagnostic LLM-judge metrics in MLflow.
 
@@ -15,14 +15,44 @@ evaluation.** `mlflow.genai.evaluate()` logs the release-gate metric means
 evidence — it is overwritten on each run and is not canonical. See
 `eval/evidence/README.md`. Trust the MLflow run when the two disagree.
 
+## Ordered register → evaluate → promote lifecycle
+
+Run these steps in order, carrying the newly registered version number (`N`) into
+evaluation and promotion:
+
+```bash
+# 1. Log, isolated-validate, register version N, and set @candidate (never @prod).
+cd agent
+DATABRICKS_CONFIG_PROFILE=fe-bar uv run python src/register_agent.py --profile fe-bar
+
+# 2. Independently score the packaged version N in version-named MLflow runs.
+cd ../eval
+DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar \
+  MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py \
+  --profile fe-bar --experiment /Shared/claims-adjudication-offline-evaluation \
+  --candidate-version N
+
+# 3a. Gate-only dry run: bootstrap if @prod is absent, otherwise compare against @prod.
+uv run python src/promote.py --profile fe-bar --candidate-version N
+
+# 3b. After approval, make promote.py—the sole @prod owner—apply the passing decision.
+uv run python src/promote.py --profile fe-bar --candidate-version N --promote
+```
+
+Each invocation of `evaluate.py` is independent: skipped tiers are absent, and no
+prior convenience JSON is read or backfilled. `--candidate-version` is required.
+The prediction adapter loads `models:/fe-bar-ir.default.claims_adjudication_agent/N`
+with `mlflow.pyfunc.load_model` and invokes the packaged artifact with
+`custom_inputs.persist=false`; it fails closed unless the artifact reports
+`write_result.persisted=false`.
+
 ## Versioned candidate → compare-vs-@prod → alias promotion
 
 Evaluation is a versioned, comparable, governed process, not a local-JSON record:
 
 - **Version linkage.** Each eval run is tagged with `candidate_version` — the UC
   registered-model version of `fe-bar-ir.default.claims_adjudication_agent` under
-  test. It is passed with `--candidate-version` (default: the `AGENT_MODEL_VERSION`
-  env var, else the module's `MODEL_VERSION`), stamped on every run tag, and also
+  test. It is passed with the required `--candidate-version`, stamped on every run tag, and also
   exported as `AGENT_MODEL_VERSION` so the agent records the same version on its
   decision records and trace attributes. The run — and the traces it produces —
   therefore reference the exact version being scored. (MLflow 3 also offers
@@ -40,10 +70,13 @@ Evaluation is a versioned, comparable, governed process, not a local-JSON record
   uv run python src/promote.py --profile fe-bar --candidate-version 3 --promote
   ```
 
-  `promote_if_beats_prod` resolves the current `@prod` version
+  `promote_if_beats_prod` resolves the current `@prod` version when present
   (`get_model_version_by_alias`), pulls both versions' release-gate metrics from
   their eval runs via `mlflow.search_runs`, and moves the alias **only if the
-  candidate wins the gate**:
+  candidate wins the gate**. If no `@prod` exists, bootstrap requires the five
+  money-safety metrics (`no_payable_duplicate`, `amount_matches_authority`,
+  `amount_matches_gold`, `verdict_matches_eligibility`, `invariant_clean`) to be
+  finite, in range, and at least `1.0` with no epsilon slack:
 
   1. every **money-safety invariant** passes its absolute release threshold
      (`no_payable_duplicate`, `amount_matches_authority`,
