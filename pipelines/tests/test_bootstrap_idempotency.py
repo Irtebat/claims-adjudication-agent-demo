@@ -7,7 +7,7 @@ def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
     bundle = yaml.safe_load((Path(__file__).parents[1] / "databricks.yml").read_text())
     jobs = bundle["resources"]["jobs"]
     assert jobs["generate_raw"]["tasks"][0]["task_key"] == "generate"
-    medallion = jobs["process_cdf"]["tasks"][0]
+    medallion = jobs["refresh_medallion"]["tasks"][0]
     assert medallion["task_key"] == "medallion"
     assert "full_refresh" not in medallion["pipeline_task"]
 
@@ -23,14 +23,21 @@ def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
     assert ".gold.claims_history" not in seed_source
     assert ".gold.adjudications_history" not in seed_source
 
+    composer = (Path(__file__).parents[2] / "scripts" / "bootstrap.py").read_text()
+    generate = composer.index('"pipelines/run.py", "generate"')
+    seed = composer.index('"lakebase/run.py", "setup-and-seed"')
+    create_cdf = composer.index('"lakebase/run.py", "create-cdf"')
+    refresh = composer.index('"pipelines/run.py", "refresh"')
+    assert generate < seed < create_cdf < refresh
+
     runner = (Path(__file__).parents[1] / "run.py").read_text()
-    generate = runner.index('"bundle", "run", "generate_raw"')
-    seed = runner.index('"bundle", "run", "setup_and_seed"')
-    create_cdf = runner.index('"create-cdf-config"')
-    wait_for_streaming = runner.index('states == {"STREAMING"}')
-    process = runner.index('"bundle", "run", "process_cdf"')
-    assert generate < seed < create_cdf < wait_for_streaming < process
-    assert "Refusing to reseed Lakebase" in runner
+    process = runner.index('"bundle", "run", "refresh_medallion"')
+    drop_old = runner.index('"DROP MATERIALIZED VIEW IF EXISTS')
+    assert drop_old < process
+    assert "lakebase_root" not in runner
+
+    lakebase_runner = (Path(__file__).parents[2] / "lakebase" / "run.py").read_text()
+    assert 'states == {"STREAMING"}' in lakebase_runner
 
 
 def test_history_uses_native_cdf_auto_cdc_scd2():

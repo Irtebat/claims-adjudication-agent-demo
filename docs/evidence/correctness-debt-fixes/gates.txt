@@ -13,7 +13,7 @@ Ruff lint
   result: All checks passed!
 
 Ruff format (changed files)
-  command: uv run --with ruff ruff format --check agent/src/fraud_graph.py agent/src/fraud_graph_job.py agent/src/policy_intake.py
+  command: uv run --with ruff ruff format --check agent/src/fraud_graph.py agent/src/fraud_graph_job.py lakebase/src/policy_intake.py
   result: 3 files already formatted
 
 Ruff format (exact README pipeline scope)
@@ -33,7 +33,7 @@ Agent bundle
   result: run 355068363829515 TERMINATED SUCCESS
 
 Policy intake
-  command: uv run --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' python agent/src/policy_intake.py --profile fe-bar
+  command: uv run --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' python lakebase/src/policy_intake.py --profile fe-bar
   result: passed; four table counts verified and both BM25 indexes retained
 
 Money/decision guardrail

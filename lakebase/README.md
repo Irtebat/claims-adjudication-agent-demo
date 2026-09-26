@@ -22,8 +22,8 @@ Native Postgres tables in schema `public`:
 
 | Group | Tables | Notes |
 | --- | --- | --- |
-| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases`, `claims_pending` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite). `adjudications` is widened by the decision-record migration to carry the agent recommendation fields. |
-| Decision record (created by `src/decision_records_migration.py`) | `adjudication_decision_records` | Append-only canonical record per adjudication, PK `(adjudication_id, record_version)`, JSONB payload, `REPLICA IDENTITY FULL`; UPDATE/DELETE revoked (immutability by access) |
+| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite). The pending/retry queue is deferred to the future services wave. |
+| Decision record (created by `src/setup_and_seed.py`) | `adjudication_decision_records` | Append-only canonical record per adjudication, PK `(adjudication_id, record_version)`, JSONB payload, `REPLICA IDENTITY FULL`; UPDATE/DELETE revoked (immutability by access) |
 | Precedent corpus | `prior_claims` | Finalized claims joined to adjudications + coil; embeddings + full-text |
 | Policy (created by `agent/` intake) | `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses` | Natural-key policy params + citable clauses |
 
@@ -80,7 +80,7 @@ flowchart LR
 
   silverref -- "serve-down (Triggered sync)" --> ref
   oltp -- "serve-up: native CDF" --> cdfland
-  policyjson["agent/src/policy_source.json"] -- "policy intake" --> policy
+  policyjson["lakebase/src/policy_source.json"] -- "policy intake" --> policy
   oltp -- "finalized + coil join" --> prior
   ref -- read --> prior
 ```
@@ -114,11 +114,19 @@ schema-scoped config streams it. A schema-scoped config detects a newly added ta
 once it has committed WAL activity; the first decision-record write is what moves it
 to `CDF_STATE_STREAMING` and materializes `cdf.lb_adjudication_decision_records_history`.
 
-## Run
+## Deploy and execute on the workspace
 
 ```bash
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy -t prod --profile fe-bar
-databricks bundle run setup_and_seed -t prod --profile fe-bar
-./scripts/create_synced_tables.sh
+uv run --with pyyaml python lakebase/run.py validate
+uv run --with pyyaml python lakebase/run.py deploy
+uv run --with pyyaml python lakebase/run.py setup-and-seed
+uv run --with pyyaml python lakebase/run.py policy-intake
+uv run --with pyyaml python lakebase/run.py create-cdf
+uv run --with pyyaml python lakebase/run.py synced-tables
 ```
+
+The wrappers always use `-t prod --profile fe-bar`. The underlying bundle job key
+is `setup_and_seed`; `lakebase/scripts/create_synced_tables.sh` is the direct
+alternative to the `synced-tables` action. The setup action refuses before deploy
+or seed if native CDF already exists.
+The pending/retry queue remains a future services-wave responsibility.

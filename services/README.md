@@ -20,6 +20,7 @@ claim.adjudicated ->  downstream consumers
 ```
 
 The operational tables this flow uses (`outbox`, `settlements`,
-`investigation_cases`, `supplier_recovery_cases`, `claims_pending`) are created
+`investigation_cases`, `supplier_recovery_cases`) are created
 by `lakebase/`, not here. No Kafka configuration, worker code, relay, topics, or
 jobs are implemented in this directory yet.
+The pending/retry queue (`claims_pending`) is deferred to the future services wave.

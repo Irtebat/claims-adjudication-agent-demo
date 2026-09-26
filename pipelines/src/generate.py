@@ -11,7 +11,7 @@ catalog = dbutils.widgets.get("catalog")
 claim_count = int(dbutils.widgets.get("claim_count"))
 seed = int(dbutils.widgets.get("seed"))
 # The warranty version schedule (effective windows + durations) is sourced from the
-# single authored policy (agent/src/policy_source.json), passed in by run.py. No
+# single authored policy (lakebase/src/policy_source.json), passed in by run.py. No
 # policy numerics are hardcoded here; edits to the policy propagate into history.
 warranty_schedule = json.loads(dbutils.widgets.get("warranty_schedule"))
 if not warranty_schedule:
@@ -61,8 +61,8 @@ def schedule_col(field):
 
 
 # Policy standards and coating-warranty terms are no longer generated here. They
-# are authored in agent/src/policy_source.json and loaded directly into Lakebase
-# by the policy intake (agent/src/policy_intake.py) as the single source of both
+# are authored in lakebase/src/policy_source.json and loaded directly into Lakebase
+# by the policy intake (lakebase/src/policy_intake.py) as the single source of both
 # the structured params the deterministic authorities read and the citable text
 # clauses. This generator only produces reference/master/history fact data.
 

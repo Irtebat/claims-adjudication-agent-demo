@@ -75,8 +75,8 @@ resources:
             notebook_path: ./src/generate.py
           timeout_seconds: 3600
           max_retries: 0
-    process_cdf:
-      name: steel-claims-process-cdf
+    refresh_medallion:
+      name: steel-claims-refresh-medallion
       max_concurrent_runs: 1
       tasks:
         - task_key: medallion

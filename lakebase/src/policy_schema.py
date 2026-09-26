@@ -77,7 +77,9 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
                     "gauge_tolerance_mm": float(spec["gauge_tolerance_mm"]),
                     "width_tolerance_mm": float(spec["width_tolerance_mm"]),
                     "min_coating_g_m2": float(spec["min_coating_g_m2"]),
-                    "coating_adhesion_required": bool(spec["coating_adhesion_required"]),
+                    "coating_adhesion_required": bool(
+                        spec["coating_adhesion_required"]
+                    ),
                     "source_sha256": digest,
                 }
             )
@@ -85,7 +87,9 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
                 "chemistry": "; ".join(
                     f"{k}: {v['min']}–{v['max']} mass percent" for k, v in chem.items()
                 ),
-                "mechanical": "; ".join(f"{k}: {v['min']}–{v['max']}" for k, v in mech.items()),
+                "mechanical": "; ".join(
+                    f"{k}: {v['min']}–{v['max']}" for k, v in mech.items()
+                ),
                 "dimensions": (
                     f"Gauge tolerance ±{spec['gauge_tolerance_mm']} mm; width tolerance "
                     f"±{spec['width_tolerance_mm']} mm; minimum coating "
@@ -125,9 +129,15 @@ def parse_policies(path: str | Path | None = None) -> dict[str, list[dict]]:
                         "duration_months": duration,
                         "full_coverage_months": full,
                         "min_coating_g_m2": min_coating,
-                        "min_coast_distance_km": float(coverage["min_coast_distance_km"]),
-                        "excluded_environments": list(coverage["excluded_environments"]),
-                        "excluded_installations": list(coverage["excluded_installations"]),
+                        "min_coast_distance_km": float(
+                            coverage["min_coast_distance_km"]
+                        ),
+                        "excluded_environments": list(
+                            coverage["excluded_environments"]
+                        ),
+                        "excluded_installations": list(
+                            coverage["excluded_installations"]
+                        ),
                         "proration_method": coverage["proration_method"],
                         "freight_covered": bool(coverage["freight_covered"]),
                         "freight_cap": float(coverage["freight_cap"]),
