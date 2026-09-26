@@ -99,10 +99,18 @@ def _read_evidence(name: str, default):
 def run(args) -> dict:
     if args.profile != "fe-bar":
         raise ValueError("live evaluation is approved only for the explicit fe-bar profile")
+    # The candidate registered-model VERSION under evaluation. Passed via
+    # --candidate-version (default: AGENT_MODEL_VERSION env, else MODEL_VERSION). It is
+    # stamped as the ``candidate_version`` run tag on every eval run so the run — and the
+    # traces it produces — reference the exact UC version of
+    # fe-bar-ir.default.claims_adjudication_agent being scored, and so promote.py can pull
+    # this version's release-gate metrics later. It is also exported as AGENT_MODEL_VERSION
+    # so the agent stamps the same version on its decision records and trace attributes.
+    candidate_version = str(args.candidate_version or MODEL_VERSION)
     os.environ.update(
         DATABRICKS_CONFIG_PROFILE=args.profile,
         LAKEBASE_PROFILE=args.profile,
-        AGENT_MODEL_VERSION=MODEL_VERSION,
+        AGENT_MODEL_VERSION=candidate_version,
     )
     mlflow.set_tracking_uri("databricks")
     mlflow.set_registry_uri("databricks-uc")
@@ -112,7 +120,8 @@ def run(args) -> dict:
     )
     tags = {
         "agent_model": MODEL_NAME,
-        "agent_model_version": MODEL_VERSION,
+        "agent_model_version": candidate_version,
+        "candidate_version": candidate_version,
         "git_sha": _git_sha(),
         "dataset_split": metadata["source_fingerprint"],
         "persist": "false",
@@ -169,7 +178,8 @@ def run(args) -> dict:
         "built_at_utc": datetime.now(UTC).isoformat(),
         "experiment": args.experiment,
         "model_name": MODEL_NAME,
-        "model_version": MODEL_VERSION,
+        "model_version": candidate_version,
+        "candidate_version": candidate_version,
         "model_uri": args.model_uri,
         "git_sha": tags["git_sha"],
         "dataset": metadata,
@@ -178,6 +188,10 @@ def run(args) -> dict:
         "judge_run_id": (judge.run_id if judge else previous_manifest.get("judge_run_id")),
         "mlflow_run_link": link,
         "persist": False,
+        # The MLflow run/metrics (link above) are the authoritative system of record.
+        # Everything written under eval/evidence/ is a regenerated convenience snapshot.
+        "record_of_truth": "mlflow",
+        "convenience_artifact": True,
     }
     metrics = {
         "release_gate": _metric_summary(exact.metrics),
@@ -255,6 +269,11 @@ def main() -> None:
     parser.add_argument("--model-uri", default=f"models:/{MODEL_NAME}@prod")
     parser.add_argument("--judge-endpoint", default="databricks-meta-llama-3-3-70b-instruct")
     parser.add_argument("--scorer-tier", choices=("auto", "exact", "judges"), default="auto")
+    parser.add_argument(
+        "--candidate-version",
+        default=os.environ.get("AGENT_MODEL_VERSION") or MODEL_VERSION,
+        help="UC registered-model version under evaluation; stamped as the candidate_version run tag.",
+    )
     parser.add_argument("--dataset-version", default="latest")
     parser.add_argument(
         "--workspace-host", default="https://fe-sandbox-fe-bar-ir.cloud.databricks.com"
