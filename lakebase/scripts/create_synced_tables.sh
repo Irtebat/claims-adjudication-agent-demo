@@ -29,7 +29,7 @@ create_sync() {
 
 # spec_standards and coating_warranty_terms are no longer synced down: the policy
 # corpus (structured params + citable clauses + embeddings) is authored directly
-# into Lakebase by the policy intake (agent/src/policy_intake.py), so it is native
+# into Lakebase by the policy intake (lakebase/src/policy_intake.py), so it is native
 # operational data, not a UC serve-down.
 create_sync heats_coils coil_id
 create_sync mill_test_certs cert_id

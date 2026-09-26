@@ -58,8 +58,8 @@ def main():
         choices=[
             "validate",
             "deploy",
-            "run",
-            "resume",
+            "generate",
+            "refresh",
             "decision-records",
             "preview-status",
             "summary",
@@ -89,7 +89,7 @@ def main():
         raise ValueError("Invalid catalog")
     # Source the warranty version schedule from the single authored policy so the
     # generator carries no hardcoded policy numerics (durations, effective windows).
-    policy_source = json.loads((ROOT.parent / "agent/src/policy_source.json").read_text())
+    policy_source = json.loads((ROOT.parent / "lakebase/src/policy_source.json").read_text())
     warranty_schedule = json.dumps(
         [
             {
@@ -123,10 +123,10 @@ def main():
             raise RuntimeError(result.stderr.strip() or result.stdout.strip())
         return result
 
-    if args.action in {"validate", "deploy", "summary", "check-generator"}:
+    if args.action in {"validate", "deploy", "generate", "summary", "check-generator"}:
         parts = [
             "bundle",
-            "run" if args.action == "check-generator" else args.action,
+            "run" if args.action in {"generate", "check-generator"} else args.action,
             "--target",
             "prod",
         ]
@@ -134,6 +134,8 @@ def main():
             parts.append("--strict")
         if args.action == "check-generator":
             parts.append("validate_generator")
+        if args.action == "generate":
+            parts.append("generate_raw")
         result = subprocess.run(
             ["databricks", *parts, "--profile", profile], cwd=ROOT, env=env, check=False
         )
@@ -158,7 +160,7 @@ def main():
         print(json.dumps(status, sort_keys=True))
         raise SystemExit(0 if status["enabled"] else 2)
 
-    if args.action in {"run", "resume"}:
+    if args.action == "refresh":
         status = preview_status()
         if not status["enabled"]:
             raise RuntimeError(
@@ -168,21 +170,10 @@ def main():
 
         cdf_schema = db["cdf_schema"]
         existing = status["cdf_configs"]
-        if args.action == "run" and existing:
+        if not isinstance(existing, list) or len(existing) != 1:
             raise RuntimeError(
-                "A CDF config already exists. Refusing to reseed Lakebase because fixture "
-                "delete/upsert operations would create spurious SCD2 versions."
+                f"Refresh requires exactly one existing CDF config; found {existing}"
             )
-
-        if args.action == "run":
-            # The baseline is generated and seeded exactly once, before native CDF starts.
-            cli("bundle", "deploy", "--target", "prod")
-            cli("bundle", "run", "generate_raw", "--target", "prod")
-            lakebase_root = ROOT.parent / "lakebase"
-            cli("bundle", "deploy", "--target", "prod", cwd=lakebase_root)
-            cli("bundle", "run", "setup_and_seed", "--target", "prod", cwd=lakebase_root)
-        elif not isinstance(existing, list) or len(existing) != 1:
-            raise RuntimeError(f"Resume requires exactly one existing CDF config; found {existing}")
 
         warehouses = cli_json("warehouses", "list")
         warehouse = next(
@@ -190,51 +181,7 @@ def main():
             for item in warehouses
             if item["name"] == db["warehouse_name"] and item["enable_serverless_compute"]
         )
-        if args.action == "run":
-            cli(
-                "experimental",
-                "aitools",
-                "tools",
-                "query",
-                f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.`{cdf_schema}`",
-                "--warehouse",
-                warehouse,
-            )
-            created = cli_json(
-                "postgres",
-                "create-cdf-config",
-                database,
-                catalog,
-                cdf_schema,
-                "public",
-            )
-        else:
-            created = existing[0]
-        cdf_config_name = created["name"]
-
-        statuses = None
-        for _ in range(40):
-            statuses = cli_json("postgres", "list-cdf-statuses", cdf_config_name)
-            status_rows = statuses if isinstance(statuses, list) else statuses.get("statuses", [])
-            relevant = [
-                row
-                for row in status_rows
-                if row.get("postgres_table") in {"claims", "adjudications"}
-                or row.get("table_name") in {"claims", "adjudications"}
-            ]
-            states = {
-                str(row.get("status") or row.get("state", "")).upper().removeprefix("CDF_STATE_")
-                for row in relevant
-            }
-            if len(relevant) == 2 and states == {"STREAMING"}:
-                break
-            time.sleep(15)
-        else:
-            raise RuntimeError(
-                "Lakebase CDF did not reach STREAMING for claims and adjudications; "
-                f"last status: {statuses}"
-            )
-
+        created = existing[0]
         table_response = cli_json("tables", "list", catalog, cdf_schema)
         tables = (
             table_response if isinstance(table_response, list) else table_response.get("tables", [])
@@ -274,7 +221,7 @@ def main():
         env["BUNDLE_VAR_cdf_claims_table"] = cdf_table("claims")
         env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table("adjudications")
         cli("bundle", "deploy", "--target", "prod")
-        cli("bundle", "run", "process_cdf", "--target", "prod")
+        cli("bundle", "run", "refresh_medallion", "--target", "prod")
         print(
             json.dumps(
                 {
@@ -344,7 +291,7 @@ def main():
         env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table("adjudications")
         env["BUNDLE_VAR_cdf_decision_records_table"] = cdf_table(source)
         cli("bundle", "deploy", "--target", "prod")
-        cli("bundle", "run", "process_cdf", "--target", "prod")
+        cli("bundle", "run", "refresh_medallion", "--target", "prod")
         print(
             json.dumps(
                 {

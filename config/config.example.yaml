@@ -25,9 +25,9 @@ models:
   embedding_dim: 1024
   embedding_normalization: "l2"
 
-# Policy corpus — authored once, loaded into Lakebase by agent/src/policy_intake.py.
+# Policy corpus — authored once, loaded into Lakebase by lakebase/src/policy_intake.py.
 policy:
-  source: agent/src/policy_source.json         # single source of truth
+  source: lakebase/src/policy_source.json      # single source of truth
   param_tables: [spec_params, warranty_terms]  # read by the deterministic authorities
   clause_tables: [spec_clauses, warranty_clauses]  # embedded + tsvector, hybrid retrieval
   # Deterministic UC-function authorities (governed, auditable) in <catalog>.silver.

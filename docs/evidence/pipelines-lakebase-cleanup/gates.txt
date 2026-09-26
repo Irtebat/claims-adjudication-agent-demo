@@ -1,0 +1,32 @@
+Pipelines/Lakebase cleanup gates
+
+PASS pipelines bundle
+  databricks bundle validate --strict -t prod --profile fe-bar
+  Validation OK: steel-claims / prod
+
+PASS lakebase bundle
+  databricks bundle validate --strict -t prod --profile fe-bar
+  Validation OK: fe-bar-lakebase / prod
+
+PASS agent + lakebase test collection
+  uv run --with pytest --with pyyaml --with pydantic pytest agent/tests lakebase/tests --collect-only -q
+  77 test cases collected
+
+PASS agent + lakebase tests
+  uv run --with pytest --with pyyaml --with pydantic pytest agent/tests lakebase/tests -q
+  75 passed, 2 skipped
+
+PASS pipelines tests
+  uv run --with pytest --with pyyaml pytest pipelines/tests -q
+  13 passed
+
+PASS lint
+  uv run --with ruff ruff check pipelines lakebase agent/tests/test_authorities.py scripts/bootstrap.py
+
+PASS formatting
+  uv run --with ruff ruff format --check pipelines lakebase agent/tests/test_authorities.py scripts/bootstrap.py
+  30 files already formatted
+
+PASS protected-file check
+  git diff main -- agent/src/authorities.py agent/src/agent.py eval/
+  Empty

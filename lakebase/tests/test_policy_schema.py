@@ -2,7 +2,10 @@
 
 import copy
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from policy_schema import SOURCE_PATH, parse_policies
 
@@ -76,8 +79,12 @@ def test_clauses_carry_numbers_identifiers_and_negation():
     warranty_exclusion = next(
         c for c in parsed["warranty_clauses"] if c["section_ref"] == "exclusions"
     )
-    assert "Does not cover" in warranty_exclusion["clause_text"]  # negation retrieval needs
-    spec_dims = next(c for c in parsed["spec_clauses"] if c["section_ref"] == "dimensions")
+    assert (
+        "Does not cover" in warranty_exclusion["clause_text"]
+    )  # negation retrieval needs
+    spec_dims = next(
+        c for c in parsed["spec_clauses"] if c["section_ref"] == "dimensions"
+    )
     assert "g/m" in spec_dims["clause_text"]  # numeric threshold retained
     # no embedding/vector columns are produced by the parser (added only in Lakebase)
     assert all(
@@ -92,5 +99,7 @@ def test_source_path_exists():
 
 def test_live_claim_schema_has_no_ground_truth_label():
     ddl = (Path(__file__).parents[2] / "lakebase/src/setup_and_seed.py").read_text()
-    claims_ddl = ddl.split("CREATE TABLE IF NOT EXISTS claims (", 1)[1].split(");", 1)[0]
+    claims_ddl = ddl.split("CREATE TABLE IF NOT EXISTS claims (", 1)[1].split(");", 1)[
+        0
+    ]
     assert "ground_truth_label" not in claims_ddl

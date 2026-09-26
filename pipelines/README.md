@@ -9,8 +9,8 @@ CLI wrapper always passes the `fe-bar` profile explicitly and reads settings fro
 authentication and are never committed.
 
 Policy standards and coating-warranty terms are **not** produced here — they are
-authored in `agent/src/policy_source.json` and loaded into Lakebase by
-`agent/src/policy_intake.py`. This layer produces only the reference, master, and
+authored in `lakebase/src/policy_source.json` and loaded into Lakebase by
+`lakebase/src/policy_intake.py`. This layer produces only the reference, master, and
 history fact data.
 
 ## Objects created
@@ -33,10 +33,10 @@ Column-mask functions in `silver`: `mask_customer`, `mask_money`.
 ## Resources configured
 
 - Bundle `steel-claims`; single target `prod` (production mode), profile `fe-bar`.
-- Lakeflow pipeline `medallion` — serverless, triggered; default schema `silver`;
+- Lakeflow pipeline workspace name `steel-claims` (bundle resource key `medallion`) — serverless, triggered; default schema `silver`;
   processes every file under `src/transformations/**`.
 - Jobs: `steel-claims-validate-generator`, `steel-claims-generate-raw`,
-  `steel-claims-process-cdf`.
+  `steel-claims-refresh-medallion`.
 - Governance (`governance.sql`): account groups `adjuster` and
   `metallurgy_analyst` (created only when absent; no users enrolled); SELECT on
   curated tables; column masks on customer identifiers and money — adjusters and
@@ -49,7 +49,7 @@ Column-mask functions in `silver`: `mask_customer`, `mask_money`.
 
 ```mermaid
 flowchart TD
-  gen["Serverless Faker/Spark generator"] --> vol["/Volume bronze.raw_landing/"]
+  gen["Serverless Faker/Spark generator"] --> vol["/Volumes/fe-bar-ir/bronze/raw_landing/"]
 
   vol --> bronze["bronze materialized views<br/>(reference & master)"]
   bronze --> silverref["silver reference streaming tables"]
@@ -70,27 +70,37 @@ insert/update/delete up into the `cdf` landing tables; AUTO CDC applies them int
 the two SCD Type 2 silver histories, and the gold views expose current-state and
 full-history projections.
 
-## Run
+## Deploy and run on the workspace
 
 Requires an authenticated Databricks CLI (>= 1.0), `uv`, an accessible UC managed
 storage root, and permission to create schemas, volumes, and account groups. All
 compute is serverless; there is no schedule. From the repository root:
 
 ```bash
-uv run --with pyyaml python pipelines/run.py validate
-uv run --with pyyaml python pipelines/run.py deploy
-uv run --with pyyaml python pipelines/run.py run
+databricks bundle validate --strict -t prod --profile fe-bar
+databricks bundle deploy -t prod --profile fe-bar
+databricks bundle run validate_generator -t prod --profile fe-bar
+databricks bundle run generate_raw -t prod --profile fe-bar
+databricks bundle run refresh_medallion -t prod --profile fe-bar
+databricks bundle run medallion -t prod --profile fe-bar
+uv run --with pyyaml python pipelines/run.py generate
+uv run --with pyyaml python pipelines/run.py refresh
+uv run --with pyyaml python pipelines/run.py decision-records
+uv run --with pyyaml python pipelines/run.py preview-status
+uv run --with pyyaml python pipelines/run.py summary
+uv run --with pyyaml python pipelines/run.py check-generator
 uv run --with pyyaml python pipelines/run.py govern
 uv run --with pyyaml python pipelines/run.py evidence
+uv run --with pyyaml python scripts/bootstrap.py
 ```
 
-`run` orchestrates raw generation, the one-time Lakebase seed, CDF
+`scripts/bootstrap.py` orchestrates raw generation, the one-time Lakebase seed, CDF
 creation/readiness, then the triggered AUTO CDC pipeline. It refuses to reseed once
 a CDF config exists, because replacing the fixture would emit artificial
 deletes/inserts and create spurious SCD2 versions.
 
 `decision-records` is the additive path for the append-only agent decision record.
-The table is created by `lakebase/src/decision_records_migration.py` (with
+The table is created by `lakebase/src/setup_and_seed.py` (with
 `REPLICA IDENTITY FULL`, so the EXISTING schema-scoped native CDF config over
 `public` picks it up once it has committed rows) and lands in UC as
 `cdf.lb_adjudication_decision_records_history`. This action verifies that table
@@ -108,7 +118,7 @@ amount, in-spec/out-of-coverage claims are never approved). Set `synthetic.claim
 diagnostic only — it does not land data. Do not run the bootstrap against live data.
 
 The synthetic historical adjudications apply the warranty version schedule sourced
-from the authored policy: `run.py` reads `agent/src/policy_source.json` and passes
+from the authored policy: `run.py` reads `lakebase/src/policy_source.json` and passes
 it to `generate.py`, so a policy edit propagates into the generated history and no
 policy numbers are hardcoded here. The authoritative live coverage/settlement math
 lives in the `agent/` `compute_*` authorities, never in this generator.

@@ -4,10 +4,16 @@ These are the invariants that used to live in the pipeline's checks.py, now asse
 directly against the authorities using the authored params.
 """
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from authorities import completed_months, compute_conformance, compute_coverage, compute_settlement
+sys.path.insert(0, str(Path(__file__).parents[2] / "lakebase/src"))
+
 from policy_schema import parse_policies
+
+from authorities import completed_months, compute_conformance, compute_coverage, compute_settlement
 
 PARSED = parse_policies()
 SPEC = next(

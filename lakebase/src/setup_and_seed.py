@@ -1,5 +1,5 @@
 # Databricks notebook source
-# ruff: noqa: F821, SIM117
+# ruff: noqa: F821
 """Create the operational schema and idempotently seed the synthetic baseline."""
 
 import json
@@ -24,7 +24,7 @@ credential = w.postgres.generate_database_credential(endpoint=endpoint)
 username = w.current_user.me().user_name
 host = endpoint_details.status.hosts.host
 
-DDL = """
+BASE_DDL = """
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS lakebase_vector;
@@ -96,18 +96,50 @@ CREATE TABLE IF NOT EXISTS supplier_recovery_cases (
   supplier_id text NOT NULL, status text NOT NULL, recovery_amount numeric(18,2),
   created_at timestamptz NOT NULL DEFAULT now(), closed_at timestamptz
 );
-CREATE TABLE IF NOT EXISTS claims_pending (
-  claim_id text PRIMARY KEY, reason text NOT NULL,
-  queued_at timestamptz NOT NULL DEFAULT now(), retry_count integer NOT NULL DEFAULT 0
-);
-
 ALTER TABLE claims REPLICA IDENTITY FULL;
 ALTER TABLE adjudications REPLICA IDENTITY FULL;
 ALTER TABLE outbox REPLICA IDENTITY FULL;
 ALTER TABLE settlements REPLICA IDENTITY FULL;
 ALTER TABLE investigation_cases REPLICA IDENTITY FULL;
 ALTER TABLE supplier_recovery_cases REPLICA IDENTITY FULL;
-ALTER TABLE claims_pending REPLICA IDENTITY FULL;
+"""
+
+# Additive schema evolution is deliberately independent of fixture replacement below.
+# It remains safe to execute after CDF is active.
+ADDITIVE_DDL = """
+ALTER TABLE adjudications
+  ADD COLUMN IF NOT EXISTS recommended_disposition text,
+  ADD COLUMN IF NOT EXISTS confidence numeric,
+  ADD COLUMN IF NOT EXISTS flags jsonb,
+  ADD COLUMN IF NOT EXISTS advisory_risk jsonb,
+  ADD COLUMN IF NOT EXISTS precedent jsonb,
+  ADD COLUMN IF NOT EXISTS idempotency_key text,
+  ADD COLUMN IF NOT EXISTS decision_record_version integer,
+  ADD COLUMN IF NOT EXISTS recommended_at timestamptz DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS adjudication_decision_records (
+  adjudication_id text NOT NULL, claim_id text NOT NULL,
+  record_version integer NOT NULL, idempotency_key text NOT NULL,
+  claim_type text, claim_input jsonb NOT NULL, spec_provenance jsonb,
+  warranty_provenance jsonb, spec_params jsonb, warranty_terms jsonb,
+  freight_cap numeric, coil jsonb, mtc_measured jsonb,
+  conformance jsonb NOT NULL, coverage jsonb, settlement jsonb NOT NULL,
+  duplicate jsonb NOT NULL, claimed_amount numeric,
+  approved_amount numeric NOT NULL, over_claim_flag boolean NOT NULL,
+  duplicate_flag boolean NOT NULL, deterministic_verdict text NOT NULL,
+  deterministic_disposition text NOT NULL, recommended_verdict text NOT NULL,
+  recommended_disposition text NOT NULL, rationale text, confidence numeric,
+  flags jsonb NOT NULL, advisory_risk jsonb, precedent jsonb NOT NULL,
+  invariant_violations jsonb NOT NULL, citations jsonb NOT NULL,
+  cited_clause_ids text[] NOT NULL, authorities_git_sha text,
+  authorities_source_sha256 text NOT NULL, agent_model_name text,
+  agent_model_version text, reasoning_endpoint text, prompt_version text NOT NULL,
+  schema_version text NOT NULL, mlflow_trace_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (adjudication_id, record_version)
+);
+ALTER TABLE adjudication_decision_records REPLICA IDENTITY FULL;
+REVOKE UPDATE, DELETE, TRUNCATE ON adjudication_decision_records FROM PUBLIC;
 """
 
 CLAIM_COLUMNS = [
@@ -180,7 +212,8 @@ with psycopg.connect(
         f"/Volumes/{catalog}/bronze/raw_landing/adjudications_history"
     )
     with connection.cursor() as cursor:
-        cursor.execute(DDL)
+        cursor.execute(BASE_DDL)
+        cursor.execute(ADDITIVE_DDL)
         # Replace only this deterministic fixture set. Keeping stale synthetic
         # rows would make a smaller future fixture non-idempotent, while rows
         # from real intake retain their independent provenance.
@@ -251,7 +284,8 @@ with psycopg.connect(
             WHERE n.nspname = 'public'
               AND c.relname IN (
                 'claims', 'adjudications', 'outbox', 'settlements',
-                'investigation_cases', 'supplier_recovery_cases', 'claims_pending'
+                'investigation_cases', 'supplier_recovery_cases',
+                'adjudication_decision_records'
               )
             GROUP BY c.relname, c.relreplident
             ORDER BY c.relname

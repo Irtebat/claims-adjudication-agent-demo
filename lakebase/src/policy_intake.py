@@ -22,8 +22,29 @@ from __future__ import annotations
 import argparse
 import json
 
-from db import DEFAULT_DATABASE, DEFAULT_ENDPOINT, connect
+import psycopg
+from databricks.sdk import WorkspaceClient
 from policy_schema import parse_policies
+
+DEFAULT_ENDPOINT = (
+    "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
+)
+DEFAULT_DATABASE = "databricks_postgres"
+
+
+def connect(profile, endpoint, database, *, autocommit=False):
+    client = WorkspaceClient(profile=profile)
+    details = client.postgres.get_endpoint(name=endpoint)
+    credential = client.postgres.generate_database_credential(endpoint=endpoint)
+    return psycopg.connect(
+        host=details.status.hosts.host,
+        dbname=database,
+        user=client.current_user.me().user_name,
+        password=credential.token,
+        sslmode="require",
+        autocommit=autocommit,
+    )
+
 
 EXTENSIONS = ["pg_trgm", "lakebase_text"]
 
@@ -127,7 +148,11 @@ WARRANTY_CLAUSE_COLUMNS = [
 # backfill. lakebase_ann serves cosine vector search (<=>); lakebase_bm25 serves
 # lexical BM25 (<@> to_bm25query).
 LAKEBASE_INDEXES = [
-    ("spec_clauses_lb_bm25", "spec_clauses", "lakebase_bm25 (clause_tsv tsvector_bm25_ops)"),
+    (
+        "spec_clauses_lb_bm25",
+        "spec_clauses",
+        "lakebase_bm25 (clause_tsv tsvector_bm25_ops)",
+    ),
     (
         "warranty_clauses_lb_bm25",
         "warranty_clauses",
@@ -157,9 +182,13 @@ def upsert_sql(table: str, columns: list[str], pk: str) -> str:
 
 def clause_upsert_sql(table: str, meta_columns: list[str], pk: str) -> str:
     all_columns = meta_columns + ["clause_tsv"]
-    value_exprs = [f"%({c})s" for c in meta_columns] + ["to_tsvector('english', %(clause_text)s)"]
+    value_exprs = [f"%({c})s" for c in meta_columns] + [
+        "to_tsvector('english', %(clause_text)s)"
+    ]
     pk_columns = [part.strip() for part in pk.split(",")]
-    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in all_columns if c not in pk_columns)
+    updates = ", ".join(
+        f"{c} = EXCLUDED.{c}" for c in all_columns if c not in pk_columns
+    )
     return (
         f"INSERT INTO {table} ({', '.join(all_columns)}) VALUES ({', '.join(value_exprs)}) "
         f"ON CONFLICT ({pk}) DO UPDATE SET {updates}, loaded_at = now()"
@@ -244,42 +273,50 @@ def run_intake(
             summary["extensions"] = _create_extensions(cur)
             cur.execute(DDL)
         # Upserts + stale-row reconciliation applied atomically.
-        with conn.transaction():
-            with conn.cursor() as cur:
-                cur.executemany(
-                    upsert_sql("spec_params", SPEC_PARAM_COLUMNS, "grade, spec_edition, region"),
-                    parsed["spec_params"],
-                )
-                cur.executemany(
-                    upsert_sql(
-                        "warranty_terms", WARRANTY_TERM_COLUMNS, "product_line, region, version"
-                    ),
-                    parsed["warranty_terms"],
-                )
-                cur.executemany(
-                    clause_upsert_sql(
-                        "spec_clauses",
-                        SPEC_CLAUSE_COLUMNS,
-                        "grade, spec_edition, region, section_ref",
-                    ),
-                    parsed["spec_clauses"],
-                )
-                cur.executemany(
-                    clause_upsert_sql(
-                        "warranty_clauses",
-                        WARRANTY_CLAUSE_COLUMNS,
-                        "product_line, region, version, section_ref",
-                    ),
-                    parsed["warranty_clauses"],
-                )
-                summary["reconciled_deletes"] = {
-                    table: _reconcile(cur, table, source_sha256) for table in parsed
-                }
+        with conn.transaction(), conn.cursor() as cur:
+            cur.executemany(
+                upsert_sql(
+                    "spec_params", SPEC_PARAM_COLUMNS, "grade, spec_edition, region"
+                ),
+                parsed["spec_params"],
+            )
+            cur.executemany(
+                upsert_sql(
+                    "warranty_terms",
+                    WARRANTY_TERM_COLUMNS,
+                    "product_line, region, version",
+                ),
+                parsed["warranty_terms"],
+            )
+            cur.executemany(
+                clause_upsert_sql(
+                    "spec_clauses",
+                    SPEC_CLAUSE_COLUMNS,
+                    "grade, spec_edition, region, section_ref",
+                ),
+                parsed["spec_clauses"],
+            )
+            cur.executemany(
+                clause_upsert_sql(
+                    "warranty_clauses",
+                    WARRANTY_CLAUSE_COLUMNS,
+                    "product_line, region, version, section_ref",
+                ),
+                parsed["warranty_clauses"],
+            )
+            summary["reconciled_deletes"] = {
+                table: _reconcile(cur, table, source_sha256) for table in parsed
+            }
         with conn.cursor() as cur:
             # Indexes are built AFTER the backfill so BM25 statistics see all rows.
             _build_indexes(cur)
             summary["index_methods"] = _verify_indexes(cur)
-            for table in ("spec_params", "warranty_terms", "spec_clauses", "warranty_clauses"):
+            for table in (
+                "spec_params",
+                "warranty_terms",
+                "spec_clauses",
+                "warranty_clauses",
+            ):
                 cur.execute(f"SELECT count(*) FROM {table}")
                 summary["counts"][table] = cur.fetchone()[0]
     return summary
@@ -290,7 +327,9 @@ def main() -> None:
     parser.add_argument("--profile", default="fe-bar")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--database", default=DEFAULT_DATABASE)
-    parser.add_argument("--source", default=None, help="Override policy_source.json path")
+    parser.add_argument(
+        "--source", default=None, help="Override policy_source.json path"
+    )
     parser.add_argument(
         "--no-embed", action="store_true", help="Load params/text only (zero vectors)"
     )

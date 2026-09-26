@@ -12,7 +12,7 @@ canonical decision record.
 
 ## Single source of truth
 
-`src/policy_source.json` is the sole authored policy source. `src/policy_schema.py`
+`../lakebase/src/policy_source.json` is the sole authored policy source. `../lakebase/src/policy_schema.py`
 parses it once into two aligned representations ("two representations, one source"):
 
 - **structured params** the authorities read — `spec_params` (grade-level
@@ -37,7 +37,7 @@ There are **no** UC functions for the money math. `compute_conformance`,
 `compute_coverage`, and `compute_settlement` are pure Python called in-process —
 deploying them as UC functions added ~5–6 warehouse round-trips per adjudication for
 math that runs in microseconds locally. The append-only decision-record table and
-the `adjudications` widening are created by `lakebase/src/decision_records_migration.py`.
+the `adjudications` widening are created by `lakebase/src/setup_and_seed.py`.
 
 ## The agent
 
@@ -89,7 +89,7 @@ experiment.
 | File | Role |
 | --- | --- |
 | `src/gateway_embed.py` | Shared GTE embedding helper via the Unity Gateway model service `system.ai.gte-large-en`; OAuth token from the SDK, ~16 per batch, 429 retry with backoff, 1024-dim L2-normalized (cosine). Used by both intake and retrieval. |
-| `src/policy_intake.py` | Sole creator + populator of the four natural-key policy tables; clause tables carry `tsvector` + `lakebase_bm25` indexes. |
+| `../lakebase/src/policy_intake.py` | Sole creator + populator of the four natural-key policy tables; clause tables carry `tsvector` + `lakebase_bm25` indexes. |
 | `src/authorities.py` | Pure `compute_conformance` (incl. gauge + width), `compute_coverage`, `compute_settlement` — the single source of the money math, exercised by the offline tests and called in-process. |
 | `src/authorities_runtime.py` | Runtime adapter: fetches params (`public.spec_params` / `warranty_terms`) and coil MTC (`reference.heats_coils` / `mill_test_certs`) over the Lakebase psycopg (5432) path with parameterized queries, then calls the pure authorities in-process. No warehouse on the decision path. |
 | `src/duplicate.py` | `check_duplicate_claim` — deterministic record linkage (block by coil + date window, match on defect/amount/tonnage + `pg_trgm` narrative). A gate that can deny money. |
@@ -135,7 +135,7 @@ always with an explicit profile:
 
 ```bash
 uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
-  python agent/src/policy_intake.py --profile fe-bar          # idempotent; owns the 4 tables
+  python lakebase/src/policy_intake.py --profile fe-bar       # idempotent; owns the 4 tables
 databricks bundle run fraud_graph -t prod --profile fe-bar    # gold.customer_heat_risk
 ```
 

@@ -2,7 +2,7 @@
 
 Live evidence that claims and adjudications history is maintained incrementally from
 Lakebase via native Change Data Feed and AUTO CDC (SCD Type 2). Captured against the
-`fe-bar` profile after a normal `process_cdf` run with no full refresh. The
+`fe-bar` profile after a normal `refresh_medallion` run with no full refresh. The
 incremental mutation was a single Lakebase row: `ADJ-CLM-0000000`, `decision_status`
 from `FINAL` to `REVIEWED`.
 
