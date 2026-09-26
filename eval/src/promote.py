@@ -129,15 +129,26 @@ def evaluate_gate(candidate_metrics: dict, prod_metrics: dict) -> dict:
     """
     money_safety = {}
     for name in MONEY_SAFETY_METRICS:
-        value = candidate_metrics.get(name)
         threshold = RELEASE_THRESHOLDS[name]
-        valid = _valid_metric(value)
+        candidate_value = candidate_metrics.get(name)
+        prod_value = prod_metrics.get(name)
+        candidate_valid = _valid_metric(candidate_value)
+        prod_valid = _valid_metric(prod_value)
+        # Fail closed on BOTH sides: a money-safety metric that is missing, non-finite,
+        # out-of-range, or below its absolute threshold on candidate OR prod blocks
+        # promotion. Prod is checked too — an unverifiable @prod safety metric must never
+        # let a candidate through.
+        candidate_passed = candidate_valid and candidate_value >= threshold - EPS
+        prod_passed = prod_valid and prod_value >= threshold - EPS
         money_safety[name] = {
-            "value": value,
             "threshold": threshold,
-            "valid": valid,
-            # Fail closed: an invalid (missing/non-finite/out-of-range) value never passes.
-            "passed": valid and value >= threshold - EPS,
+            "candidate": candidate_value,
+            "prod": prod_value,
+            "candidate_valid": candidate_valid,
+            "prod_valid": prod_valid,
+            "candidate_passed": candidate_passed,
+            "prod_passed": prod_passed,
+            "passed": candidate_passed and prod_passed,
         }
     money_safety_passed = all(item["passed"] for item in money_safety.values())
 
@@ -163,8 +174,20 @@ def evaluate_gate(candidate_metrics: dict, prod_metrics: dict) -> dict:
     wins = money_safety_passed and quality_not_worse
     reasons: list[str] = []
     if not money_safety_passed:
-        failed = [name for name, item in money_safety.items() if not item["passed"]]
-        reasons.append(f"money-safety invariant(s) below threshold: {', '.join(failed)}")
+        failed = []
+        for name, item in money_safety.items():
+            if item["passed"]:
+                continue
+            sides = [
+                side
+                for side, ok in (
+                    ("candidate", item["candidate_passed"]),
+                    ("prod", item["prod_passed"]),
+                )
+                if not ok
+            ]
+            failed.append(f"{name} ({'/'.join(sides)})")
+        reasons.append(f"money-safety invariant(s) failed or invalid: {', '.join(failed)}")
     if not quality_not_worse:
         worse = [name for name, item in quality.items() if not item["not_worse"]]
         reasons.append(

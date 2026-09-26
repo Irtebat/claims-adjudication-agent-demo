@@ -13,6 +13,14 @@ Updated after cross-review of PR #11 (two BLOCKING fixes):
        metric (candidate AND prod) must be finite and within [0.0, 1.0], else no
        promotion. New tests appended to eval/tests/test_promote.py.
 
+Updated after re-review (one residual BLOCKING fix):
+  B2b — money-safety invariants are now validated AND threshold-checked on BOTH
+        candidate AND prod in evaluate_gate. An invalid (missing/NaN/+inf/out-of-range)
+        or sub-threshold @prod safety metric now fails closed and blocks promotion;
+        previously prod was consulted only for the quality comparison. Added prod-side
+        gate tests + a non-dry-run orchestration test asserting the alias is NOT moved
+        when a prod money-safety metric is invalid.
+
 ── PART 1 + PART 2 scope guardrails ─────────────────────────────────────────────
 PASS: git diff main -- agent/src/authorities.py
   Result: EMPTY diff — deterministic money math is untouched.
@@ -44,11 +52,11 @@ PASS: uv run --with ruff ruff format --check agent
 ── Eval gates (eval/ project env) ────────────────────────────────────────────────
 Pytest collection
   command: (cd eval) uv run pytest --collect-only -q
-  Result: 35 tests collected (was 19; +7 tests/test_evaluate.py [B1], +9 tests/test_promote.py [B2]).
+  Result: 39 tests collected (19 base + 7 test_evaluate.py [B1] + 13 test_promote.py [B2/B2b]).
 
 Pytest execution
   command: (cd eval) uv run pytest -q
-  Result: PASS — 35 passed.
+  Result: PASS — 39 passed.
 
 PASS: uv run --with ruff ruff check eval
   Result: All checks passed!

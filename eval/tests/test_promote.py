@@ -191,7 +191,7 @@ NAN = float("nan")
 def test_gate_refuses_candidate_nan_money_safety():
     gate = evaluate_gate({**CANDIDATE_WINS, "no_payable_duplicate": NAN}, PROD)
     assert gate["wins"] is False
-    assert gate["money_safety"]["no_payable_duplicate"]["valid"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["candidate_valid"] is False
     assert gate["money_safety"]["no_payable_duplicate"]["passed"] is False
 
 
@@ -249,6 +249,49 @@ def test_promotion_refuses_to_move_alias_on_nonfinite_metric_even_without_dry_ru
         client=client,
         search_runs=_search_runs_for(
             {"2": PROD, "4": {**CANDIDATE_WINS, "no_payable_duplicate": INF}}
+        ),
+        dry_run=False,
+    )
+    assert decision["promoted"] is False
+    assert decision["gate"]["wins"] is False
+    client.set_registered_model_alias.assert_not_called()
+
+
+# ---------- money-safety is enforced on PROD too, not only the candidate ------ #
+
+
+def test_gate_refuses_when_prod_money_safety_metric_is_invalid():
+    # Prod safety metric is NaN — unverifiable @prod safety must block promotion.
+    gate = evaluate_gate(CANDIDATE_WINS, {**PROD, "no_payable_duplicate": NAN})
+    assert gate["wins"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["prod_valid"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["prod_passed"] is False
+    assert gate["money_safety"]["no_payable_duplicate"]["passed"] is False
+
+
+def test_gate_refuses_when_prod_money_safety_metric_missing():
+    prod_missing = {**PROD}
+    del prod_missing["amount_matches_authority"]
+    gate = evaluate_gate(CANDIDATE_WINS, prod_missing)
+    assert gate["wins"] is False
+    assert gate["money_safety"]["amount_matches_authority"]["prod_passed"] is False
+
+
+def test_gate_refuses_when_prod_money_safety_below_threshold():
+    gate = evaluate_gate(CANDIDATE_WINS, {**PROD, "amount_matches_authority": 0.9})
+    assert gate["wins"] is False
+    assert gate["money_safety"]["amount_matches_authority"]["prod_passed"] is False
+
+
+def test_promotion_refuses_when_prod_money_safety_invalid_even_without_dry_run():
+    # Non-dry-run orchestration: an invalid PROD money-safety metric must NOT move the alias.
+    client = _client(prod_version="2")
+    decision = promote_if_beats_prod(
+        "4",
+        "exp-1",
+        client=client,
+        search_runs=_search_runs_for(
+            {"2": {**PROD, "amount_matches_authority": INF}, "4": CANDIDATE_WINS}
         ),
         dry_run=False,
     )
