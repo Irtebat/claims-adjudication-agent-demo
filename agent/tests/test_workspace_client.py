@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from workspace_client import workspace_client
 
 
@@ -20,3 +22,23 @@ def test_workspace_client_uses_service_principal_environment(monkeypatch):
     constructor.assert_called_once_with(
         host="https://workspace.example", client_id="client-id", client_secret="secret"
     )
+
+
+@pytest.mark.parametrize(
+    ("client_id", "client_secret"),
+    [("client-id", None), (None, "secret")],
+)
+def test_workspace_client_rejects_partial_service_principal_environment(
+    monkeypatch, client_id, client_secret
+):
+    for name, value in (
+        ("APP_SP_CLIENT_ID", client_id),
+        ("APP_SP_CLIENT_SECRET", client_secret),
+    ):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError, match="must be set together or both unset"):
+        workspace_client()

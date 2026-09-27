@@ -11,6 +11,10 @@ def workspace_client(profile: str | None = None):
 
     client_id = os.environ.get("APP_SP_CLIENT_ID")
     client_secret = os.environ.get("APP_SP_CLIENT_SECRET")
+    if bool(client_id) != bool(client_secret):
+        raise ValueError(
+            "APP_SP_CLIENT_ID and APP_SP_CLIENT_SECRET must be set together or both unset"
+        )
     if client_id and client_secret:
         return WorkspaceClient(
             host=os.environ["DATABRICKS_HOST"],
