@@ -6,9 +6,9 @@ reasons, cites, and recommends** (PLAN §3, §6) — it can never change an auth
 number or verdict. The MLflow 3 `ResponsesAgent` (`src/agent.py`) resolves the
 claim once to a frozen policy snapshot, runs the deterministic authorities and the
 duplicate gate (which decide eligibility and the amount), gathers advisory context,
-lets the reasoning model (`databricks-gpt-5-2`) emit a structured recommendation,
-enforces code-level money invariants, and writes an atomic recommendation +
-canonical decision record.
+calls the governed Unity Gateway model service `system.ai.gpt-5-2` to emit a
+structured recommendation, enforces code-level money invariants, and writes an
+atomic recommendation + canonical decision record.
 
 ## Single source of truth
 
@@ -42,8 +42,11 @@ the `adjudications` widening are created by `lakebase/src/setup_and_seed.py`.
 ## The agent
 
 `src/agent.py` is an MLflow 3 custom `ResponsesAgent` (implements `predict` and
-`predict_stream`) running a LangGraph tool-calling loop over
-`ChatDatabricks("databricks-gpt-5-2")`. The decision flow per adjudication:
+`predict_stream`). Its `UnityGatewayChatModel` adapter in `src/gateway_chat.py`
+calls `system.ai.gpt-5-2` through the OpenAI-compatible Unity Gateway chat route.
+The LangGraph loop binds the frozen-result tools to that adapter; after the loop,
+a separate non-streaming call binds the recommendation JSON Schema through
+`response_format`. The decision flow per adjudication:
 
 1. **Resolve-once** — bind the claim's coil to a FROZEN policy snapshot
    (`spec_params`, `warranty_terms`, `freight_cap`, natural-key provenance). Every
@@ -76,14 +79,16 @@ cited clause keys, and the final recommendation — no credentials or PII.
 ## Registration
 
 `src/register_agent.py` logs the agent with `mlflow.pyfunc.log_model`
-(`python_model="agent.py"` + sibling `code_paths`), pinned deps, and the
-passthrough-auth resources (`DatabricksServingEndpoint("databricks-gpt-5-2")` +
-`DatabricksLakebase`), registers it to `fe-bar-ir.default.claims_adjudication_agent`,
-validates the isolated artifact with `mlflow.models.predict(env_manager="uv")` on a
-real sample claim (`persist=false` — validation never writes), and sets `@candidate`. It
-never sets `@prod`; only `eval/src/promote.py` owns that alias. It
-does **not** create a serving endpoint. Traces land in a named, non-Git MLflow
-experiment.
+(`python_model="agent.py"` + sibling `code_paths`) and pinned dependencies; it does
+not declare passthrough `resources`. It registers the model to
+`fe-bar-ir.default.claims_adjudication_agent`, validates the isolated artifact with
+`mlflow.models.predict(env_manager="uv")` on a real sample claim (`persist=false` —
+validation never writes), and sets `@candidate`. In served mode,
+`src/workspace_client.py` authenticates Gateway and Lakebase workspace API calls as
+the dedicated application service principal using the deployed secret references;
+local runs use the explicit workspace profile. Registration never sets `@prod` —
+only `eval/src/promote.py` owns that alias — and does **not** create a serving
+endpoint. Traces land in a named, non-Git MLflow experiment.
 
 ## Release and deployment
 
@@ -107,13 +112,15 @@ prerequisites for the application service principal:
 2. Grant only the `workspace-access` entitlement. This lets the service principal
    call the workspace API to resolve the Lakebase endpoint and mint a database
    credential; it does not need workspace admin, cluster creation, or SQL access.
-3. Create the `claims-agent` secret scope and write `app-sp-client-id`,
-   `app-sp-client-secret`, and `lakebase-db-user`. The database user is the
-   Lakebase OAuth role for the application service principal.
-4. Grant the service principal `EXECUTE` on
+3. Create the Lakebase OAuth role for the service principal and grant the
+   table-level read/write permissions required by the agent. The role value is the
+   application service principal's application UUID.
+4. Create the `claims-agent` secret scope and write `app-sp-client-id`,
+   `app-sp-client-secret`, and `lakebase-db-user`. Set `lakebase-db-user` to the
+   Lakebase OAuth role from step 3: the application service principal's application
+   UUID.
+5. Grant the service principal `EXECUTE` on
    `system.ai.databricks-gpt-5-2` and `system.ai.gte_large_en_v1_5`.
-5. Create the Lakebase OAuth role and grant the table-level read/write permissions
-   required by the agent.
 
 Run the lifecycle and deployment as follows, replacing `N` with the newly
 registered version:
@@ -162,6 +169,7 @@ Lakebase, governed retrieval embedding, governed reasoning, and the atomic write
 
 | File | Role |
 | --- | --- |
+| `src/gateway_chat.py` | LangChain adapter for governed reasoning through the Unity Gateway model service `system.ai.gpt-5-2`; supports bound tools and `response_format` over the OpenAI-compatible chat route with refreshed SDK OAuth authentication. |
 | `src/gateway_embed.py` | Shared GTE embedding helper via the Unity Gateway model service `system.ai.gte-large-en`; OAuth token from the SDK, ~16 per batch, 429 retry with backoff, 1024-dim L2-normalized (cosine). Used by both intake and retrieval. |
 | `../lakebase/src/policy_intake.py` | Sole creator + populator of the four natural-key policy tables; clause tables carry `tsvector` + `lakebase_bm25` indexes. |
 | `src/authorities.py` | Pure `compute_conformance` (incl. gauge + width), `compute_coverage`, `compute_settlement` — the single source of the money math, exercised by the offline tests and called in-process. |
@@ -172,11 +180,12 @@ Lakebase, governed retrieval embedding, governed reasoning, and the atomic write
 | `src/agent_tools.py` | Resolve-once decision core + the in-process tool callables (authorities, duplicate, clause/precedent retrieval, risk) and the deterministic baseline recommendation. Pure (no LangGraph/MLflow), unit-tested with a fake connection. |
 | `src/decision_record.py` | The money-critical spine: the Pydantic recommendation schema + JSON-Schema, the deterministic outcome, `enforce_invariants` (the LLM never overrides an authority), and the canonical decision-record payload builder. |
 | `src/writer.py` | Atomic transactional writer — `adjudications` recommendation + `adjudication_decision_records` canonical row in one transaction, idempotent on `(adjudication_id, record_version)`. |
-| `src/agent.py` | The MLflow 3 `ResponsesAgent` orchestrator: LangGraph tool loop over `databricks-gpt-5-2`, structured recommendation, MLflow tracing, invariant enforcement, and persistence. |
+| `src/agent.py` | The MLflow 3 `ResponsesAgent` orchestrator: LangGraph tool loop and separate structured recommendation through governed `system.ai.gpt-5-2`, MLflow tracing, invariant enforcement, and persistence. |
 | `src/register_agent.py` | Log + register + isolated-uv validation + `@candidate` alias. |
 | `src/offline_validation.py` | Runs the agent on a labeled sample spanning every injected pattern and captures the evidence (recommendation vs authority, decision records, no override). |
 | `src/fraud_graph.py` + `src/fraud_graph_job.py` | Connected-components cluster risk over shared heats, scored by customer concentration, written to `gold.customer_heat_risk`. |
 | `src/db.py` | Lakebase psycopg connection using an SDK OAuth credential. |
+| `src/workspace_client.py` | Shared workspace client: dedicated application-service-principal OAuth in served mode and the explicit `fe-bar` profile for local runs. |
 
 ## Data flow
 
