@@ -12,9 +12,15 @@ tables.
   trends, and fraud-cluster counts.
 - A Genie space for natural-language questions over the same gold data.
 
-## Intended inputs
+## Available inputs
 
-- The gold views published by `pipelines/`.
+- `gold.gold_claim_adjudication_fact` for cross-filterable detail.
+- `gold.gold_quality_kpis`, `gold.gold_failure_mode_analytics`,
+  `gold.gold_supplier_recovery_analytics`, `gold.gold_fraud_cluster_analytics`,
+  `gold.gold_agent_human_alignment`, and `gold.gold_retrieval_citation_kpis` for
+  dashboard-ready aggregates.
+- `gold.quality_claims_metrics` for governed reusable measures in Genie and AI/BI.
 
-Nothing is built here yet: there is no dashboard JSON, bundle resource, or Genie
-configuration.
+The KPI sources are ready for the next Genie/dashboard layer. Dashboard JSON and
+Genie configuration are not yet built here. Workflow-backlog visuals remain
+deferred until settlement, recovery, and investigation events exist.
