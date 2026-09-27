@@ -52,3 +52,29 @@ def decision_record_queries(c):
         "inspec_material_approved": f"SELECT count(*) n FROM {t} WHERE claim_type = 'material_nonconformance' AND conformance.conforms AND recommended_verdict = 'APPROVE'",
         "uncovered_warranty_approved": f"SELECT count(*) n FROM {t} WHERE claim_type = 'coating_warranty' AND NOT coverage.covered AND recommended_verdict = 'APPROVE'",
     }
+
+
+def gold_analytics_queries(c):
+    """No-fan-out and reconciliation checks for the additive gold analytics layer."""
+    fact = f"{c}.gold.gold_claim_adjudication_fact"
+    source = f"{c}.gold.adjudications_current"
+    return {
+        "fact_grain_mismatch": (
+            f"SELECT abs((SELECT count(*) FROM {fact}) - "
+            f"(SELECT count(DISTINCT adjudication_id) FROM {source})) n"
+        ),
+        "duplicate_fact_adjudication": (
+            f"SELECT count(*) n FROM (SELECT adjudication_id FROM {fact} "
+            "GROUP BY adjudication_id HAVING count(*) > 1)"
+        ),
+        "null_fact_grain_key": f"SELECT count(*) n FROM {fact} WHERE adjudication_id IS NULL",
+        "approved_amount_reconciliation": (
+            f"SELECT CASE WHEN abs((SELECT sum(approved_amount) FROM {fact}) - "
+            f"(SELECT sum(approved_amount) FROM {source})) < 0.01 THEN 0 ELSE 1 END n"
+        ),
+        "quality_approved_amount_reconciliation": (
+            f"SELECT CASE WHEN abs((SELECT sum(approved_amount) FROM "
+            f"{c}.gold.gold_quality_kpis) - (SELECT sum(approved_amount) FROM {fact})) "
+            "< 0.01 THEN 0 ELSE 1 END n"
+        ),
+    }
