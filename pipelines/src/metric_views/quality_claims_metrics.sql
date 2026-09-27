@@ -3,7 +3,7 @@ WITH METRICS
 LANGUAGE YAML
 AS $$
   version: 1.1
-  source: fe-bar-ir.gold.gold_claim_adjudication_fact
+  source: "`fe-bar-ir`.gold.gold_claim_adjudication_fact"
   comment: "Governed quality-claim outcome and value measures for Genie and AI/BI dashboards. Value categories remain separate and auditable."
   dimensions:
     - name: Claim Date
