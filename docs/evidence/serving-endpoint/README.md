@@ -79,3 +79,11 @@ The idempotent deployment code and DAB job are committed, configured for endpoin
 scale-to-zero, and the three `claims-agent` secret references. Deployment and the
 persistent smoke test were not run because the required governed-service EXECUTE
 grant is UI-only. No smoke-test transaction was written.
+
+## Minor review notes (not addressed)
+
+- `parse_tool_calls` raises on malformed tool-call arguments instead of recording
+  them in `invalid_tool_calls`.
+- `bind()` keyword arguments are forwarded verbatim; verify that the gateway
+  tolerates extras before using `with_structured_output`.
+- The `model_service` Pydantic-namespace `UserWarning` is cosmetic.
