@@ -12,6 +12,8 @@ class FakeModel:
     def predict(self, request):
         self.calls += 1
         assert request["custom_inputs"]["persist"] is False
+        assert "max_output_tokens" not in request
+        assert "temperature" not in request
         if self.calls <= self.failures:
             raise RuntimeError(self.message)
         return SimpleNamespace(

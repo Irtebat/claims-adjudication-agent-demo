@@ -50,7 +50,7 @@ from decision_record import (
 )
 from writer import write_adjudication
 
-LLM_ENDPOINT = "databricks-gpt-5-2"
+LLM_ENDPOINT = "system.ai.gpt-5-2"
 MODEL_NAME = "fe-bar-ir.default.claims_adjudication_agent"
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -126,15 +126,15 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
     # --- LLM wiring (lazy so the class imports without a live endpoint) ---------
     def _llm_client(self):
         if self._llm is None:
-            from databricks_langchain import ChatDatabricks
+            from gateway_chat import UnityGatewayChatModel
 
-            self._llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.0)
+            self._llm = UnityGatewayChatModel(profile=self.profile, temperature=0.0)
         return self._llm
 
     def _embed_fn(self):
         from gateway_embed import embed_texts
 
-        return lambda texts: embed_texts(texts, profile=self.profile or "fe-bar")
+        return lambda texts: embed_texts(texts, profile=self.profile)
 
     # --- Deterministic core with per-step tracing -------------------------------
     def _deterministic_core(self, conn: Any, claim: dict) -> dict:

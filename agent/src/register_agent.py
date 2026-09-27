@@ -3,8 +3,7 @@
 Runs as local runtime Python against the ``fe-bar`` workspace (set
 ``DATABRICKS_CONFIG_PROFILE=fe-bar``). Logs the ResponsesAgent via
 ``mlflow.pyfunc.log_model`` (Models-from-code: ``python_model="agent.py"`` plus the
-sibling modules as ``code_paths``), with pinned deps and the passthrough-auth
-resources (the reasoning endpoint + Lakebase). It registers to
+sibling modules as ``code_paths``), with pinned deps. It registers to
 ``fe-bar-ir.default.claims_adjudication_agent``, validates the isolated artifact
 with ``mlflow.models.predict(env_manager="uv")`` on a real sample claim
 (``persist=false`` — validation never writes), and only then registers and sets
@@ -20,13 +19,10 @@ import json
 import os
 
 import mlflow
-from mlflow.models.resources import DatabricksLakebase, DatabricksServingEndpoint
 from mlflow.tracking import MlflowClient
 
 # Mirror the agent constants without importing agent.py (which calls set_model).
 MODEL_NAME = "fe-bar-ir.default.claims_adjudication_agent"
-LLM_ENDPOINT = "databricks-gpt-5-2"
-LAKEBASE_INSTANCE = "fe-bar-operational-plane"
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 CODE_MODULES = [
@@ -40,7 +36,9 @@ CODE_MODULES = [
     "retrieval.py",
     "heat_risk.py",
     "db.py",
+    "workspace_client.py",
     "gateway_embed.py",
+    "gateway_chat.py",
 ]
 PIP_REQUIREMENTS = [
     "mlflow>=3.1.3",
@@ -105,16 +103,11 @@ def run(profile: str, experiment: str, validate: bool = True, register: bool = T
         "input": [{"role": "user", "content": json.dumps(claim)}],
         "custom_inputs": {"persist": False, "claim": claim},
     }
-    resources = [
-        DatabricksServingEndpoint(endpoint_name=LLM_ENDPOINT),
-        DatabricksLakebase(database_instance_name=LAKEBASE_INSTANCE),
-    ]
     with mlflow.start_run(run_name="claims-adjudication-agent") as run_ctx:
         info = mlflow.pyfunc.log_model(
             name="agent",
             python_model=os.path.join(_HERE, "agent.py"),
             code_paths=[os.path.join(_HERE, module) for module in CODE_MODULES],
-            resources=resources,
             input_example=input_example,
             pip_requirements=PIP_REQUIREMENTS,
         )

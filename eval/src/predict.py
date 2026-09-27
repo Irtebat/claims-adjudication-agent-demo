@@ -42,7 +42,9 @@ def predict_claim(claim: dict, model=None, attempts: int = 3, sleep=time.sleep) 
     request = response_request(claim)
     for attempt in range(attempts):
         try:
-            response = model.predict(request.model_dump())
+            # MLflow's pyfunc schema represents optional scalars as typed columns;
+            # explicit None values cannot be coerced to those scalar types.
+            response = model.predict(request.model_dump(exclude_none=True))
             dumped = response.model_dump() if hasattr(response, "model_dump") else response
             if isinstance(dumped, list) and len(dumped) == 1:
                 dumped = dumped[0]

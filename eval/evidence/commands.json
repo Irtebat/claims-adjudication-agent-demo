@@ -1,5 +1,5 @@
 {
-  "live": "DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py --profile fe-bar --scorer-tier exact",
+  "live": "DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py --profile fe-bar --candidate-version 1 --scorer-tier auto",
   "local_gates": [
     "uv run ruff check src tests",
     "uv run ruff format --check src tests",

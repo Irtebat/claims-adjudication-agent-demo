@@ -8,6 +8,7 @@ retrieval and duplicate detection run here at agent/app runtime, not as UDFs.
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from typing import Iterator
 
@@ -18,20 +19,20 @@ DEFAULT_DATABASE = "databricks_postgres"
 
 
 def connection_params(
-    profile: str = "fe-bar",
+    profile: str | None = "fe-bar",
     endpoint: str = DEFAULT_ENDPOINT,
     database: str = DEFAULT_DATABASE,
 ) -> dict:
     """Resolve host + fresh OAuth credential for a Lakebase endpoint via the SDK."""
-    from databricks.sdk import WorkspaceClient
+    from workspace_client import workspace_client
 
-    client = WorkspaceClient(profile=profile)
+    client = workspace_client(profile)
     endpoint_details = client.postgres.get_endpoint(name=endpoint)
     credential = client.postgres.generate_database_credential(endpoint=endpoint)
     return {
         "host": endpoint_details.status.hosts.host,
         "dbname": database,
-        "user": client.current_user.me().user_name,
+        "user": os.environ.get("LAKEBASE_DB_USER") or client.current_user.me().user_name,
         "password": credential.token,
         "sslmode": "require",
     }
@@ -39,7 +40,7 @@ def connection_params(
 
 @contextmanager
 def connect(
-    profile: str = "fe-bar",
+    profile: str | None = "fe-bar",
     endpoint: str = DEFAULT_ENDPOINT,
     database: str = DEFAULT_DATABASE,
     autocommit: bool = False,

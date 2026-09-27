@@ -2,7 +2,7 @@
   "diagnostic_judges": {
     "authority_guidelines": {
       "status": "measured",
-      "value": 0.41379310344827586
+      "value": 0.5333333333333333
     },
     "retrieval_groundedness": {
       "follow_up": "Enrich agent RETRIEVER span outputs with clause text.",
