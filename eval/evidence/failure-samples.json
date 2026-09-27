@@ -9,6 +9,12 @@
     "failed_scorers": [
       "disposition_exact_match"
     ],
+    "request_hash": "281a26f22b423e13"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
     "request_hash": "63fc516e46a9ce75"
   },
   {
@@ -28,37 +34,31 @@
     "failed_scorers": [
       "disposition_exact_match"
     ],
-    "request_hash": "281a26f22b423e13"
-  },
-  {
-    "failed_scorers": [
-      "disposition_exact_match"
-    ],
     "request_hash": "dd7a6995ac702173"
-  },
-  {
-    "failed_scorers": [
-      "disposition_exact_match"
-    ],
-    "request_hash": "fcf51b148ac72a4d"
-  },
-  {
-    "failed_scorers": [
-      "disposition_exact_match"
-    ],
-    "request_hash": "74952cc1f054c46c"
   },
   {
     "failed_scorers": [
       "verdict_exact_match",
       "disposition_exact_match"
     ],
-    "request_hash": "f008850c81024fe5"
+    "request_hash": "432c2e885287eaa3"
   },
   {
     "failed_scorers": [
       "disposition_exact_match"
     ],
-    "request_hash": "336db2804957b08d"
+    "request_hash": "cd2c79a9c5eac7e7"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "ba75eb1dd3e91f07"
+  },
+  {
+    "failed_scorers": [
+      "disposition_exact_match"
+    ],
+    "request_hash": "fcf51b148ac72a4d"
   }
 ]
