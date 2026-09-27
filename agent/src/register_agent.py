@@ -40,7 +40,9 @@ CODE_MODULES = [
     "retrieval.py",
     "heat_risk.py",
     "db.py",
+    "workspace_client.py",
     "gateway_embed.py",
+    "gateway_chat.py",
 ]
 PIP_REQUIREMENTS = [
     "mlflow>=3.1.3",

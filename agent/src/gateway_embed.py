@@ -67,10 +67,10 @@ def _extract_embeddings(payload: dict) -> list[list[float]]:
     raise ValueError(f"Unrecognized embeddings response shape: {sorted(payload)[:5]}")
 
 
-def _default_token_provider(profile: str) -> Callable[[], tuple[str, str]]:
-    from databricks.sdk import WorkspaceClient
+def _default_token_provider(profile: str | None) -> Callable[[], tuple[str, str]]:
+    from workspace_client import workspace_client
 
-    client = WorkspaceClient(profile=profile)
+    client = workspace_client(profile)
 
     def provider() -> tuple[str, str]:
         headers = client.config.authenticate()  # refreshes the OAuth token as needed
@@ -92,7 +92,7 @@ def _default_post(url: str, authorization: str, body: dict) -> dict:
 
 def embed_texts(
     texts: list[str],
-    profile: str = "fe-bar",
+    profile: str | None = "fe-bar",
     batch_size: int = DEFAULT_BATCH,
     max_retries: int = 6,
     normalize: bool = True,
