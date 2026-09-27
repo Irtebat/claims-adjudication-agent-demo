@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
 import json
+import time
+import urllib.error
 import urllib.request
 from typing import Any, Callable, Sequence
 
@@ -13,6 +16,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
+from gateway_embed import backoff_delay, parse_retry_after
 from workspace_client import workspace_client
 
 MODEL_SERVICE = "system.ai.gpt-5-2"
@@ -37,6 +41,8 @@ class UnityGatewayChatModel(BaseChatModel):
     model_service: str = MODEL_SERVICE
     temperature: float = 0.0
     post_fn: Callable[[str, str, dict], dict] = _default_post
+    max_retries: int = 6
+    sleep_fn: Callable[[float], None] = time.sleep
 
     @property
     def _llm_type(self) -> str:
@@ -70,7 +76,26 @@ class UnityGatewayChatModel(BaseChatModel):
         if stop:
             body["stop"] = stop
         body.update(kwargs)
-        payload = self.post_fn(client.config.host.rstrip("/") + GATEWAY_PATH, authorization, body)
+        url = client.config.host.rstrip("/") + GATEWAY_PATH
+        for attempt in range(self.max_retries + 1):
+            try:
+                payload = self.post_fn(url, authorization, body)
+                break
+            except urllib.error.HTTPError as err:  # pragma: no cover - network path
+                if err.code in (429, 503) and attempt < self.max_retries:
+                    retry_after = parse_retry_after(err.headers.get("Retry-After"))
+                    self.sleep_fn(backoff_delay(attempt, retry_after))
+                    continue
+                raise
+            except (
+                http.client.IncompleteRead,
+                http.client.RemoteDisconnected,
+                urllib.error.URLError,
+            ):
+                if attempt < self.max_retries:
+                    self.sleep_fn(backoff_delay(attempt, None))
+                    continue
+                raise
         choice = payload["choices"][0]
         message = choice["message"]
         raw_tool_calls = message.get("tool_calls") or []
