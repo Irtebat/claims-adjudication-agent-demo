@@ -20,6 +20,25 @@ resources:
           max_retries: 0
       queue:
         enabled: true
+    deploy_claims_agent:
+      name: fe-bar-deploy-claims-adjudication-agent
+      max_concurrent_runs: 1
+      environments:
+        - environment_key: agent_deploy
+          spec:
+            client: "4"
+            dependencies:
+              - databricks-agents>=1.1.0
+              - databricks-sdk>=0.81.0
+      tasks:
+        - task_key: deploy
+          environment_key: agent_deploy
+          spark_python_task:
+            python_file: ./src/deploy_agent.py
+          timeout_seconds: 3600
+          max_retries: 0
+      queue:
+        enabled: true
 
 targets:
   prod:
