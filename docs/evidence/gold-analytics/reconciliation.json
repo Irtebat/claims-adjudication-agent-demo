@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-09-27T22:06:00Z",
+  "query": "Compare fact rows with distinct current adjudications and approved dollars across source, fact, and quality KPI aggregate.",
+  "result": {
+    "fact_rows": 5009,
+    "source_distinct_adjudications": 5009,
+    "fact_approved_amount": 38644136.42,
+    "source_approved_amount": 38644136.42,
+    "quality_kpi_approved_amount": 38644136.42
+  },
+  "separate_value_categories": {
+    "in_spec_denial_amount": 19671963.00,
+    "warranty_exclusion_denial_amount": 15705444.00,
+    "duplicate_blocked_amount": 7838598.00,
+    "over_claim_reduction_amount": 6809305.58
+  },
+  "unweighted_average_cycle_time_days": 2.0
+}

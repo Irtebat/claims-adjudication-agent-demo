@@ -1,0 +1,34 @@
+Gold analytics gates, 2026-09-28 Asia/Kolkata
+
+PASS: uv run --with pytest --with pyyaml pytest pipelines/tests -q
+Result: 16 test functions passed in 0.05s.
+
+PASS: uv run --with ruff ruff check pipelines
+Result: All checks passed.
+
+PASS: uv run --with ruff ruff format --check pipelines
+Result: 23 files already formatted.
+
+PASS: uv run --with mypy --with types-PyYAML mypy --config-file pipelines/pyproject.toml pipelines/evidence.py pipelines/src/checks.py
+Result: Success; no issues in 2 touched source files.
+
+PASS: python3 -m compileall -q pipelines
+Result: no output.
+
+PASS: cd pipelines && databricks bundle validate --strict --target prod --profile fe-bar
+Result: Validation OK.
+
+PASS: git diff --check
+Result: no output.
+
+PASS: git diff main -- agent/
+Result: empty.
+
+PASS: git diff main -- <all pre-existing pipelines/src/transformations files>
+Result: empty. The only transformation added is gold_analytics.sql.
+
+PASS: databricks bundle run refresh_medallion --target prod --profile fe-bar
+Result: run 216119910528011 terminated SUCCESS; normal update, no full refresh.
+
+PASS: databricks bundle run deploy_metric_views --target prod --profile fe-bar
+Result: run 737951126524956 terminated SUCCESS.
