@@ -1,0 +1,216 @@
+{
+  "version": 2,
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "fe-bar-ir.gold.gold_agent_human_alignment",
+        "column_configs": [
+          {
+            "column_name": "override_rate",
+            "description": [
+              "Human override rate for the agent-adjudicated subset only."
+            ],
+            "synonyms": [
+              "human override",
+              "override percentage"
+            ]
+          },
+          {
+            "column_name": "verdict_agreement_rate",
+            "description": [
+              "Agreement rate for the agent-adjudicated subset only."
+            ],
+            "synonyms": [
+              "human agreement",
+              "agent agreement"
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.gold_failure_mode_analytics",
+        "column_configs": [
+          {
+            "column_name": "failure_mode_code",
+            "description": [
+              "Standard defect or failure-mode code."
+            ],
+            "synonyms": [
+              "defect mode",
+              "failure mode"
+            ]
+          },
+          {
+            "column_name": "heat_no",
+            "description": [
+              "Steel heat identifier."
+            ],
+            "synonyms": [
+              "heat",
+              "heat number"
+            ]
+          },
+          {
+            "column_name": "line",
+            "description": [
+              "Manufacturing line associated with the affected material."
+            ],
+            "synonyms": [
+              "production line",
+              "mill line"
+            ]
+          },
+          {
+            "column_name": "quarantine_candidate",
+            "description": [
+              "True when the heat should be considered for quarantine review."
+            ],
+            "synonyms": [
+              "metallurgy flag",
+              "quarantine flag"
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.gold_fraud_cluster_analytics",
+        "column_configs": [
+          {
+            "column_name": "risky_claimed_amount",
+            "description": [
+              "Claimed value associated with risky claims in the cluster."
+            ],
+            "synonyms": [
+              "fraud exposure",
+              "risky dollars"
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.gold_supplier_recovery_analytics",
+        "column_configs": [
+          {
+            "column_name": "supplier_attributable_amount",
+            "description": [
+              "Value attributable to a supplier; this is an opportunity measure, not completed recovery workflow cash."
+            ],
+            "synonyms": [
+              "supplier recovery opportunity",
+              "supplier attributable dollars"
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.quality_claims_metrics",
+        "column_configs": [
+          {
+            "column_name": "Approved Amount",
+            "description": [
+              "Governed approved settlement value."
+            ],
+            "synonyms": [
+              "settlement value",
+              "approved dollars"
+            ]
+          },
+          {
+            "column_name": "Customer",
+            "description": [
+              "Customer associated with the claim."
+            ],
+            "synonyms": [
+              "account",
+              "buyer"
+            ]
+          },
+          {
+            "column_name": "Denial Rate",
+            "description": [
+              "Governed share of claim outcomes denied."
+            ],
+            "synonyms": [
+              "reject rate",
+              "denied percentage"
+            ]
+          },
+          {
+            "column_name": "Disposition",
+            "description": [
+              "Final business disposition, including investigation pending status."
+            ],
+            "synonyms": [
+              "outcome",
+              "resolution"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "config": {
+    "sample_questions": [
+      {
+        "id": "10000000000000000000000000000001",
+        "question": [
+          "What is the denial rate by customer?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000002",
+        "question": [
+          "What are the top defect modes by line, grade, and coating?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000003",
+        "question": [
+          "What approved and warranty-related value is associated with each heat?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000004",
+        "question": [
+          "Which claims or heats are flagged for metallurgy review or investigation?"
+        ]
+      },
+      {
+        "id": "10000000000000000000000000000005",
+        "question": [
+          "What supplier-attributable value is associated with each supplier?"
+        ]
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "id": "20000000000000000000000000000001",
+        "content": [
+          "Use quality_claims_metrics for governed claim KPIs and MEASURE() for its measures. Never add In Spec Denial Amount, Warranty Exclusion Denial Amount, Duplicate Blocked Amount, and Over Claim Reduction Amount together; show them separately because they may overlap. Treat supplier_attributable_amount as opportunity only. Settlement, investigation, and recovery workflow backlogs are pending downstream services and must not be fabricated. Label gold_agent_human_alignment answers as the agent-adjudicated subset. Heat-level approved value comes from gold_failure_mode_analytics. No heat-level warranty-exclusion measure exists; state that limitation instead of inventing one."
+        ]
+      }
+    ],
+    "example_question_sqls": [
+      {
+        "id": "30000000000000000000000000000001",
+        "question": [
+          "What is the denial rate by customer?"
+        ],
+        "sql": [
+          "SELECT `Customer`, MEASURE(`Denied Claims`) / NULLIF(MEASURE(`Claim Count`), 0) AS denial_rate FROM `fe-bar-ir`.gold.quality_claims_metrics GROUP BY `Customer` ORDER BY denial_rate DESC"
+        ]
+      },
+      {
+        "id": "30000000000000000000000000000002",
+        "question": [
+          "What supplier-attributable value is associated with each supplier?"
+        ],
+        "sql": [
+          "SELECT COALESCE(NULLIF(supplier, ''), 'Unassigned') AS supplier, SUM(supplier_attributable_amount) AS supplier_attributable_amount FROM `fe-bar-ir`.gold.gold_supplier_recovery_analytics GROUP BY 1 ORDER BY supplier_attributable_amount DESC"
+        ]
+      }
+    ]
+  }
+}
