@@ -85,6 +85,79 @@ never sets `@prod`; only `eval/src/promote.py` owns that alias. It
 does **not** create a serving endpoint. Traces land in a named, non-Git MLflow
 experiment.
 
+## Release and deployment
+
+Use the `fe-bar` workspace profile for every command. The release order is fixed:
+
+1. `agent/src/register_agent.py` logs and isolated-validates a new model version,
+   registers it, and assigns `@candidate`.
+2. `eval/src/evaluate.py` evaluates that exact candidate version and records the
+   release-gate metrics in MLflow.
+3. `eval/src/promote.py --promote` applies the gate and is the only script that
+   assigns `@prod`.
+4. `agent/src/deploy_agent.py` resolves `@prod` and creates or updates the Model
+   Serving endpoint. The `deploy_claims_agent` job in `agent/databricks.yml` runs
+   the same script.
+
+Before the first deployment, a workspace administrator must complete these
+prerequisites for the application service principal:
+
+1. Create the application service principal and generate a workspace-level OAuth
+   secret for it.
+2. Grant only the `workspace-access` entitlement. This lets the service principal
+   call the workspace API to resolve the Lakebase endpoint and mint a database
+   credential; it does not need workspace admin, cluster creation, or SQL access.
+3. Create the `claims-agent` secret scope and write `app-sp-client-id`,
+   `app-sp-client-secret`, and `lakebase-db-user`. The database user is the
+   Lakebase OAuth role for the application service principal.
+4. Grant the service principal `EXECUTE` on
+   `system.ai.databricks-gpt-5-2` and `system.ai.gte_large_en_v1_5`.
+5. Create the Lakebase OAuth role and grant the table-level read/write permissions
+   required by the agent.
+
+Run the lifecycle and deployment as follows, replacing `N` with the newly
+registered version:
+
+```bash
+cd agent
+DATABRICKS_CONFIG_PROFILE=fe-bar uv run python src/register_agent.py --profile fe-bar
+
+cd ../eval
+DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar \
+  MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py \
+  --profile fe-bar --experiment /Shared/claims-adjudication-offline-evaluation \
+  --candidate-version N
+uv run python src/promote.py --profile fe-bar --candidate-version N --promote
+
+cd ../agent
+databricks bundle validate --strict -t prod --profile fe-bar
+databricks bundle deploy -t prod --profile fe-bar
+databricks bundle run deploy_claims_agent -t prod --profile fe-bar
+```
+
+The deployment is idempotent. It serves the `@prod` version at
+`agents_fe-bar-ir-default-claims_adjudication_agent` using a Small CPU workload
+with scale-to-zero enabled. Wait for both `state.ready == READY` and
+`state.config_update == NOT_UPDATING` before invoking it.
+
+Send a claim through the deployed endpoint, with persistence explicitly enabled:
+
+```json
+{
+  "input": [{"role": "user", "content": "<claim JSON>"}],
+  "custom_inputs": {"persist": true, "claim": {"claim_id": "..."}}
+}
+```
+
+POST this body to
+`/serving-endpoints/agents_fe-bar-ir-default-claims_adjudication_agent/invocations`
+using workspace authentication. Verify `custom_outputs.llm_used`,
+`custom_outputs.write_result.persisted`, and
+`custom_outputs.write_result.decision_record_inserted`, then query
+`public.adjudications` joined to `public.adjudication_decision_records` by the
+returned `adjudication_id`. A successful response proves the request traversed
+Lakebase, governed retrieval embedding, governed reasoning, and the atomic write.
+
 ## Components
 
 | File | Role |

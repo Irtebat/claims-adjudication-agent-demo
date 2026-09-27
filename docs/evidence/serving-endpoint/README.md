@@ -1,7 +1,6 @@
 # Serving endpoint deployment evidence
 
-Status: **stopped before deployment at the model-service EXECUTE grant**. No serving
-endpoint was created.
+Status: **deployed and smoke-tested successfully**.
 
 ## Completed code changes
 
@@ -43,9 +42,8 @@ endpoint was created.
 - The accidental duplicate `98283b7d-68cb-4978-8821-eb73c93d85ce`
   (`claims-adjudication-agent-serving`) was removed. The canonical SP above is the
   only remaining claims-adjudication application SP in the workspace.
-- The scope keys still require a fresh canonical OAuth secret because the account
-  credential API resolves against the workspace host under `--profile fe-bar` and
-  returns HTTP 404.
+- The service principal has only the `workspace-access` workspace entitlement,
+  required to resolve the Lakebase endpoint and mint its database credential.
 
 ## Lakebase role and grants
 
@@ -63,22 +61,28 @@ sequences for either writable table, so no sequence grant was applied.
 
 ## Governed service grants
 
-The canonical SP has direct `USE CATALOG` on `system` and `USE SCHEMA` on
-`system.ai`; the duplicate SP's corresponding direct grants were removed. The UC
-Grants API reports `MODEL is not enabled` for both governed services, while SQL
-`GRANT EXECUTE ON FUNCTION` reports that neither service is a grantable routine or
-model. The exact UI grants still required are:
+The canonical SP has direct `USE CATALOG` on `system`, `USE SCHEMA` on
+`system.ai`, and the user completed the required governed-function grants:
 
-- `EXECUTE` on `system.ai.gpt-5-2` to `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`
-- `EXECUTE` on `system.ai.gte-large-en` to `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`
+- `EXECUTE` on `system.ai.databricks-gpt-5-2`
+- `EXECUTE` on `system.ai.gte_large_en_v1_5`
 
 ## Deploy and smoke test
 
-The idempotent deployment code and DAB job are committed, configured for endpoint
-`agents_fe-bar-ir-default-claims_adjudication_agent`, version 1, Small workload,
-scale-to-zero, and the three `claims-agent` secret references. Deployment and the
-persistent smoke test were not run because the required governed-service EXECUTE
-grant is UI-only. No smoke-test transaction was written.
+The idempotent DAB job deployed endpoint
+`agents_fe-bar-ir-default-claims_adjudication_agent`, version 1, with a Small
+workload and scale-to-zero. Its final state was `READY`, `NOT_UPDATING`, and
+`DEPLOYMENT_READY`.
+
+The live `persist=true` smoke request returned HTTP 200 and adjudication
+`ADJ-f3f80f6d541f69984498`. It proved all four runtime legs: Lakebase reads,
+governed GTE hybrid retrieval, governed GPT-5.2 structured reasoning, and an atomic
+write to both adjudication tables. The joined database verification returned one
+new record with `record_version=1`.
+
+- `smoke-request.json`: representative deployed-endpoint request
+- `smoke-response.json`: redacted response and write result
+- `smoke-verification.json`: endpoint, entitlement, four-leg, and database proof
 
 ## Minor review notes (not addressed)
 
