@@ -1,23 +1,25 @@
 # Post-deploy notes
 
-## Blocking decision required
+## Residual UI grant blocker
 
-Lakebase rejected the prescribed role creation before making a role:
+Lakebase role creation and least-privilege SQL grants are complete. The canonical
+SP also has `USE CATALOG` on `system` and `USE SCHEMA` on `system.ai`.
 
-```text
-Field role_id must match pattern ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$,
-got '47643eb1-dbd5-40a6-a51d-5da6b8e2da7a'.
-```
+The remaining governed-service grants must be applied in the UI because the UC
+Grants API returns `MODEL is not enabled` and SQL does not expose the services as
+grantable routines/models:
 
-The dedicated SP app/client ID is a UUID beginning with a digit. Approval is needed
-to use a separate Lakebase resource ID (for example `claims-agent-sp`) while keeping
-`spec.postgres_role` equal to the exact SP client ID. After that decision, the
-remaining work is:
+- grant `EXECUTE` on `system.ai.gpt-5-2` to
+  `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`
+- grant `EXECUTE` on `system.ai.gte-large-en` to
+  `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`
 
-1. Create the Lakebase role and apply the enumerated least-privilege SQL grants.
-2. Grant Unity Gateway `USE CATALOG`, `USE SCHEMA`, and model-service `EXECUTE`.
-3. Add and validate `deploy_agent.py` plus the parameterized DAB job.
-4. Deploy version 1 with Small workload and scale-to-zero.
-5. Run the persistent end-to-end smoke test and capture the decision record.
+The `claims-agent` scope key names are `app-sp-client-id`,
+`app-sp-client-secret`, and `lakebase-db-user`. Before deployment, create a fresh
+OAuth secret for the canonical SP and overwrite all three keys (ID/user keys with
+the canonical UUID, secret key with the fresh secret). The account credential CLI
+currently targets the workspace host with `--profile fe-bar` and returns HTTP 404.
 
-No UI-only or Consumer Access entitlement blocker has been encountered yet.
+After those two external prerequisites, deploy with the committed DAB job and run
+one `persist=true` adjudication through the endpoint, retrying once for cold start;
+then verify the corresponding `public.adjudication_decision_records` row.

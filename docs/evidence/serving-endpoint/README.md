@@ -1,7 +1,7 @@
 # Serving endpoint deployment evidence
 
-Status: **stopped during Phase 3 Lakebase role creation**. No serving endpoint was
-created.
+Status: **stopped before deployment at the model-service EXECUTE grant**. No serving
+endpoint was created.
 
 ## Completed code changes
 
@@ -40,14 +40,42 @@ created.
 - Secret scope: `claims-agent`
 - Keys: `app-sp-client-id`, `app-sp-client-secret`, `lakebase-db-user`
 - No secret values are recorded here.
+- The accidental duplicate `98283b7d-68cb-4978-8821-eb73c93d85ce`
+  (`claims-adjudication-agent-serving`) was removed. The canonical SP above is the
+  only remaining claims-adjudication application SP in the workspace.
+- The scope keys still require a fresh canonical OAuth secret because the account
+  credential API resolves against the workspace host under `--profile fe-bar` and
+  returns HTTP 404.
 
 ## Lakebase role and grants
 
-Not applied. The requested role creation failed validation because the client ID
-starts with a digit and cannot be used as the Lakebase API `role-id`. See
-`POST-DEPLOY-NOTES.md`.
+Created resource ID `claims-agent-sp`, with `spec.postgres_role` equal to canonical
+SP UUID `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a` and OAuth auth. It has no superuser,
+create-role, create-database, or bypass-RLS attributes.
+
+Granted `CONNECT` on `databricks_postgres`; `USAGE` on `public` and `reference`;
+`SELECT` on `public.claims`, `spec_params`, `warranty_terms`, `spec_clauses`,
+`warranty_clauses`, and `prior_claims`; `SELECT` on `reference.heats_coils`,
+`mill_test_certs`, and `customer_heat_risk`; `SELECT, INSERT, UPDATE` on
+`public.adjudications`; and `SELECT, INSERT` on
+`public.adjudication_decision_records`. `pg_get_serial_sequence` returned no
+sequences for either writable table, so no sequence grant was applied.
+
+## Governed service grants
+
+The canonical SP has direct `USE CATALOG` on `system` and `USE SCHEMA` on
+`system.ai`; the duplicate SP's corresponding direct grants were removed. The UC
+Grants API reports `MODEL is not enabled` for both governed services, while SQL
+`GRANT EXECUTE ON FUNCTION` reports that neither service is a grantable routine or
+model. The exact UI grants still required are:
+
+- `EXECUTE` on `system.ai.gpt-5-2` to `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`
+- `EXECUTE` on `system.ai.gte-large-en` to `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`
 
 ## Deploy and smoke test
 
-Not run. There is no endpoint name or URL yet, and no smoke-test transaction was
-written.
+The idempotent deployment code and DAB job are committed, configured for endpoint
+`agents_fe-bar-ir-default-claims_adjudication_agent`, version 1, Small workload,
+scale-to-zero, and the three `claims-agent` secret references. Deployment and the
+persistent smoke test were not run because the required governed-service EXECUTE
+grant is UI-only. No smoke-test transaction was written.
