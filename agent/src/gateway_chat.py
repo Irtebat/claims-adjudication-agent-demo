@@ -57,6 +57,7 @@ class UnityGatewayChatModel(BaseChatModel):
         self,
         messages: list[BaseMessage],
         stop: list[str] | None = None,
+        run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         client = workspace_client(self.profile)
