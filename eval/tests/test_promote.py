@@ -17,6 +17,7 @@ from promote import (
     MODEL_NAME,
     MONEY_SAFETY_METRICS,
     QUALITY_METRICS,
+    evaluate_bootstrap_gate,
     evaluate_gate,
     promote_if_beats_prod,
 )
@@ -59,6 +60,12 @@ def _search_runs_for(version_metrics: dict[str, dict]):
 def _client(prod_version: str) -> MagicMock:
     client = MagicMock()
     client.get_model_version_by_alias.return_value = SimpleNamespace(version=prod_version)
+    return client
+
+
+def _client_without_prod() -> MagicMock:
+    client = MagicMock()
+    client.get_model_version_by_alias.side_effect = RuntimeError("alias prod does not exist")
     return client
 
 
@@ -154,6 +161,62 @@ def test_losing_candidate_never_moves_alias_even_without_dry_run():
     assert decision["promoted"] is False
     assert "did not win" in decision["reason"]
     client.set_registered_model_alias.assert_not_called()
+
+
+def test_bootstrap_pass_sets_prod():
+    client = _client_without_prod()
+    decision = promote_if_beats_prod(
+        "4",
+        "exp-1",
+        client=client,
+        search_runs=_search_runs_for({"4": CANDIDATE_WINS}),
+        dry_run=False,
+    )
+    assert decision["gate"]["wins"] is True
+    assert decision["promoted"] is True
+    client.set_registered_model_alias.assert_called_once_with(MODEL_NAME, "prod", "4")
+
+
+def test_bootstrap_hard_gate_failure_refuses():
+    client = _client_without_prod()
+    with pytest.raises(RuntimeError, match="bootstrap refused"):
+        promote_if_beats_prod(
+            "4",
+            "exp-1",
+            client=client,
+            search_runs=_search_runs_for({"4": CANDIDATE_MONEY_FAIL}),
+            dry_run=False,
+        )
+    client.set_registered_model_alias.assert_not_called()
+
+
+def test_bootstrap_dry_run_never_sets_prod():
+    client = _client_without_prod()
+    decision = promote_if_beats_prod(
+        "4",
+        "exp-1",
+        client=client,
+        search_runs=_search_runs_for({"4": CANDIDATE_WINS}),
+        dry_run=True,
+    )
+    assert decision["gate"]["wins"] is True
+    assert decision["promoted"] is False
+    client.set_registered_model_alias.assert_not_called()
+
+
+def test_bootstrap_gate_requires_all_five_money_invariants_at_one():
+    gate = evaluate_bootstrap_gate({**CANDIDATE_WINS, "invariant_clean": 1.0})
+    assert gate["wins"] is True
+    assert set(gate["money_safety"]) == {
+        "no_payable_duplicate",
+        "amount_matches_authority",
+        "amount_matches_gold",
+        "verdict_matches_eligibility",
+        "invariant_clean",
+    }
+    assert (
+        evaluate_bootstrap_gate({**CANDIDATE_WINS, "invariant_clean": 1 - EPS / 2})["wins"] is False
+    )
 
 
 def test_candidate_already_prod_is_a_noop():

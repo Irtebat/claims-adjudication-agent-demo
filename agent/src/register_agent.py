@@ -8,7 +8,7 @@ resources (the reasoning endpoint + Lakebase). It registers to
 ``fe-bar-ir.default.claims_adjudication_agent``, validates the isolated artifact
 with ``mlflow.models.predict(env_manager="uv")`` on a real sample claim
 (``persist=false`` — validation never writes), and only then registers and sets
-the ``@prod`` alias. A failed validation therefore never creates another partial
+the ``@candidate`` alias. A failed validation therefore never creates another partial
 UC model version. It
 does NOT create a serving endpoint (that is a later workstream).
 """
@@ -84,14 +84,14 @@ def _sample_claim(profile: str) -> dict:
 
 
 def register_validated(model_uri: str) -> dict:
-    """Register an already isolated-validated artifact and promote it to ``@prod``."""
+    """Register an already isolated-validated artifact and stamp ``@candidate``."""
     mlflow.set_tracking_uri("databricks")
     mlflow.set_registry_uri("databricks-uc")
     registered = mlflow.register_model(model_uri, MODEL_NAME)
     MlflowClient(registry_uri="databricks-uc").set_registered_model_alias(
-        MODEL_NAME, "prod", registered.version
+        MODEL_NAME, "candidate", registered.version
     )
-    return {"model_uri": model_uri, "model_version": registered.version, "alias": "prod"}
+    return {"model_uri": model_uri, "model_version": registered.version, "alias": "candidate"}
 
 
 def run(profile: str, experiment: str, validate: bool = True, register: bool = True) -> dict:
