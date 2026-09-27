@@ -7,14 +7,20 @@ import json
 from databricks import agents
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.errors import NotFound
+from mlflow.tracking import MlflowClient
 
 MODEL_NAME = "fe-bar-ir.default.claims_adjudication_agent"
-MODEL_VERSION = 1
+MODEL_ALIAS = "prod"
 ENDPOINT_NAME = "agents_fe-bar-ir-default-claims_adjudication_agent"
 
 
 def main() -> None:
     workspace = WorkspaceClient()
+    model_version = int(
+        MlflowClient(registry_uri="databricks-uc")
+        .get_model_version_by_alias(MODEL_NAME, MODEL_ALIAS)
+        .version
+    )
     try:
         workspace.serving_endpoints.get(ENDPOINT_NAME)
         action = "redeploy"
@@ -23,7 +29,7 @@ def main() -> None:
 
     deployment = agents.deploy(
         MODEL_NAME,
-        MODEL_VERSION,
+        model_version,
         endpoint_name=ENDPOINT_NAME,
         scale_to_zero=True,
         workload_size="Small",
@@ -41,7 +47,7 @@ def main() -> None:
                 "endpoint_name": ENDPOINT_NAME,
                 "endpoint_url": f"{workspace.config.host}/ml/endpoints/{ENDPOINT_NAME}",
                 "model_name": MODEL_NAME,
-                "model_version": MODEL_VERSION,
+                "model_version": model_version,
                 "deployment": str(deployment),
             },
             indent=2,
