@@ -5,12 +5,13 @@
 For each ``claim.submitted`` event the worker checks Lakebase for an existing
 *agent-produced* adjudication on that claim id; if none exists it invokes the
 governed serving endpoint with ``persist=true`` so the endpoint's writer performs
-the atomic Lakebase write (adjudication + decision record + ``claim.adjudicated``
-outbox row) behind the deterministic authorities. Kafka offsets are committed
-manually only after a message is fully processed, so a crash re-delivers rather
-than drops. Re-delivery is safe twice over: the pre-check skips already-adjudicated
-claims, and the endpoint's writer is idempotent on a stable ``adjudication_id`` +
-outbox ``event_id``.
+the atomic Lakebase write (adjudication + decision record) behind the deterministic
+authorities. The recommendation write emits NO ``claim.adjudicated`` outbox row —
+that event is produced only when an adjuster finalizes the claim in the App, so the
+claim stays ``RECOMMENDED`` until then. Kafka offsets are committed manually only
+after a message is fully processed, so a crash re-delivers rather than drops.
+Re-delivery is safe twice over: the pre-check skips already-adjudicated claims, and
+the endpoint's writer is idempotent on a stable ``adjudication_id``.
 
 Default: scheduled serverless, bounded drain (``max_messages``) then exit. See the
 CONTINUOUS MODE toggle in the resource yml for a live-demo long-running consumer.

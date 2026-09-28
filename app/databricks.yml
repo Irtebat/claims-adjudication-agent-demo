@@ -1,0 +1,76 @@
+bundle:
+  name: steel-claims-cockpit
+
+variables:
+  sql_warehouse_id:
+    description: SQL Warehouse ID
+  genie_space_id:
+    description: Default Genie Space ID
+  genie_space_name:
+    description: Genie Space display name
+  postgres_branch:
+    description: Full Lakebase Postgres branch resource name. Obtain by running `databricks postgres list-branches {project-name}`, select the desired item from the output array and use its .name value. Requires the project resource name.
+  postgres_database:
+    description: Full Lakebase Postgres database resource name. Obtain by running `databricks postgres list-databases {branch-name}`, select the desired item from the output array and use its .name value. Requires the branch resource name.
+  postgres_project:
+    description: Full Lakebase Postgres project resource name. Obtain by running `databricks postgres list-projects`, select the desired item from the output array and use its .name value.
+  business_genie_space_id:
+    description: Genie Space ID for the business-dashboard chat (reused gold-analytics space)
+  business_genie_space_name:
+    description: Business Genie Space display name
+
+resources:
+  apps:
+    app:
+      name: 'steel-claims-cockpit'
+      description: 'Steel warranty claims adjudication cockpit (adjuster + business user)'
+      source_code_path: ./
+
+      # Start the app automatically on deploy.
+      lifecycle:
+        started: true
+      # OBO scopes for the GOVERNED surfaces only: Genie (cockpit copilot + business
+      # chat) and the SQL warehouse (business dashboard). Lakebase uses the App SP,
+      # so no postgres user scope is needed.
+      user_api_scopes:
+        - dashboards.genie
+        - sql
+
+      # The resources which this app has access to.
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+        - name: genie-space
+          genie_space:
+            name: ${var.genie_space_name}
+            space_id: ${var.genie_space_id}
+            permission: CAN_RUN
+        # Second Genie space: the reused Wave 10 gold-analytics space for business chat.
+        - name: genie-space-business
+          genie_space:
+            name: ${var.business_genie_space_name}
+            space_id: ${var.business_genie_space_id}
+            permission: CAN_RUN
+        - name: postgres
+          postgres:
+            branch: ${var.postgres_branch}
+            database: ${var.postgres_database}
+            permission: CAN_CONNECT_AND_CREATE
+
+targets:
+  default:
+    default: true
+    workspace:
+      host: https://fe-sandbox-fe-bar-ir.cloud.databricks.com
+
+    variables:
+      sql_warehouse_id: 38e458a09de4a055
+      genie_space_id: 01f1bb5b9d081378b00a283760825c64
+      genie_space_name: Steel Claims Operational Cockpit
+      postgres_branch: production
+      postgres_database: databricks_postgres
+      postgres_project: fe-bar-operational-plane
+      business_genie_space_id: 01f1bac20bf6119f84fa99c7ba438ba4
+      business_genie_space_name: Steel Quality Claims Analytics

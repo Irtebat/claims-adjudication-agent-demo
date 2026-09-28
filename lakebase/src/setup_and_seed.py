@@ -115,7 +115,12 @@ ALTER TABLE adjudications
   ADD COLUMN IF NOT EXISTS precedent jsonb,
   ADD COLUMN IF NOT EXISTS idempotency_key text,
   ADD COLUMN IF NOT EXISTS decision_record_version integer,
-  ADD COLUMN IF NOT EXISTS recommended_at timestamptz DEFAULT now();
+  ADD COLUMN IF NOT EXISTS recommended_at timestamptz DEFAULT now(),
+  -- Human-finalization metadata (Wave 7). Populated only by the App's finalize
+  -- transaction; NULL on an agent recommendation. Captured by native Lakebase CDF,
+  -- so adding them triggers a one-time re-snapshot that propagates to silver/gold.
+  ADD COLUMN IF NOT EXISTS decided_by text,
+  ADD COLUMN IF NOT EXISTS override_reason text;
 
 CREATE TABLE IF NOT EXISTS adjudication_decision_records (
   adjudication_id text NOT NULL, claim_id text NOT NULL,
@@ -135,9 +140,17 @@ CREATE TABLE IF NOT EXISTS adjudication_decision_records (
   authorities_source_sha256 text NOT NULL, agent_model_name text,
   agent_model_version text, reasoning_endpoint text, prompt_version text NOT NULL,
   schema_version text NOT NULL, mlflow_trace_id text,
+  decided_by text, override_reason text,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (adjudication_id, record_version)
 );
+-- Idempotent evolution for tables created before the human-finalization columns
+-- existed. Each new record_version written by the App's finalize transaction carries
+-- the human-final decision + decided_by + override_reason while PRESERVING the
+-- deterministic baseline (deterministic_verdict/disposition/settlement) of v1.
+ALTER TABLE adjudication_decision_records
+  ADD COLUMN IF NOT EXISTS decided_by text,
+  ADD COLUMN IF NOT EXISTS override_reason text;
 ALTER TABLE adjudication_decision_records REPLICA IDENTITY FULL;
 REVOKE UPDATE, DELETE, TRUNCATE ON adjudication_decision_records FROM PUBLIC;
 """
