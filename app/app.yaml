@@ -13,3 +13,9 @@ env:
   # allowlist; until then the app shows an open-in-Databricks fallback.
   - name: DATABRICKS_DASHBOARD_ID
     value: '01f1bac220111001a171872b5185e8e6'
+  # Per-user role allowlist OVERRIDE (see server/identity.ts). Same user in BOTH so a
+  # single demo account can drive the adjuster and business-leader personas.
+  - name: ADJUSTER_USERS
+    value: 'irtebat.shaukat@databricks.com'
+  - name: BUSINESS_USERS
+    value: 'irtebat.shaukat@databricks.com'

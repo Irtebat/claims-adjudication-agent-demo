@@ -132,7 +132,9 @@ export function cockpitContextSql(coilId: string, customerId: string): Sql {
              (SELECT to_jsonb(h) FROM reference.heats_coils h WHERE h.coil_id = $1) AS heats_coils,
              (SELECT to_jsonb(m) FROM reference.mill_test_certs m
                 JOIN reference.heats_coils h ON h.heat_no = m.heat_no
-               WHERE h.coil_id = $1) AS mill_test_cert,
+               WHERE h.coil_id = $1
+               ORDER BY m.cert_date DESC NULLS LAST, m.cert_id DESC
+               LIMIT 1) AS mill_test_cert,
              (SELECT to_jsonb(cu) FROM reference.customers cu WHERE cu.customer_id = $2) AS customer,
              (SELECT to_jsonb(r) FROM reference.customer_heat_risk r
                WHERE r.customer_id = $2
