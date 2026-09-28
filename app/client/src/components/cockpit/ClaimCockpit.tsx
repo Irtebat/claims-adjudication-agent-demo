@@ -255,7 +255,10 @@ export function ClaimCockpit({
     <Dialog open={Boolean(claimId)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton
-        className="flex h-[calc(100vh-3rem)] w-[calc(100vw-3rem)] max-w-[1720px] flex-col gap-0 overflow-hidden rounded-xl p-0"
+        /* Near-full-screen: ~24px inset all round, up to a 1720px cap. The explicit
+           sm:max-w override is required — AppKit's DialogContent ships sm:max-w-lg, which
+           (as a separate responsive key) would otherwise cap the modal at 512px on desktop. */
+        className="flex h-[calc(100vh-3rem)] w-[calc(100vw-3rem)] max-w-[1720px] flex-col gap-0 overflow-hidden rounded-xl border-border p-0 sm:max-w-[1720px]"
       >
         <DialogHeader className="shrink-0 space-y-0 border-b border-border px-5 py-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pr-8">

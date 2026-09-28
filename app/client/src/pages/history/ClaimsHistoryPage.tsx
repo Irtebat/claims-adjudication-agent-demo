@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@databricks/appkit-ui/react';
-import { History, RotateCw, Search } from 'lucide-react';
+import { CornerDownLeft, History, RotateCw, Search } from 'lucide-react';
 import { getHistory, ApiError } from '@/lib/api';
 import { age, ageHours, dispositionLabel, money, shortDate, titleCase, toNum } from '@/lib/format';
 import type { HistoryItem } from '@/lib/types';
@@ -173,7 +173,7 @@ export function ClaimsHistoryPage() {
         r.override_flag ? (
           <Badge
             variant="outline"
-            className="rounded-sm border-warning/30 bg-warning/10 text-xs font-semibold text-warning"
+            className="gap-1 rounded-[5px] px-1.5 py-0 text-xs font-medium leading-5 border-warning/30 bg-warning/12 text-warning tabular-nums"
             title={r.override_reason ?? undefined}
           >
             Override
@@ -316,24 +316,35 @@ export function ClaimsHistoryPage() {
               }
             />
           ) : (
-            <DataGrid
-              rows={filtered}
-              columns={columns}
-              getRowId={(r) => r.claim_id}
-              // Adjuster-only drill-in. Business Users get a read-only list (no
-              // activatable rows) so no offered action hits the adjuster-only cockpit.
-              onRowActivate={
-                canOpenCockpit
-                  ? (r) => {
-                      setOpenClaim(r.claim_id);
-                      setOpenAdjId(r.adjudication_id);
-                    }
-                  : undefined
-              }
-              activeRowId={canOpenCockpit ? (openClaim ?? undefined) : undefined}
-              initialSort={{ key: 'finalized', dir: 'desc' }}
-              ariaLabel="Claims history"
-            />
+            <div className="space-y-2">
+              {canOpenCockpit ? (
+                <HistoryKeyHint count={filtered.length} />
+              ) : (
+                <div className="px-0.5 text-xs text-muted-foreground">
+                  <span className="tabular-nums">
+                    {filtered.length} {filtered.length === 1 ? 'claim' : 'claims'}
+                  </span>
+                </div>
+              )}
+              <DataGrid
+                rows={filtered}
+                columns={columns}
+                getRowId={(r) => r.claim_id}
+                // Adjuster-only drill-in. Business Users get a read-only list (no
+                // activatable rows) so no offered action hits the adjuster-only cockpit.
+                onRowActivate={
+                  canOpenCockpit
+                    ? (r) => {
+                        setOpenClaim(r.claim_id);
+                        setOpenAdjId(r.adjudication_id);
+                      }
+                    : undefined
+                }
+                activeRowId={canOpenCockpit ? (openClaim ?? undefined) : undefined}
+                initialSort={{ key: 'finalized', dir: 'desc' }}
+                ariaLabel="Claims history"
+              />
+            </div>
           )}
         </div>
 
@@ -398,5 +409,28 @@ function FilterSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/** A quiet, command-oriented hint line — Linear-style keyboard affordances above the grid (adjuster-only). */
+function HistoryKeyHint({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-3 px-0.5 text-xs text-muted-foreground">
+      <span className="tabular-nums">
+        {count} {count === 1 ? 'claim' : 'claims'}
+      </span>
+      <span className="text-border">·</span>
+      <span className="hidden items-center gap-1 sm:inline-flex">
+        <Kbd>↑</Kbd>
+        <Kbd>↓</Kbd>
+        to navigate
+      </span>
+      <span className="hidden items-center gap-1 sm:inline-flex">
+        <Kbd>
+          <CornerDownLeft className="h-3 w-3" aria-hidden />
+        </Kbd>
+        to open
+      </span>
+    </div>
   );
 }
