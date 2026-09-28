@@ -69,8 +69,12 @@ export async function getHistory(filters: ListFilters = {}, signal?: AbortSignal
   return data.items;
 }
 
-export function getClaim(claimId: string, signal?: AbortSignal): Promise<ClaimDetail> {
-  return getJson<ClaimDetail>(`/api/claims/${encodeURIComponent(claimId)}`, signal);
+export function getClaim(claimId: string, adjudicationId?: string | null, signal?: AbortSignal): Promise<ClaimDetail> {
+  // Pass the exact adjudication_id from the selected row so the cockpit opens that precise
+  // adjudication (a claim can carry several); the server falls back to RECOMMENDED-first
+  // resolution when it is omitted.
+  const qs = adjudicationId ? `?adjudication_id=${encodeURIComponent(adjudicationId)}` : '';
+  return getJson<ClaimDetail>(`/api/claims/${encodeURIComponent(claimId)}${qs}`, signal);
 }
 
 export function getBusinessDashboardConfig(signal?: AbortSignal): Promise<BusinessDashboardConfig> {

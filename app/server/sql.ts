@@ -58,7 +58,17 @@ function whereFilters(alias: string, claimAlias: string, f: ListFilters, params:
   return clauses.length ? ' AND ' + clauses.join(' AND ') : '';
 }
 
-/** Adjuster queue: claims ⋈ adjudications where decision_status='RECOMMENDED'. */
+/**
+ * Adjuster queue: claims ⋈ adjudications where decision_status='RECOMMENDED'.
+ *
+ * A claim drops out of the queue the moment it carries ANY human-final sibling
+ * adjudication (decision_status FINAL or REVIEWED) — the human decision of record
+ * supersedes the recommendation, so the queue must not keep surfacing it. Multiple
+ * RECOMMENDED rows for one claim are allowed and stay in the queue; ONLY a human-final
+ * sibling excludes the claim. The NOT EXISTS is correlated on claim_id, so it also drops
+ * an offline-validation-style stray RECOMMENDED row written against an already-finalized
+ * claim.
+ */
 export function queueSql(f: ListFilters = {}): Sql {
   const params: unknown[] = [];
   const where = whereFilters('a', 'c', f, params);
@@ -71,7 +81,12 @@ export function queueSql(f: ListFilters = {}): Sql {
            a.recommended_at
       FROM public.adjudications a
       JOIN public.claims c ON c.claim_id = a.claim_id
-     WHERE a.decision_status = 'RECOMMENDED'${where}
+     WHERE a.decision_status = 'RECOMMENDED'
+       AND NOT EXISTS (
+             SELECT 1 FROM public.adjudications h
+              WHERE h.claim_id = a.claim_id
+                AND h.decision_status IN ('FINAL', 'REVIEWED')
+           )${where}
      ${orderClause(QUEUE_SORTS, 'recommended_at', f)}
      ${paging(f, params)}`;
   return { text, params };
@@ -109,21 +124,33 @@ export function historySql(f: ListFilters = {}): Sql {
  * History) has nothing to prefer, so it still resolves its FINAL adjudication. The
  * remaining ORDER BY keys are a NULL-safe deterministic tiebreak (newest recommendation,
  * then newest finalization, then the adjudication surrogate) so the result is stable.
+ *
+ * When the caller knows the exact adjudication it selected (the queue/history row carries
+ * its `adjudication_id`), pass it as `adjudicationId` to open THAT precise row — no
+ * ambiguity when a claim has several adjudications. The RECOMMENDED-first ORDER BY stays
+ * in place as a safety net: it governs the claim-only path (no `adjudicationId`), and is
+ * harmless when the exact filter already narrows to a single row.
  */
-export function cockpitAdjudicationSql(claimId: string): Sql {
+export function cockpitAdjudicationSql(claimId: string, adjudicationId?: string): Sql {
+  const params: unknown[] = [claimId];
+  let filter = 'a.claim_id = $1';
+  if (adjudicationId) {
+    params.push(adjudicationId);
+    filter += ` AND a.adjudication_id = $${params.length}`;
+  }
   return {
     text: `SELECT a.*, c.coil_id, c.customer_id, c.claim_type, c.claim_date,
                   c.install_date, c.environment, c.installation, c.coast_distance_km,
                   c.defect_code, c.defect_narrative, c.claimed_tonnage, c.claimed_freight
              FROM public.adjudications a
              JOIN public.claims c ON c.claim_id = a.claim_id
-            WHERE a.claim_id = $1
+            WHERE ${filter}
             ORDER BY CASE WHEN a.decision_status = 'RECOMMENDED' THEN 0 ELSE 1 END,
                      a.recommended_at DESC NULLS LAST,
                      a.finalized_at DESC NULLS LAST,
                      a.adjudication_id DESC
             LIMIT 1`,
-    params: [claimId],
+    params,
   };
 }
 

@@ -9,8 +9,8 @@
  * from the Queue and History, not a nav destination.
  */
 
-import { createBrowserRouter, RouterProvider, NavLink, Navigate, Outlet, useLocation } from 'react-router';
-import { useState } from 'react';
+import { createBrowserRouter, RouterProvider, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -25,7 +25,8 @@ import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Role } from '@/lib/types';
 import { WhoamiProvider } from '@/components/RoleContext';
-import { useWhoami } from '@/components/whoami';
+import { useActiveRole, useWhoami } from '@/components/whoami';
+import { PersonaSwitch } from '@/components/PersonaSwitch';
 import { EmptyState, ErrorState, LoadingPanel } from '@/components/States';
 import { WorkQueuePage } from '@/pages/queue/WorkQueuePage';
 import { ClaimsHistoryPage } from '@/pages/history/ClaimsHistoryPage';
@@ -101,14 +102,17 @@ function Brand() {
   );
 }
 
-function Identity({ role }: { role: Role | null }) {
-  const { data } = useWhoami();
+function Identity() {
+  const { data, roles, activeRole } = useWhoami();
   const email = data?.email ?? data?.user ?? 'Unknown user';
+  // A multi-role caller sees the persona switch (rendered above) instead of a static
+  // badge; a single-role caller gets the badge as a plain, non-interactive indicator.
+  const soleRole = roles.length === 1 ? activeRole : null;
   return (
     <div className="flex flex-col gap-1.5">
-      {role && (
+      {soleRole && (
         <Badge variant="outline" className="w-fit font-medium">
-          {ROLE_LABEL[role]}
+          {ROLE_LABEL[soleRole]}
         </Badge>
       )}
       <span className="truncate text-xs text-muted-foreground" title={email}>
@@ -120,8 +124,19 @@ function Identity({ role }: { role: Role | null }) {
 
 function Layout() {
   const [navOpen, setNavOpen] = useState(false);
-  const { loading, unauthorized, error, reload, data } = useWhoami();
-  const role = data?.role ?? null;
+  const { loading, unauthorized, error, reload, activeRole } = useWhoami();
+  const navigate = useNavigate();
+  const role = activeRole;
+
+  // On a genuine persona switch (a change between two real roles), land on the new
+  // persona's home so the visible surface matches the chosen view. The initial
+  // null->role seed is skipped so a deep link survives the first load.
+  const prevRole = useRef<Role | null>(null);
+  useEffect(() => {
+    const prev = prevRole.current;
+    prevRole.current = role;
+    if (prev && role && prev !== role) void navigate(HOME_FOR[role]);
+  }, [role, navigate]);
 
   if (loading) {
     return (
@@ -155,8 +170,10 @@ function Layout() {
     <div className="flex h-full flex-col gap-6 p-4">
       <Brand />
       <NavList role={role} onNavigate={() => setNavOpen(false)} />
-      <div className="mt-auto border-t border-sidebar-border pt-4">
-        <Identity role={role} />
+      <div className="mt-auto flex flex-col gap-3 border-t border-sidebar-border pt-4">
+        {/* Persona switch: only shown for a caller holding both roles. */}
+        <PersonaSwitch />
+        <Identity />
       </div>
     </div>
   );
@@ -193,17 +210,22 @@ function Layout() {
   );
 }
 
-/** Redirect the index route to the role's home surface. */
+/** Redirect the index route to the active persona's home surface. */
 function RootRedirect() {
-  const role = useWhoami().data?.role ?? null;
+  const role = useActiveRole();
   if (!role) return <Navigate to="/history" replace />;
   return <Navigate to={HOME_FOR[role]} replace />;
 }
 
-/** Client-side role gate for direct-URL access; the server still enforces per route. */
+/**
+ * Client-side role gate for direct-URL access, keyed off the ACTIVE persona so the
+ * visible surfaces match the chosen view. The server still enforces per route, so this
+ * is a UX convenience, not the control — a caller who also holds the required role can
+ * reach the surface by switching persona.
+ */
 function RequireRole({ allow, children }: { allow: Role[]; children: React.ReactNode }) {
   const location = useLocation();
-  const role = useWhoami().data?.role ?? null;
+  const role = useActiveRole();
   if (role && !allow.includes(role)) {
     return (
       <EmptyState

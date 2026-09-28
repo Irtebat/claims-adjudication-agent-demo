@@ -11,9 +11,18 @@
  * decision/finalize/queue endpoints; Adjusters are DENIED the business-dashboard
  * data endpoint. Both roles may read claims history.
  *
+ * MULTI-ROLE: a single caller may hold BOTH roles (e.g. a login in both allowlists,
+ * or a member of both an adjuster and a business group). The resolver returns the
+ * caller's FULL role SET (see identity.ts); authorization is the UNION of the
+ * per-role permissions — an action is allowed iff SOME role the caller ACTUALLY holds
+ * permits it. The set is the server's own resolution of who the caller is; it is
+ * NEVER derived from a client-supplied "active role". The in-app persona switch is a
+ * VIEW preference only, so a single-role caller can never escalate to the other role
+ * by asserting it from the client — the middleware ignores any such header entirely.
+ *
  * ROLE SOURCE (server-side; see identity.ts): governed GROUP membership is the
  * PRIMARY mechanism — the OBO user's token (`x-forwarded-access-token`) is presented
- * to SCIM `/Me` and their direct groups are mapped to a role via env
+ * to SCIM `/Me` and their direct groups are mapped to roles via env
  * `ADJUSTER_GROUPS` / `BUSINESS_GROUPS`. A per-user allowlist (`ADJUSTER_USERS` /
  * `BUSINESS_USERS`, keyed on `x-forwarded-email`) is an OVERRIDE checked first — the
  * escape hatch for callers the group config can't cover. A caller matched by neither
@@ -23,6 +32,9 @@
 import type { Request, Response, NextFunction } from 'express';
 
 export type Role = 'adjuster' | 'business_user';
+
+/** The full set of roles a caller actually holds. Empty => hard deny. */
+export type RoleSet = ReadonlySet<Role>;
 
 export type Action =
   | 'identity'
@@ -59,10 +71,25 @@ export const PERMISSIONS: Record<Role, ReadonlySet<Action>> = {
   business_user: new Set<Action>(['identity', 'business_dashboard', 'business_chat', 'claims_history', 'history_chat']),
 };
 
-/** True iff `role` may perform `action`. Pure. */
+/** True iff the single `role` may perform `action`. Pure. */
 export function authorize(role: Role | null, action: Action): boolean {
   if (!role) return false;
   return PERMISSIONS[role].has(action);
+}
+
+/**
+ * True iff the caller may perform `action` given the FULL set of roles they hold —
+ * i.e. SOME actual role permits it (the union of per-role permissions). This is the
+ * only authorization primitive the request path uses. It takes the server-resolved
+ * set; it must never be fed a client-asserted "active role". An empty/absent set is a
+ * hard deny, so a caller who resolved to no role cannot do anything.
+ */
+export function authorizeSet(roles: RoleSet | null | undefined, action: Action): boolean {
+  if (!roles) return false;
+  for (const role of roles) {
+    if (PERMISSIONS[role].has(action)) return true;
+  }
+  return false;
 }
 
 /**
@@ -91,19 +118,28 @@ export function actionForPath(method: string, path: string): Action | null {
   return null;
 }
 
-/** A request-scoped role resolver. Injected so the middleware is unit-testable. */
-export type RoleResolver = (req: Request) => Promise<Role | null> | Role | null;
+/**
+ * A request-scoped role resolver. Injected so the middleware is unit-testable. Returns
+ * the FULL set of roles the caller holds (empty set => hard deny).
+ */
+export type RoleResolver = (req: Request) => Promise<RoleSet> | RoleSet;
 
 /**
  * Express middleware enforcing the permission matrix. Registered GLOBALLY (no mount
  * prefix) in onPluginsReady so `req.path` is the full path and the guard runs before
  * the deferred plugin-route mount — covering the Genie/analytics plugin routes too.
  *
+ * The guard authorizes against the caller's SERVER-RESOLVED role set only. It reads no
+ * client-supplied "active role" — the in-app persona switch is a view preference, so a
+ * caller cannot widen their permissions by asserting a role they do not hold. A
+ * business-only caller is still 403'd on an adjuster-only action regardless of any
+ * header the client sends.
+ *
  * Default-DENY: a request under `/api/` that maps to no known action is rejected
  * (403), so a future endpoint added without a matrix entry cannot silently bypass
  * authz. Non-API paths (static assets, `/health`) pass through untouched.
  */
-export function makeAuthz(resolveRole: RoleResolver) {
+export function makeAuthz(resolveRoles: RoleResolver) {
   return async function authz(req: Request, res: Response, next: NextFunction): Promise<void> {
     const action = actionForPath(req.method, req.path);
     if (action === null) {
@@ -115,27 +151,27 @@ export function makeAuthz(resolveRole: RoleResolver) {
       next();
       return;
     }
-    let role: Role | null;
+    let roles: RoleSet;
     try {
-      role = await resolveRole(req);
+      roles = await resolveRoles(req);
     } catch (err) {
       // A failed governed role lookup is a hard deny, never an open door.
       console.error('[authz] role resolution failed:', (err as Error).message);
       res.status(403).json({ error: 'forbidden', reason: 'role_resolution_failed' });
       return;
     }
-    if (!authorize(role, action)) {
+    if (!authorizeSet(roles, action)) {
       res.status(403).json({
         error: 'forbidden',
-        reason: role ? 'role_not_permitted' : 'no_role',
+        reason: roles.size > 0 ? 'role_not_permitted' : 'no_role',
         action,
       });
       return;
     }
-    // Expose the resolved role to downstream handlers (e.g. /api/whoami) so they need
-    // not re-run the SCIM lookup. `res.locals` is always present under Express; the
-    // guard keeps the middleware usable with the lightweight test mocks.
-    if (res.locals) (res.locals as Record<string, unknown>).role = role;
+    // Expose the resolved role set to downstream handlers (e.g. /api/whoami) so they
+    // need not re-run the SCIM lookup. `res.locals` is always present under Express;
+    // the guard keeps the middleware usable with the lightweight test mocks.
+    if (res.locals) (res.locals as Record<string, unknown>).roles = [...roles];
     next();
   };
 }

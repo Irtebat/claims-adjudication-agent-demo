@@ -7,27 +7,36 @@
  * on a finalization; the OBO token is what we present to Databricks on the user's
  * behalf to resolve their governed group membership.
  *
+ * MULTI-ROLE: a caller may hold BOTH roles. The resolver returns the FULL role SET,
+ * not the first match — so a login in both allowlists (or a member of both an adjuster
+ * and a business group) resolves to `{adjuster, business_user}` and can reach BOTH
+ * surfaces. An empty set is a hard deny.
+ *
  * ROLE RESOLUTION (see `makeDatabricksRoleResolver`), precedence exactly:
  *   1. Per-user allowlist OVERRIDE — `ADJUSTER_USERS` / `BUSINESS_USERS` (CSV email).
- *      An explicit escape hatch, checked first, no token or network required.
- *   2. OBO user token — `x-forwarded-access-token`. Absent => hard deny (null).
+ *      An explicit escape hatch, checked first, no token or network required. The
+ *      caller's allowlist roles are UNIONED (both lists => both roles); if this yields
+ *      a non-empty set it is returned as-is and SCIM is skipped.
+ *   2. OBO user token — `x-forwarded-access-token`. Absent => hard deny (empty set).
  *   3. Group membership (PRIMARY) — a raw REST GET to the SCIM `/Me` endpoint with the
- *      END USER's OBO token, mapped to a role via `ADJUSTER_GROUPS` / `BUSINESS_GROUPS`.
- *   4. No group match => hard deny (null).
+ *      END USER's OBO token; EVERY matching group contributes, so a member of both an
+ *      adjuster and a business group resolves to both roles (`ADJUSTER_GROUPS` /
+ *      `BUSINESS_GROUPS`).
+ *   4. No group match => hard deny (empty set).
  *
  * The group lookup needs no extra `user_api_scope` and no admin grant: the default
  * `iam.current-user:read` capability of any OBO token covers `/Me`. Namespace is
  * `GROUP_SCOPE` (`account` | `workspace`), DEFAULT `account`.
  *
  * Resilience: `fetch`, the clock, and the host are injectable so the resolver is unit
- * testable. A per-user short-TTL cache stores the RESOLVED ROLE only — never the token,
- * never a failure. Any SCIM error/timeout throws, which the authz middleware turns into
- * a 403: a network/SCIM failure must never open the door.
+ * testable. A per-user short-TTL cache stores the RESOLVED ROLE SET only — never the
+ * token, never a failure. Any SCIM error/timeout throws, which the authz middleware
+ * turns into a 403: a network/SCIM failure must never open the door.
  */
 
 import type { Request } from 'express';
 import { z } from 'zod';
-import { type Role, type RoleResolver } from './authz';
+import { type Role, type RoleSet, type RoleResolver } from './authz';
 
 export interface UserIdentity {
   email: string | null;
@@ -146,14 +155,15 @@ function resolveHost(override?: string): string | null {
 const defaultFetch: FetchLike = (url, init) => globalThis.fetch(url, init);
 
 /**
- * A bounded, TTL'd, LRU cache of RESOLVED roles keyed by user. Never holds tokens or
- * failures. `Map` insertion order == LRU order: `get` re-inserts a live hit (newest),
- * purges an expired entry on access; `set` evicts the oldest key(s) when at capacity
- * before inserting. So the cache can never exceed `maxEntries` and cannot grow without
- * bound even under a churn of distinct users.
+ * A bounded, TTL'd, LRU cache keyed by user. Never holds tokens or failures. `Map`
+ * insertion order == LRU order: `get` re-inserts a live hit (newest), purges an expired
+ * entry on access; `set` evicts the oldest key(s) when at capacity before inserting. So
+ * the cache can never exceed `maxEntries` and cannot grow without bound even under a
+ * churn of distinct users. Generic over the cached value `V` — the resolver caches the
+ * resolved role SET (`readonly Role[]`); the LRU/TTL mechanics are value-agnostic.
  */
-export class RoleCache {
-  private readonly map = new Map<string, { role: Role; expiresAt: number }>();
+export class RoleCache<V> {
+  private readonly map = new Map<string, { value: V; expiresAt: number }>();
 
   constructor(
     private readonly maxEntries: number,
@@ -166,8 +176,8 @@ export class RoleCache {
     return this.map.size;
   }
 
-  /** Return the cached role, purging it if expired and refreshing LRU order on a hit. */
-  get(key: string): Role | null {
+  /** Return the cached value, purging it if expired and refreshing LRU order on a hit. */
+  get(key: string): V | null {
     const hit = this.map.get(key);
     if (!hit) return null;
     if (hit.expiresAt <= this.now()) {
@@ -176,31 +186,35 @@ export class RoleCache {
     }
     this.map.delete(key); // re-insert to move to the newest LRU position
     this.map.set(key, hit);
-    return hit.role;
+    return hit.value;
   }
 
-  /** Insert/refresh a role, evicting the oldest (LRU) entries while at capacity. */
-  set(key: string, role: Role): void {
+  /** Insert/refresh a value, evicting the oldest (LRU) entries while at capacity. */
+  set(key: string, value: V): void {
     this.map.delete(key); // ensure a refresh lands at the newest position
     while (this.map.size >= this.maxEntries) {
       const oldest = this.map.keys().next().value;
       if (oldest === undefined) break;
       this.map.delete(oldest);
     }
-    this.map.set(key, { role, expiresAt: this.now() + this.ttlMs });
+    this.map.set(key, { value, expiresAt: this.now() + this.ttlMs });
   }
 }
 
 /**
- * Build the role resolver from app configuration.
+ * Build the role resolver from app configuration. Returns the caller's FULL role SET.
  *
  * PRIMARY mechanism: governed group membership resolved server-side from the OBO
  * user's token via SCIM `/Me` (`ADJUSTER_GROUPS` / `BUSINESS_GROUPS`, matched against
- * each direct group's `display` or `value`). Per-user allowlists
- * (`ADJUSTER_USERS` / `BUSINESS_USERS`) are an OVERRIDE checked first — the escape
- * hatch for individuals the group config can't (yet) cover. A caller matched by
- * neither resolves to null and is hard-denied by the authz middleware; any SCIM
- * error throws (never opens the door).
+ * each direct group's `display` or `value`); EVERY matching group contributes, so a
+ * member of both an adjuster and a business group resolves to both roles. Per-user
+ * allowlists (`ADJUSTER_USERS` / `BUSINESS_USERS`) are an OVERRIDE checked first — the
+ * escape hatch for individuals the group config can't (yet) cover; a caller in both
+ * lists gets both roles. When the allowlist yields any role it is returned as-is
+ * (SCIM is skipped), preserving the escape hatch's independence from the network so an
+ * explicitly-listed user is never denied by a SCIM outage. A caller matched by neither
+ * resolves to the empty set and is hard-denied by the authz middleware; any SCIM error
+ * throws (never opens the door).
  */
 export function makeDatabricksRoleResolver(opts: RoleResolverOptions = {}): RoleResolver {
   const adjusterUsers = new Set(csv('ADJUSTER_USERS'));
@@ -214,29 +228,30 @@ export function makeDatabricksRoleResolver(opts: RoleResolverOptions = {}): Role
   const cacheMaxEntries = opts.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES;
   const scimTimeoutMs = opts.scimTimeoutMs ?? DEFAULT_SCIM_TIMEOUT_MS;
 
-  // Bounded per-user cache of the RESOLVED (non-null) role — capped + LRU + TTL, so it
-  // never grows without bound. Never stores the token, never a failure.
-  const cache = new RoleCache(cacheMaxEntries, cacheTtlMs, now);
+  // Bounded per-user cache of the RESOLVED (non-empty) role set — capped + LRU + TTL,
+  // so it never grows without bound. Never stores the token, never a failure.
+  const cache = new RoleCache<readonly Role[]>(cacheMaxEntries, cacheTtlMs, now);
 
   // Deploy-time verification aid: log the direct-group count ONCE on the first real
   // SCIM /Me success, so we can confirm the narrowly-scoped OBO token actually returns
   // a populated groups[] under iam.current-user:read. Never logs group names/ids.
   let loggedGroupCount = false;
 
-  /** Map SCIM direct-group memberships to a role. Adjuster wins a dual match. */
-  function groupRole(groups: ScimGroup[]): Role | null {
+  /** Map SCIM direct-group memberships to the FULL set of matching roles. */
+  function groupRoles(groups: ScimGroup[]): Set<Role> {
     // Direct memberships only — SCIM /Me returns direct memberships; we never expand
     // nested groups. Defensively drop any explicitly-indirect entry.
     const direct = groups.filter((g) => (g.type ?? 'direct').toLowerCase() !== 'indirect');
     const tokensOf = (g: ScimGroup): string[] =>
       [g.display?.toLowerCase(), g.value?.toLowerCase()].filter((t): t is string => Boolean(t));
-    if (direct.some((g) => tokensOf(g).some((t) => adjusterGroups.has(t)))) return 'adjuster';
-    if (direct.some((g) => tokensOf(g).some((t) => businessGroups.has(t)))) return 'business_user';
-    return null;
+    const roles = new Set<Role>();
+    if (direct.some((g) => tokensOf(g).some((t) => adjusterGroups.has(t)))) roles.add('adjuster');
+    if (direct.some((g) => tokensOf(g).some((t) => businessGroups.has(t)))) roles.add('business_user');
+    return roles;
   }
 
-  /** GET SCIM /Me with the user's OBO token and map their groups to a role. */
-  async function resolveGroupRole(token: string): Promise<Role | null> {
+  /** GET SCIM /Me with the user's OBO token and map their groups to the role set. */
+  async function resolveGroupRoles(token: string): Promise<Set<Role>> {
     const host = resolveHost(opts.host);
     if (!host) throw new Error('SCIM host unresolved (set DATABRICKS_HOST)');
     const url = `${host}${SCIM_ME_PATH[scope]}`;
@@ -256,33 +271,36 @@ export function makeDatabricksRoleResolver(opts: RoleResolverOptions = {}): Role
       loggedGroupCount = true;
       console.info(`[identity] SCIM /Me (${scope}) returned ${groups.length} direct group(s) for the OBO user`);
     }
-    return groupRole(groups);
+    return groupRoles(groups);
   }
 
-  return async function resolveRole(req: Request): Promise<Role | null> {
+  return async function resolveRoles(req: Request): Promise<RoleSet> {
     const email = getUserIdentity(req).email?.toLowerCase() ?? null;
 
-    // (1) Per-user allowlist OVERRIDE — the escape hatch, before groups/network.
+    // (1) Per-user allowlist OVERRIDE — the escape hatch, before groups/network. Union
+    // both lists so a login in both resolves to BOTH roles; non-empty => skip SCIM.
     if (email) {
-      if (adjusterUsers.has(email)) return 'adjuster';
-      if (businessUsers.has(email)) return 'business_user';
+      const allow = new Set<Role>();
+      if (adjusterUsers.has(email)) allow.add('adjuster');
+      if (businessUsers.has(email)) allow.add('business_user');
+      if (allow.size > 0) return allow;
     }
 
     // (2) OBO user token is required for the group lookup; absent => hard deny.
     const token = oboToken(req);
-    if (!token) return null;
+    if (!token) return new Set<Role>();
 
-    // (3) Bounded short-TTL cache of the resolved (non-null) group role, per user.
+    // (3) Bounded short-TTL cache of the resolved (non-empty) group role set, per user.
     if (email) {
       const cached = cache.get(email);
-      if (cached) return cached;
+      if (cached) return new Set(cached);
     }
 
     // (4) Governed group membership via SCIM /Me. Throws on any error => 403.
-    const role = await resolveGroupRole(token);
+    const roles = await resolveGroupRoles(token);
 
-    // Cache only a successful (non-null) resolution — never a deny, never a failure.
-    if (role && email) cache.set(email, role);
-    return role; // null => no matching group => hard-deny by default.
+    // Cache only a successful (non-empty) resolution — never a deny, never a failure.
+    if (roles.size > 0 && email) cache.set(email, [...roles]);
+    return roles; // empty => no matching group => hard-deny by default.
   };
 }

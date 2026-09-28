@@ -59,7 +59,10 @@ export function ClaimsHistoryPage() {
   const [disposition, setDisposition] = useState('all');
   const [override, setOverride] = useState<OverrideFilter>('all');
 
+  // Track both the opened claim_id and its exact adjudication_id so the cockpit opens the
+  // precise finalized adjudication from the row, not a claim-resolved one.
   const [openClaim, setOpenClaim] = useState<string | null>(null);
+  const [openAdjId, setOpenAdjId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -319,7 +322,14 @@ export function ClaimsHistoryPage() {
               getRowId={(r) => r.claim_id}
               // Adjuster-only drill-in. Business Users get a read-only list (no
               // activatable rows) so no offered action hits the adjuster-only cockpit.
-              onRowActivate={canOpenCockpit ? (r) => setOpenClaim(r.claim_id) : undefined}
+              onRowActivate={
+                canOpenCockpit
+                  ? (r) => {
+                      setOpenClaim(r.claim_id);
+                      setOpenAdjId(r.adjudication_id);
+                    }
+                  : undefined
+              }
               activeRowId={canOpenCockpit ? (openClaim ?? undefined) : undefined}
               initialSort={{ key: 'finalized', dir: 'desc' }}
               ariaLabel="Claims history"
@@ -349,7 +359,11 @@ export function ClaimsHistoryPage() {
       {canOpenCockpit && (
         <ClaimCockpit
           claimId={openClaim}
-          onClose={() => setOpenClaim(null)}
+          adjudicationId={openAdjId}
+          onClose={() => {
+            setOpenClaim(null);
+            setOpenAdjId(null);
+          }}
           onFinalized={() => setReloadNonce((n) => n + 1)}
         />
       )}

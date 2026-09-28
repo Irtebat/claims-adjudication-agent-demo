@@ -187,10 +187,14 @@ function FinalizedSummary({ detail }: { detail: ClaimDetail }) {
 
 export function ClaimCockpit({
   claimId,
+  adjudicationId,
   onClose,
   onFinalized,
 }: {
   claimId: string | null;
+  /** The exact adjudication the caller selected (from the queue/history row). When set,
+   * the cockpit opens THAT adjudication rather than resolving one from the claim. */
+  adjudicationId?: string | null;
   onClose: () => void;
   onFinalized?: () => void;
 }) {
@@ -209,7 +213,7 @@ export function ClaimCockpit({
       setError(null);
       setNotFound(false);
       try {
-        const d = await getClaim(claimId, ctrl.signal);
+        const d = await getClaim(claimId, adjudicationId, ctrl.signal);
         if (live) setDetail(d);
       } catch (err: unknown) {
         if (!live || ctrl.signal.aborted) return;
@@ -223,7 +227,7 @@ export function ClaimCockpit({
       live = false;
       ctrl.abort();
     };
-  }, [claimId, reloadNonce]);
+  }, [claimId, adjudicationId, reloadNonce]);
 
   // The loaded detail is only "current" when it matches the open claim — this both
   // prevents a stale flash when switching claims and avoids resetting state
