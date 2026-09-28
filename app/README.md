@@ -41,8 +41,9 @@ deny by default.**
   account-admin grant is required.
 - **Fail-closed:** a caller matched by neither mechanism is hard-denied; any SCIM
   error/timeout hard-denies (never opens the door); any unmapped `/api/*` route is
-  denied by default. Resolved roles are cached per user for ~120s (the OBO token is
-  never cached; failures are never cached).
+  denied by default. Resolved roles are cached per user in a **bounded** LRU cache
+  (≤ 5000 entries, ~120s TTL; expired entries purged on access, oldest evicted at
+  capacity) — the OBO token is never cached, and failures are never cached.
 
 ### Role configuration (plain app env vars — no resource/grant needed)
 
@@ -102,7 +103,7 @@ adjudication is a no-op (no double outbox, no new version).
 ## Gates (all green, offline)
 
 ```
-npm run test           # vitest — 48 tests (authz matrix + finalize contract + identity/group resolver)
+npm run test           # vitest — 52 tests (authz matrix + finalize contract + identity/group resolver + RoleCache)
 npx tsc -b tsconfig.server.json   # server typecheck — clean
 npx appkit lint        # ast-grep (no-double-type-assertion, etc.) — clean
 databricks bundle validate --profile fe-bar   # Validation OK

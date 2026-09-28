@@ -77,6 +77,8 @@ const SCIM_ME_PATH: Record<GroupScope, string> = {
 
 const DEFAULT_CACHE_TTL_MS = 120_000;
 const DEFAULT_SCIM_TIMEOUT_MS = 5_000;
+/** Hard cap on cached role entries, so the cache is bounded in memory (LRU eviction). */
+const DEFAULT_CACHE_MAX_ENTRIES = 5_000;
 
 /** Minimal structural view of a fetch Response — all the resolver consumes. */
 export interface ScimResponse {
@@ -100,6 +102,8 @@ export interface RoleResolverOptions {
   host?: string;
   /** Resolved-role cache TTL in ms. Defaults to 120s. */
   cacheTtlMs?: number;
+  /** Max cached role entries before LRU eviction. Defaults to 5000. */
+  cacheMaxEntries?: number;
   /** SCIM request timeout in ms. Defaults to 5s. */
   scimTimeoutMs?: number;
 }
@@ -142,6 +146,52 @@ function resolveHost(override?: string): string | null {
 const defaultFetch: FetchLike = (url, init) => globalThis.fetch(url, init);
 
 /**
+ * A bounded, TTL'd, LRU cache of RESOLVED roles keyed by user. Never holds tokens or
+ * failures. `Map` insertion order == LRU order: `get` re-inserts a live hit (newest),
+ * purges an expired entry on access; `set` evicts the oldest key(s) when at capacity
+ * before inserting. So the cache can never exceed `maxEntries` and cannot grow without
+ * bound even under a churn of distinct users.
+ */
+export class RoleCache {
+  private readonly map = new Map<string, { role: Role; expiresAt: number }>();
+
+  constructor(
+    private readonly maxEntries: number,
+    private readonly ttlMs: number,
+    private readonly now: () => number
+  ) {}
+
+  /** Current live entry count (for tests / introspection). */
+  get size(): number {
+    return this.map.size;
+  }
+
+  /** Return the cached role, purging it if expired and refreshing LRU order on a hit. */
+  get(key: string): Role | null {
+    const hit = this.map.get(key);
+    if (!hit) return null;
+    if (hit.expiresAt <= this.now()) {
+      this.map.delete(key); // purge expired on access
+      return null;
+    }
+    this.map.delete(key); // re-insert to move to the newest LRU position
+    this.map.set(key, hit);
+    return hit.role;
+  }
+
+  /** Insert/refresh a role, evicting the oldest (LRU) entries while at capacity. */
+  set(key: string, role: Role): void {
+    this.map.delete(key); // ensure a refresh lands at the newest position
+    while (this.map.size >= this.maxEntries) {
+      const oldest = this.map.keys().next().value;
+      if (oldest === undefined) break;
+      this.map.delete(oldest);
+    }
+    this.map.set(key, { role, expiresAt: this.now() + this.ttlMs });
+  }
+}
+
+/**
  * Build the role resolver from app configuration.
  *
  * PRIMARY mechanism: governed group membership resolved server-side from the OBO
@@ -161,11 +211,12 @@ export function makeDatabricksRoleResolver(opts: RoleResolverOptions = {}): Role
   const doFetch = opts.fetch ?? defaultFetch;
   const now = opts.now ?? Date.now;
   const cacheTtlMs = opts.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+  const cacheMaxEntries = opts.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES;
   const scimTimeoutMs = opts.scimTimeoutMs ?? DEFAULT_SCIM_TIMEOUT_MS;
 
-  // Per-user cache of the RESOLVED (non-null) role. Never stores the token, never a
-  // failure. Entries expire after cacheTtlMs, so a group change is picked up promptly.
-  const cache = new Map<string, { role: Role; expiresAt: number }>();
+  // Bounded per-user cache of the RESOLVED (non-null) role — capped + LRU + TTL, so it
+  // never grows without bound. Never stores the token, never a failure.
+  const cache = new RoleCache(cacheMaxEntries, cacheTtlMs, now);
 
   // Deploy-time verification aid: log the direct-group count ONCE on the first real
   // SCIM /Me success, so we can confirm the narrowly-scoped OBO token actually returns
@@ -221,17 +272,17 @@ export function makeDatabricksRoleResolver(opts: RoleResolverOptions = {}): Role
     const token = oboToken(req);
     if (!token) return null;
 
-    // (3) Short-TTL cache of the resolved (non-null) group role, keyed per user.
+    // (3) Bounded short-TTL cache of the resolved (non-null) group role, per user.
     if (email) {
-      const hit = cache.get(email);
-      if (hit && hit.expiresAt > now()) return hit.role;
+      const cached = cache.get(email);
+      if (cached) return cached;
     }
 
     // (4) Governed group membership via SCIM /Me. Throws on any error => 403.
     const role = await resolveGroupRole(token);
 
     // Cache only a successful (non-null) resolution — never a deny, never a failure.
-    if (role && email) cache.set(email, { role, expiresAt: now() + cacheTtlMs });
+    if (role && email) cache.set(email, role);
     return role; // null => no matching group => hard-deny by default.
   };
 }

@@ -22,7 +22,7 @@ stop-and-report below).
 - Python (services, Wave 8 coherence): `pytest services/tests` → 34 passed.
 - Python (lakebase): `pytest lakebase/tests` → 6 passed.
 - Demo job: `pytest demo/tests` → 23 passed; `ruff` clean; `bundle validate` OK.
-- App backend: `npm run test` (vitest) → **48 passed**; `tsc -b tsconfig.server.json` clean; `appkit lint` (ast-grep) clean; `server/**` eslint- and prettier-clean; `databricks bundle validate --profile fe-bar` → Validation OK. Repo-wide `eslint .` / `prettier --check .` surface pre-existing warnings confined to the `databricks apps init` UI scaffold (`client/src/**`) and auto-generated appkit type stubs (`shared/appkit-types/*.d.ts`) — present since the scaffold commit `3ec969f`, untouched by the backend contract, and out of scope for this headless stage.
+- App backend: `npm run test` (vitest) → **52 passed**; `tsc -b tsconfig.server.json` clean; `appkit lint` (ast-grep) clean; `server/**` eslint- and prettier-clean; `databricks bundle validate --profile fe-bar` → Validation OK. Repo-wide `eslint .` / `prettier --check .` surface pre-existing warnings confined to the `databricks apps init` UI scaffold (`client/src/**`) and auto-generated appkit type stubs (`shared/appkit-types/*.d.ts`) — present since the scaffold commit `3ec969f`, untouched by the backend contract, and out of scope for this headless stage.
 
 ## Genie spaces
 
@@ -109,8 +109,10 @@ hard-denies on throw). Resolution precedence, encoded exactly:
    is matched against `ADJUSTER_GROUPS`/`BUSINESS_GROUPS`. No nested-group expansion.
 4. **No match ⇒ hard deny** (default-deny preserved).
 
-Resilience: `fetch`, clock, and host are injectable (unit-testable); a bounded per-user
-cache holds the **resolved role** for ~120s (never the token, never a failure); any
+Resilience: `fetch`, clock, and host are injectable (unit-testable); a **bounded**
+per-user LRU cache (`RoleCache`, ≤ 5000 entries, ~120s TTL — expired entries purged on
+access, oldest evicted at capacity) holds the **resolved role** (never the token, never
+a failure); any
 SCIM error/timeout **throws** ⇒ the middleware 403s (a network/SCIM failure never opens
 the door). `authorities.py` is untouched.
 
@@ -124,10 +126,12 @@ Documented in `app/README.md` ("Role configuration") + STOP-AND-REPORT item 4 ab
 **Tests** (`app/server/identity.test.ts`, injected `fetch` stub): group→adjuster,
 group→business, match by group id (`value`) as well as `display`, no-match ⇒ deny,
 missing OBO token ⇒ deny (no SCIM call), allowlist override beats group (no SCIM call),
-SCIM HTTP error ⇒ deny + not cached (re-fetches), SCIM network failure ⇒ deny,
-`GROUP_SCOPE=workspace` hits the preview path, cache hit avoids a 2nd fetch within TTL,
-cache miss after TTL re-fetches, plus the retained per-user allowlist tests. Vitest: 48
-passed.
+SCIM HTTP error ⇒ deny + not cached (re-fetches), SCIM network failure ⇒ deny, a slow
+`/Me` that trips `AbortSignal.timeout` ⇒ deny, `GROUP_SCOPE=workspace` hits the preview
+path, cache hit avoids a 2nd fetch within TTL, cache miss after TTL re-fetches, plus the
+retained per-user allowlist tests. Dedicated `RoleCache` tests assert the cap is never
+exceeded (insert > cap ⇒ size stays ≤ cap, oldest LRU-evicted), an accessed entry is
+spared eviction, and an expired entry is purged on access. Vitest: **52 passed**.
 
 **Deploy-time verification (not a blocker, no grant).** The endpoint + body shape are
 confirmed with a full user token; the only bit that can be checked exclusively live is

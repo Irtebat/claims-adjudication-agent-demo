@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Request } from 'express';
-import { getUserIdentity, decidedBy, makeDatabricksRoleResolver, type ScimResponse, type ScimGroup } from './identity';
+import {
+  getUserIdentity,
+  decidedBy,
+  makeDatabricksRoleResolver,
+  RoleCache,
+  type ScimResponse,
+  type ScimGroup,
+} from './identity';
 
 function reqWith(opts: { email?: string; token?: string } = {}): Request {
   const headers: Record<string, string> = {};
@@ -8,6 +15,13 @@ function reqWith(opts: { email?: string; token?: string } = {}): Request {
   if (opts.token) headers['x-forwarded-access-token'] = opts.token;
   const req: Pick<Request, 'headers'> = { headers };
   return req as Request;
+}
+
+/** Restore a process.env key, DELETING it when the saved value was undefined (assigning
+ *  undefined would coerce to the literal string 'undefined'). */
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
 }
 
 /** A fetch stub that returns a SCIM /Me body carrying `groups`. */
@@ -43,8 +57,8 @@ describe('makeDatabricksRoleResolver — per-user allowlist (override / escape h
     delete process.env.BUSINESS_GROUPS;
   });
   afterEach(() => {
-    process.env.ADJUSTER_USERS = saved.adj;
-    process.env.BUSINESS_USERS = saved.biz;
+    restoreEnv('ADJUSTER_USERS', saved.adj);
+    restoreEnv('BUSINESS_USERS', saved.biz);
   });
 
   it('assigns adjuster / business_user from the allowlists (case-insensitive), no token or fetch needed', async () => {
@@ -81,11 +95,11 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
     delete process.env.GROUP_SCOPE;
   });
   afterEach(() => {
-    process.env.ADJUSTER_USERS = saved.adjU;
-    process.env.BUSINESS_USERS = saved.bizU;
-    process.env.ADJUSTER_GROUPS = saved.adjG;
-    process.env.BUSINESS_GROUPS = saved.bizG;
-    process.env.GROUP_SCOPE = saved.scope;
+    restoreEnv('ADJUSTER_USERS', saved.adjU);
+    restoreEnv('BUSINESS_USERS', saved.bizU);
+    restoreEnv('ADJUSTER_GROUPS', saved.adjG);
+    restoreEnv('BUSINESS_GROUPS', saved.bizG);
+    restoreEnv('GROUP_SCOPE', saved.scope);
   });
 
   it('maps a matching group -> adjuster (by display name)', async () => {
@@ -155,6 +169,19 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
     await expect(resolve(reqWith({ email: 'u@x.com', token: 'tok' }))).rejects.toThrow(/request failed/);
   });
 
+  it('a slow SCIM /Me that trips the AbortSignal.timeout is a HARD DENY (throws)', async () => {
+    // The stub never resolves on its own; it rejects only when the injected abort
+    // signal fires — exercising the real AbortSignal.timeout(scimTimeoutMs) path.
+    const fetchMock = vi.fn(
+      (_url: string, init: { headers: Record<string, string>; signal?: AbortSignal }) =>
+        new Promise<ScimResponse>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new Error('The operation was aborted')));
+        })
+    );
+    const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST, scimTimeoutMs: 5 });
+    await expect(resolve(reqWith({ email: 'u@x.com', token: 'tok' }))).rejects.toThrow(/request failed/);
+  });
+
   it('caches the resolved role: a second call within TTL avoids a second fetch', async () => {
     let clock = 1_000;
     const fetchMock = scimStub([{ display: 'steel-adjusters' }]);
@@ -183,5 +210,43 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
     clock += 1_001; // past TTL
     expect(await resolve(reqWith({ email: 'u@x.com', token: 'tok' }))).toBe('adjuster');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('RoleCache (bounded + LRU + TTL)', () => {
+  it('never exceeds the cap and evicts the oldest (LRU) entries', () => {
+    const cache = new RoleCache(3, 60_000, () => 1_000);
+    for (let i = 0; i < 6; i++) cache.set(`u${i}`, 'adjuster'); // insert > cap distinct users
+    expect(cache.size).toBe(3); // size stays <= cap
+    // the three oldest were evicted; only the newest three survive.
+    expect(cache.get('u0')).toBeNull();
+    expect(cache.get('u1')).toBeNull();
+    expect(cache.get('u2')).toBeNull();
+    expect(cache.get('u3')).toBe('adjuster');
+    expect(cache.get('u4')).toBe('adjuster');
+    expect(cache.get('u5')).toBe('adjuster');
+  });
+
+  it('a cache hit refreshes LRU order, sparing a recently-used entry from eviction', () => {
+    const cache = new RoleCache(3, 60_000, () => 1_000);
+    cache.set('a', 'adjuster');
+    cache.set('b', 'business_user');
+    cache.set('c', 'adjuster'); // order oldest->newest: a, b, c
+    expect(cache.get('a')).toBe('adjuster'); // touch a -> order: b, c, a
+    cache.set('d', 'adjuster'); // at capacity -> evict oldest (b)
+    expect(cache.size).toBe(3);
+    expect(cache.get('b')).toBeNull(); // b was the LRU, evicted
+    expect(cache.get('a')).toBe('adjuster'); // a survived because it was touched
+    expect(cache.get('d')).toBe('adjuster');
+  });
+
+  it('purges an expired entry on access (and shrinks the cache)', () => {
+    let clock = 0;
+    const cache = new RoleCache(10, 1_000, () => clock);
+    cache.set('a', 'adjuster');
+    expect(cache.size).toBe(1);
+    clock = 1_000; // at expiry boundary (expiresAt <= now)
+    expect(cache.get('a')).toBeNull(); // expired -> hard miss
+    expect(cache.size).toBe(0); // and purged from the map
   });
 });
