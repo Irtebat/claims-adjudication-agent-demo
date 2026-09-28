@@ -28,6 +28,16 @@ HIGH_RISK_SCORE_THRESHOLD = 0.6
 HIGH_RISK_MIN_CLUSTER_SIZE = 3
 
 
+def is_high_risk(risk_score: float, cluster_size: int) -> bool:
+    """The tuned fraud flag: strong customer concentration AND a non-trivial heat.
+
+    Inclusive on the score (``>= 0.6``) and the size (``>= 3``). Kept as a small pure
+    predicate so the inclusive boundary can be unit-tested directly at values the
+    discrete ``1.5 * (1 - customers/claims)`` score can't land on exactly.
+    """
+    return risk_score >= HIGH_RISK_SCORE_THRESHOLD and cluster_size >= HIGH_RISK_MIN_CLUSTER_SIZE
+
+
 def _risk_reason(cluster_size: int, n_customers: int, heat_no: str, concentration: float) -> str:
     """One human-readable sentence explaining why a cluster is flagged (for hover)."""
     claims = "claim" if cluster_size == 1 else "claims"
@@ -143,10 +153,7 @@ def score_clusters(claims: list[dict]) -> dict:
             n_claims = stats["n_claims"]
             n_customers = stats["n_customers"]
             concentration = 1.0 - (n_customers / n_claims) if n_claims else 0.0
-            high_risk = (
-                stats["risk_score"] >= HIGH_RISK_SCORE_THRESHOLD
-                and n_claims >= HIGH_RISK_MIN_CLUSTER_SIZE
-            )
+            high_risk = is_high_risk(stats["risk_score"], n_claims)
             risk_rows[key] = {
                 "customer_id": customer,
                 "heat_no": heat,
