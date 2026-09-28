@@ -20,10 +20,18 @@ export type Verdict = 'APPROVE' | 'DENY' | 'PEND_INVESTIGATE';
 export type OperationalVerdict = 'APPROVE' | 'DENY' | 'PEND';
 export type DecisionStatus = 'RECOMMENDED' | 'FINAL';
 
+/**
+ * The signed-in user and the FULL set of roles the SERVER resolved for them, plus the
+ * default active role (the persona the UI opens in). `roles` is authoritative for what
+ * the user may do; the client's chosen active role is a view preference only and never
+ * grants access — every backend route re-enforces the permission matrix server-side.
+ * A user holding both roles gets a persona switch; an empty `roles` means no access.
+ */
 export interface Whoami {
   email: Str;
   user: Str;
-  role: Role | null;
+  roles: Role[];
+  defaultRole: Role | null;
 }
 
 /** One row of the adjuster work queue (`GET /api/queue`). */
