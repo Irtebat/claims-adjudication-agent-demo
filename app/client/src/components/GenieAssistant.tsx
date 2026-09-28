@@ -12,7 +12,7 @@
 import { Badge, GenieChat } from '@databricks/appkit-ui/react';
 import { Sparkles, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useWhoami } from './RoleContext';
+import { useWhoami } from './whoami';
 
 export function GenieAssistant({
   alias,

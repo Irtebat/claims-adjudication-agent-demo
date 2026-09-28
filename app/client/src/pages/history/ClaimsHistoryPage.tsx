@@ -27,7 +27,7 @@ import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { DispositionChip, VerdictChip } from '@/components/StatusChip';
 import { EmptyState, ErrorState, InlineNotice, LoadingRows } from '@/components/States';
 import { GenieAssistant } from '@/components/GenieAssistant';
-import { useRole } from '@/components/RoleContext';
+import { useRole } from '@/components/whoami';
 import { ClaimCockpit } from '@/components/cockpit/ClaimCockpit';
 
 type OverrideFilter = 'all' | 'overridden' | 'accepted';

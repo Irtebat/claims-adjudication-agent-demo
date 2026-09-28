@@ -10,7 +10,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@databricks/appkit-ui/react';
 import { pct } from '@/lib/format';
 import { GenieAssistant } from '@/components/GenieAssistant';
-import { useRole } from '@/components/RoleContext';
+import { useRole } from '@/components/whoami';
 import { EmptyState, InlineNotice } from '@/components/States';
 import { SimilarClaims } from './evidence';
 import type { DecisionRecord, PriorClaim } from '@/lib/types';

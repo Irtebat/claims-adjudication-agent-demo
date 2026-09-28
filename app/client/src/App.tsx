@@ -24,7 +24,8 @@ import { ClipboardList, History, LayoutDashboard, Menu, PanelsTopLeft } from 'lu
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Role } from '@/lib/types';
-import { WhoamiProvider, useWhoami } from '@/components/RoleContext';
+import { WhoamiProvider } from '@/components/RoleContext';
+import { useWhoami } from '@/components/whoami';
 import { EmptyState, ErrorState, LoadingPanel } from '@/components/States';
 import { WorkQueuePage } from '@/pages/queue/WorkQueuePage';
 import { ClaimsHistoryPage } from '@/pages/history/ClaimsHistoryPage';
