@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-09-27T22:06:00Z",
+  "result": {
+    "gold_claim_adjudication_fact": "MATERIALIZED_VIEW",
+    "gold_quality_kpis": "MATERIALIZED_VIEW",
+    "gold_failure_mode_analytics": "MATERIALIZED_VIEW",
+    "gold_supplier_recovery_analytics": "MATERIALIZED_VIEW",
+    "gold_fraud_cluster_analytics": "MATERIALIZED_VIEW",
+    "gold_agent_human_alignment": "MATERIALIZED_VIEW",
+    "gold_retrieval_citation_kpis": "MATERIALIZED_VIEW",
+    "quality_claims_metrics": "METRIC_VIEW"
+  }
+}

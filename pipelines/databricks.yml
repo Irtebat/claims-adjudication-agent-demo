@@ -19,6 +19,9 @@ variables:
   cdf_decision_records_table:
     description: Fully qualified native Lakebase CDF table for adjudication decision records
     default: fe-bar-ir.cdf.lb_adjudication_decision_records_history
+  warehouse_id:
+    description: SQL warehouse used to deploy Unity Catalog metric views
+    default: 38e458a09de4a055
 resources:
   pipelines:
     medallion:
@@ -84,6 +87,14 @@ resources:
             pipeline_id: ${resources.pipelines.medallion.id}
       queue:
         enabled: true
+    deploy_metric_views:
+      name: steel-claims-deploy-metric-views
+      tasks:
+        - task_key: quality_claims_metrics
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ./src/metric_views/quality_claims_metrics.sql
 targets:
   prod:
     default: true

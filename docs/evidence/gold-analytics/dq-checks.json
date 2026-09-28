@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-09-27T22:06:00Z",
+  "result": [
+    {"check_name": "fact_grain_mismatch", "violations": 0},
+    {"check_name": "duplicate_fact_adjudication", "violations": 0},
+    {"check_name": "null_fact_grain_key", "violations": 0},
+    {"check_name": "approved_amount_reconciliation", "violations": 0},
+    {"check_name": "quality_approved_amount_reconciliation", "violations": 0}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-09-27T22:06:00Z",
+  "profile": "fe-bar",
+  "catalog": "fe-bar-ir",
+  "result": [
+    {"object": "gold_claim_adjudication_fact", "row_count": 5009},
+    {"object": "gold_quality_kpis", "row_count": 2400},
+    {"object": "gold_failure_mode_analytics", "row_count": 2706},
+    {"object": "gold_supplier_recovery_analytics", "row_count": 4},
+    {"object": "gold_fraud_cluster_analytics", "row_count": 4401},
+    {"object": "gold_agent_human_alignment", "row_count": 5},
+    {"object": "gold_retrieval_citation_kpis", "row_count": 3}
+  ]
+}
