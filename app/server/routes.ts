@@ -17,6 +17,18 @@ import { z } from 'zod';
 import type { Application, Request, Response } from 'express';
 import { decidedBy, getUserIdentity } from './identity';
 import type { Role } from './authz';
+
+/**
+ * The default active role for a caller's role set — the persona the client opens in.
+ * Adjuster (the operational surface) wins for a dual-role caller; otherwise the single
+ * role; null when the set is empty. This is a VIEW default only — the server authorizes
+ * against the full set, never this value.
+ */
+function defaultRole(roles: Role[]): Role | null {
+  if (roles.includes('adjuster')) return 'adjuster';
+  if (roles.includes('business_user')) return 'business_user';
+  return null;
+}
 import { runFinalize, type Pool } from './finalize';
 import {
   queueSql,
@@ -89,13 +101,15 @@ export function registerRoutes(appkit: CockpitAppKit): void {
   const lb = appkit.lakebase;
 
   appkit.server.extend((app: Application) => {
-    // (0) Identity echo — the signed-in user + the role the authz guard resolved for
-    // them (stashed on res.locals). The client uses this only to shape navigation;
-    // every route below independently re-enforces the permission matrix.
+    // (0) Identity echo — the signed-in user + the FULL role set the authz guard
+    // resolved for them (stashed on res.locals) plus a default active role. The client
+    // uses this only to shape navigation and seed the persona switch; every route below
+    // independently re-enforces the permission matrix against the resolved set, so the
+    // client's chosen active role is never trusted for authorization.
     app.get('/api/whoami', (req: Request, res: Response) => {
       const { email, user } = getUserIdentity(req);
-      const role = (res.locals as { role?: Role | null }).role ?? null;
-      res.json({ email, user, role });
+      const roles = (res.locals as { roles?: Role[] }).roles ?? [];
+      res.json({ email, user, roles, defaultRole: defaultRole(roles) });
     });
 
     // (a) Adjuster queue — RECOMMENDED adjudications joined to their claim.
