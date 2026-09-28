@@ -1,19 +1,32 @@
-Wave 8 Kafka event backbone — gates (2026-09-28 IST)
+Wave 8 Kafka event backbone — gates (2026-09-28 IST; re-run after PR #19 review fixes)
+
+Review fixes applied this pass:
+- BLOCKING 1 (writer.py retry consistency): the adjudication write is now
+  INSERT ... ON CONFLICT (adjudication_id) DO NOTHING — first-write-wins, matching
+  the decision record + outbox — so a same-id retry mutates none of the three and
+  they cannot diverge. Regression tests added (retry consistency + no-DO-UPDATE-path).
+- BLOCKING 2 (relay starvation): SELECT_UNPUBLISHED_SQL now filters
+  event_type = 'claim.adjudicated' in the WHERE (before LIMIT), so foreign/unsupported
+  outbox rows cannot fill the bounded window. Test added proving they don't starve.
+- NON-BLOCKING: softened the double-mark vs double-publish claim in relay_core.py +
+  READMEs (concurrent double-publish is bounded by max_concurrent_runs:1 + consumer
+  idempotency, not by WHERE published_at IS NULL).
 
 PASS: uv run --with pytest pytest services/tests -q
-Result: 32 collected test cases passed (30 test functions; test_redelivery_is_a_noop
-is parametrized over the 3 DB-backed consumers). 0.03s.
+Result: 34 collected test cases passed (32 test functions; test_redelivery_is_a_noop
+is parametrized over the 3 DB-backed consumers). +2 relay tests this pass. 0.04s.
 
 PASS: uv run --with ruff ruff check services docs/evidence/kafka-events/simulate_e2e.py
 Result: All checks passed.
 
 PASS: uv run --with ruff ruff format --check services docs/evidence/kafka-events/simulate_e2e.py
-Result: 23 files already formatted.
+Result: all files already formatted.
 
 PASS: uv run --with pytest --with pyyaml --with pydantic --with mlflow --with langchain-core \
         --with langgraph --with databricks-agents --with 'psycopg[binary]' pytest agent/tests -q
-Result: 83 passed, 2 skipped. The writer.py atomic-outbox change integrates with the
-full agent suite (test_writer.py + test_decision_record.py cover the outbox row).
+Result: 85 passed, 2 skipped (+2 writer regression tests this pass). The writer.py
+first-write-wins change integrates with the full agent suite (test_writer.py has 8
+test functions incl. the two new regressions; test_decision_record.py covers mapping).
 
 PASS: uv run --with ruff ruff check agent
 Result: All checks passed.

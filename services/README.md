@@ -72,14 +72,22 @@ at every stage, keyed on stable, deterministic ids:
   exists for the claim (`SELECT 1 FROM adjudications WHERE claim_id=%s AND
   data_provenance='agent_recommendation'`). Scoped to `agent_recommendation` so the
   seeded baseline is adjudicated once and re-delivery is skipped. The endpoint's
-  `writer.py` is the deeper guarantee: idempotent `adjudication_id` upsert.
-- **`writer.py` (one transaction)**: adjudication + decision record + a
-  `claim.adjudicated` outbox row commit together. Outbox `event_id =
-  adj-<adjudication_id>` with `INSERT ... ON CONFLICT (event_id) DO NOTHING`.
-  Adjudication and its published-intent event can never diverge.
+  `writer.py` is the deeper guarantee: first-write-wins on the deterministic
+  `adjudication_id`.
+- **`writer.py` (one transaction)**: adjudication + decision record +
+  `claim.adjudicated` outbox row commit together, **all three `INSERT ... ON CONFLICT
+  DO NOTHING`** (first-write-wins) on their stable keys (adjudication on
+  `adjudication_id`, record on `(adjudication_id, record_version)`, outbox on
+  `event_id = adj-<adjudication_id>`). A same-id retry mutates none of them, so the
+  adjudication can never drift out of step with the immutable record or the outbox
+  payload.
 - **Relay**: publishes, then sets `published_at` **only after the broker acks**.
   Crash before the mark → re-published next run → consumers dedup → no double
-  processing. The `UPDATE ... WHERE published_at IS NULL` guards against double-mark.
+  *business* processing. `UPDATE ... WHERE published_at IS NULL` guards against
+  double-**marking** (a re-run won't re-stamp a published row); it does not by itself
+  prevent a concurrent double-**publish** — that is bounded by the job's
+  `max_concurrent_runs: 1` plus downstream consumer idempotency, so a rare duplicate
+  publish is a no-op.
 - **Consumers**: every downstream case id is a deterministic function of the claim
   (`STL-`/`INV-`/`SRC-<claim_id>`), 1:1 with the event's `event_id`. Writing behind
   `ON CONFLICT` on that primary key makes a re-delivered event a no-op (`DO NOTHING`)

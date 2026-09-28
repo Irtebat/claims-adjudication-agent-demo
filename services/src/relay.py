@@ -50,7 +50,7 @@ published = failed = 0
 # the broker acks that specific record (so we never mark an un-acked publish).
 with lakebase.connect(autocommit=True) as conn:
     with conn.cursor() as read_cur:
-        read_cur.execute(relay_core.SELECT_UNPUBLISHED_SQL, (max_events,))
+        read_cur.execute(relay_core.SELECT_UNPUBLISHED_SQL, relay_core.select_params(max_events))
         rows = read_cur.fetchall()
         columns = [d[0] for d in read_cur.description]
 
@@ -70,6 +70,10 @@ with lakebase.connect(autocommit=True) as conn:
     for row in rows:
         record = dict(zip(columns, row))
         event_id = record["event_id"]
+        # Defensive assertion: SELECT_UNPUBLISHED_SQL already filters event_type in the
+        # query (before LIMIT), so every fetched row is a claim.adjudicated event. This
+        # guard only trips if that query changes; it cannot cause starvation because
+        # foreign rows never enter `rows` in the first place.
         if not relay_core.is_adjudicated_event(record["event_type"]):
             continue
         producer.produce(

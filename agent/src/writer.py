@@ -5,12 +5,16 @@ One psycopg transaction writes the adjudication recommendation into
 ``public.adjudication_decision_records``, AND the ``claim.adjudicated`` event into
 the transactional ``public.outbox``. All three writes commit together or not at all,
 so an adjudication and its published-intent event can never diverge. Retries are
-idempotent: the decision record uses
-``ON CONFLICT (adjudication_id, record_version) DO NOTHING`` (append-only,
-immutable), the adjudications recommendation row upserts on ``adjudication_id``, and
-the outbox row uses ``ON CONFLICT (event_id) DO NOTHING`` on a stable event id
-(``adj-<adjudication_id>``). The outbox relay (services/) publishes the row to Kafka
-and sets ``published_at`` only after the broker acks (transactional-outbox pattern).
+idempotent and **first-write-wins**: all three writes use ``ON CONFLICT DO NOTHING``
+— the adjudications row on ``adjudication_id``, the decision record on
+``(adjudication_id, record_version)`` (append-only, immutable), and the outbox row
+on the stable event id ``adj-<adjudication_id>``. Because the ``adjudication_id`` is
+derived deterministically from the decision, a retry (even one carrying different
+decision data under the same id) leaves ALL THREE rows untouched, so they can never
+diverge — no path exists that updates the adjudication while the immutable decision
+record and outbox payload go stale. The outbox relay (services/) publishes the row
+to Kafka and sets ``published_at`` only after the broker acks (transactional-outbox
+pattern).
 
 The agent verdict (APPROVE/DENY/PEND_INVESTIGATE) is mapped to the operational
 ``adjudications.verdict`` value (APPROVE/DENY/PEND) that the silver history
@@ -30,6 +34,8 @@ from decision_record import (
 # Recommendation-carrying columns written to public.adjudications. The row is a
 # RECOMMENDED (not finalized) adjudication: an adjuster later writes the human-final
 # verdict. The claim.adjudicated outbox row is written here in the same tx (below).
+# The write is insert-ignore (first-write-wins) on adjudication_id, matching the
+# decision record + outbox, so a same-id retry never mutates it out of step with them.
 # verdict is set to the mapped agent
 # verdict so the row satisfies the silver business invariant even before finalization.
 ADJUDICATION_COLUMNS = [
@@ -130,15 +136,6 @@ def _jsonb(value: Any):
     return Jsonb(value, dumps=lambda v: json.dumps(v, default=_json_default))
 
 
-def _upsert_sql(table: str, columns: list[str], pk: str) -> str:
-    placeholders = ", ".join(f"%({c})s" for c in columns)
-    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in columns if c != pk)
-    return (
-        f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders}) "
-        f"ON CONFLICT ({pk}) DO UPDATE SET {updates}"
-    )
-
-
 def _insert_ignore_sql(table: str, columns: list[str], pk: tuple[str, ...]) -> str:
     placeholders = ", ".join(f"%({c})s" for c in columns)
     return (
@@ -198,12 +195,17 @@ def write_adjudication(conn: Any, record: dict) -> dict:
     """Write the recommendation, decision record, and outbox event atomically.
 
     ``conn`` must be a non-autocommit psycopg connection (``db.connect(...)``). One
-    transaction writes ``adjudications`` (upsert), ``adjudication_decision_records``
-    (insert-ignore), and the ``claim.adjudicated`` ``outbox`` row (insert-ignore on a
-    stable event id). Returns a small summary including whether the decision record
-    and the outbox event were newly inserted or already present (idempotent retry).
+    transaction writes ``adjudications``, ``adjudication_decision_records``, and the
+    ``claim.adjudicated`` ``outbox`` row — all three insert-ignore (first-write-wins)
+    on their stable keys, so a same-``adjudication_id`` retry mutates none of them and
+    they can never diverge. Returns a small summary including whether each row was
+    newly inserted or already present (idempotent retry). On any given call the three
+    ``*_inserted`` flags are identical: either the first write inserted all three, or a
+    retry inserted none.
     """
-    adjudication_sql = _upsert_sql("adjudications", ADJUDICATION_COLUMNS, _ADJUDICATION_PK)
+    adjudication_sql = _insert_ignore_sql(
+        "adjudications", ADJUDICATION_COLUMNS, (_ADJUDICATION_PK,)
+    )
     record_sql = _insert_ignore_sql(
         "adjudication_decision_records", DECISION_RECORD_COLUMNS, DECISION_RECORD_PK
     )
@@ -212,6 +214,7 @@ def write_adjudication(conn: Any, record: dict) -> dict:
     with conn.transaction():
         with conn.cursor() as cur:
             cur.execute(adjudication_sql, _adjudication_row(record))
+            adjudication_inserted = cur.rowcount == 1
             cur.execute(record_sql, _decision_record_row(record))
             inserted = cur.rowcount == 1
             cur.execute(outbox_sql, outbox_row)
@@ -220,6 +223,7 @@ def write_adjudication(conn: Any, record: dict) -> dict:
         "adjudication_id": record["adjudication_id"],
         "record_version": record["record_version"],
         "idempotency_key": record["idempotency_key"],
+        "adjudication_inserted": adjudication_inserted,
         "decision_record_inserted": inserted,
         "outbox_event_id": outbox_row["event_id"],
         "outbox_event_inserted": outbox_inserted,

@@ -14,14 +14,29 @@ from __future__ import annotations
 
 from events import EVENT_CLAIM_ADJUDICATED, serialize
 
+# The event_type filter is applied INSIDE the query, BEFORE the LIMIT, so unsupported
+# or foreign outbox rows can never consume the bounded window and starve
+# claim.adjudicated events. (An unfiltered SELECT that skipped them client-side would
+# let them fill every page and permanently block publishing.)
 SELECT_UNPUBLISHED_SQL = (
     "SELECT event_id, aggregate_id, event_type, payload "
-    "FROM outbox WHERE published_at IS NULL ORDER BY created_at LIMIT %s"
+    "FROM outbox WHERE published_at IS NULL AND event_type = %s "
+    "ORDER BY created_at LIMIT %s"
 )
 
+# Sets published_at only after the broker acks a specific record. published_at IS NULL
+# guards against double-MARKING (a re-run won't re-stamp an already-published row); it
+# does NOT by itself prevent concurrent double-PUBLISHING — that is bounded by the
+# job's max_concurrent_runs:1 plus downstream consumer idempotency (dedup on the
+# deterministic case id), so a rare duplicate publish is a business no-op.
 MARK_PUBLISHED_SQL = (
     "UPDATE outbox SET published_at = now() WHERE event_id = %s AND published_at IS NULL"
 )
+
+
+def select_params(max_events: int) -> tuple[str, int]:
+    """Bound params for :data:`SELECT_UNPUBLISHED_SQL`: (event_type filter, row limit)."""
+    return (EVENT_CLAIM_ADJUDICATED, max_events)
 
 
 def kafka_key(aggregate_id: str) -> bytes:

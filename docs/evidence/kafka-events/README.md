@@ -35,8 +35,8 @@ deterministic ids so a re-delivered event is a no-op:
 |-------|--------------------|-----------------|
 | Producer → `claim.submitted` | checkpoint replay / over-emission | key + `event_id = sub-<claim_id>`; worker dedups |
 | Worker | `claim.submitted` re-delivery | skip if `agent_recommendation` adjudication exists for `claim_id`; endpoint `writer.py` is idempotent on `adjudication_id` |
-| `writer.py` outbox (one tx) | endpoint retry | `event_id = adj-<adjudication_id>`, `ON CONFLICT (event_id) DO NOTHING` |
-| Relay → `claim.adjudicated` | crash before mark-published | `published_at` set only after broker ack; `WHERE published_at IS NULL` guards double-mark |
+| `writer.py` (one tx) | endpoint retry | adjudication + decision record + outbox all `INSERT ... ON CONFLICT DO NOTHING` (first-write-wins); a same-id retry mutates none, so they cannot diverge |
+| Relay → `claim.adjudicated` | crash before mark-published | `published_at` set only after broker ack; `WHERE published_at IS NULL` guards double-**mark**. Concurrent double-**publish** is bounded by `max_concurrent_runs: 1` + consumer idempotency, not this clause |
 | Consumers | `claim.adjudicated` re-delivery | deterministic case id (`STL-`/`INV-`/`SRC-<claim_id>`) + `ON CONFLICT`; notification is log-only |
 
 ## What the simulation proves (`end-to-end-dedup.json`)
