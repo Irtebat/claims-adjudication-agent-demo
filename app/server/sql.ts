@@ -94,7 +94,22 @@ export function historySql(f: ListFilters = {}): Sql {
   return { text, params };
 }
 
-/** Cockpit: the current adjudication (recommendation) for one claim. */
+/**
+ * Cockpit: resolve the adjudication to open for one claim.
+ *
+ * A claim can carry more than one adjudication row (e.g. a pending RECOMMENDED plus an
+ * older FINAL/REVIEWED one). The cockpit is the adjuster's decision surface, so the row
+ * awaiting a human — the RECOMMENDED one — must win. We therefore rank RECOMMENDED
+ * ahead of everything else FIRST, independent of `recommended_at` (which can be NULL on
+ * a freshly written recommendation): ordering by `recommended_at DESC NULLS LAST` alone
+ * would let a NULL push the RECOMMENDED row behind an older timestamped FINAL and open
+ * the wrong (finalized, cockpit-empty) adjudication.
+ *
+ * A "truly FINAL" claim (no RECOMMENDED sibling — e.g. opened read-only from Claims
+ * History) has nothing to prefer, so it still resolves its FINAL adjudication. The
+ * remaining ORDER BY keys are a NULL-safe deterministic tiebreak (newest recommendation,
+ * then newest finalization, then the adjudication surrogate) so the result is stable.
+ */
 export function cockpitAdjudicationSql(claimId: string): Sql {
   return {
     text: `SELECT a.*, c.coil_id, c.customer_id, c.claim_type, c.claim_date,
@@ -103,7 +118,10 @@ export function cockpitAdjudicationSql(claimId: string): Sql {
              FROM public.adjudications a
              JOIN public.claims c ON c.claim_id = a.claim_id
             WHERE a.claim_id = $1
-            ORDER BY a.recommended_at DESC NULLS LAST
+            ORDER BY CASE WHEN a.decision_status = 'RECOMMENDED' THEN 0 ELSE 1 END,
+                     a.recommended_at DESC NULLS LAST,
+                     a.finalized_at DESC NULLS LAST,
+                     a.adjudication_id DESC
             LIMIT 1`,
     params: [claimId],
   };
