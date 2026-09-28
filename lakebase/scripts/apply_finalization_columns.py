@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Apply the Wave 7 human-finalization columns to live Lakebase, idempotently.
 
 Runs ONLY the two additive ``ALTER TABLE ... ADD COLUMN IF NOT EXISTS`` statements
@@ -67,13 +66,10 @@ def main() -> None:
     parser.add_argument("--database", default=DEFAULT_DATABASE)
     args = parser.parse_args()
 
-    with _connect(args.profile, args.endpoint, args.database) as conn:
-        with conn.cursor() as cur:
-            cur.execute(MIGRATION_SQL)
-            cur.execute(VERIFY_SQL)
-            verified = [
-                {"table": t, "column": c, "data_type": d} for t, c, d in cur.fetchall()
-            ]
+    with _connect(args.profile, args.endpoint, args.database) as conn, conn.cursor() as cur:
+        cur.execute(MIGRATION_SQL)
+        cur.execute(VERIFY_SQL)
+        verified = [{"table": t, "column": c, "data_type": d} for t, c, d in cur.fetchall()]
     print(json.dumps({"applied": True, "columns": verified}, indent=2, sort_keys=True))
 
 
