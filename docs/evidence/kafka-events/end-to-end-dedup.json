@@ -1,0 +1,50 @@
+{
+  "consumers": {
+    "investigation_cases": {
+      "distinct_rows": 1,
+      "insert_attempts": 2,
+      "keys": [
+        "INV-CLM-pend"
+      ]
+    },
+    "notification_log_lines": 10,
+    "settlements": {
+      "distinct_rows": 1,
+      "insert_attempts": 4,
+      "keys": [
+        "STL-CLM-approve"
+      ]
+    },
+    "supplier_recovery_cases": {
+      "distinct_rows": 1,
+      "insert_attempts": 2,
+      "keys": [
+        "SRC-CLM-supplier"
+      ]
+    }
+  },
+  "dedup_assertions": [
+    "PASS: producer emitted each claim twice (re-delivery injected)",
+    "PASS: worker invoked endpoint once per DISTINCT claim (submitted re-delivery deduped)",
+    "PASS: outbox holds exactly one row per adjudication (ON CONFLICT event_id)",
+    "PASS: settlement: exactly one STL row (APPROVE only), despite re-delivery",
+    "PASS: investigation: exactly one INV row (PEND only), despite re-delivery",
+    "PASS: supplier-recovery: exactly one SRC row (attributable only), despite re-delivery"
+  ],
+  "outbox": {
+    "distinct_outbox_rows": 4,
+    "insert_attempts": 4
+  },
+  "producer": {
+    "distinct_claims": 4,
+    "submitted_events_emitted": 8
+  },
+  "relay": {
+    "rows_published_including_republish": 5
+  },
+  "worker": {
+    "distinct_claims_adjudicated": 4,
+    "endpoint_invocations": 4,
+    "submitted_events_consumed": 8
+  }
+}

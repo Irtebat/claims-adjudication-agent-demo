@@ -18,7 +18,9 @@ import json
 import psycopg
 from databricks.sdk import WorkspaceClient
 
-dbutils.widgets.text("endpoint", "projects/fe-bar-operational-plane/branches/production/endpoints/primary")
+dbutils.widgets.text(
+    "endpoint", "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
+)
 dbutils.widgets.text("postgres_database", "databricks_postgres")
 dbutils.widgets.text("sp_role", "47643eb1-dbd5-40a6-a51d-5da6b8e2da7a")
 

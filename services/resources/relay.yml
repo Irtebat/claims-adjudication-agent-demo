@@ -1,0 +1,52 @@
+resources:
+  jobs:
+    relay:
+      name: fe-bar-services-relay
+      max_concurrent_runs: 1
+      description: |
+        Outbox relay (transactional-outbox publish half). Polls
+        public.outbox WHERE published_at IS NULL, publishes each row to Kafka
+        claim.adjudicated (key = aggregate_id = claim_id), and sets published_at
+        ONLY after the broker acks. A crash between publish and mark re-publishes
+        next run; consumers dedup on the deterministic case id, so re-publish is a
+        business no-op (at-least-once publish + idempotent consume).
+
+        Default: scheduled serverless, hourly, bounded drain (max_events) then exit.
+
+        CONTINUOUS MODE TOGGLE (for live demo):
+        - Replace the 'periodic' trigger below with:
+            continuous:
+              pause_status: UNPAUSED
+        - Raise max_events so a run drains a long burst of outbox rows.
+        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar`.
+
+      environments:
+        - environment_key: services
+          spec:
+            client: "4"
+            dependencies:
+              - confluent-kafka==2.6.1
+              - psycopg[binary]==3.2.10
+              - databricks-sdk>=0.81.0
+
+      tasks:
+        - task_key: relay
+          environment_key: services
+          notebook_task:
+            notebook_path: ../src/relay.py
+            base_parameters:
+              topic: claim.adjudicated
+              max_events: ${var.relay_max_events}
+          timeout_seconds: 3600
+          max_retries: 0
+
+      # Default: scheduled serverless, hourly.
+      trigger:
+        pause_status: UNPAUSED
+        periodic:
+          interval: 1
+          unit: HOURS
+
+      # CONTINUOUS MODE (uncomment to toggle; comment out the 'trigger' above):
+      # continuous:
+      #   pause_status: UNPAUSED

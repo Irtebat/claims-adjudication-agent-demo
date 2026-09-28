@@ -31,6 +31,15 @@ def _workspace_client(profile: str | None):
     return WorkspaceClient(profile=profile) if profile else WorkspaceClient()
 
 
+def workspace_client(profile: str | None = None):
+    """Public SDK client (authed AS the app SP when its env creds are set).
+
+    The worker hands this to :func:`serving.invoke` so the endpoint call carries the
+    same service-principal identity as the Lakebase connections in this layer.
+    """
+    return _workspace_client(profile)
+
+
 def connection_params(profile: str | None = None) -> dict:
     client = _workspace_client(profile)
     endpoint_details = client.postgres.get_endpoint(name=LAKEBASE_ENDPOINT)

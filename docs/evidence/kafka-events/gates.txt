@@ -1,0 +1,45 @@
+Wave 8 Kafka event backbone — gates (2026-09-28 IST)
+
+PASS: uv run --with pytest pytest services/tests -q
+Result: 32 collected test cases passed (30 test functions; test_redelivery_is_a_noop
+is parametrized over the 3 DB-backed consumers). 0.03s.
+
+PASS: uv run --with ruff ruff check services docs/evidence/kafka-events/simulate_e2e.py
+Result: All checks passed.
+
+PASS: uv run --with ruff ruff format --check services docs/evidence/kafka-events/simulate_e2e.py
+Result: 23 files already formatted.
+
+PASS: uv run --with pytest --with pyyaml --with pydantic --with mlflow --with langchain-core \
+        --with langgraph --with databricks-agents --with 'psycopg[binary]' pytest agent/tests -q
+Result: 83 passed, 2 skipped. The writer.py atomic-outbox change integrates with the
+full agent suite (test_writer.py + test_decision_record.py cover the outbox row).
+
+PASS: uv run --with ruff ruff check agent
+Result: All checks passed.
+
+PASS: uv run --with ruff ruff format --check agent
+Result: 36 files already formatted.
+
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (services/)
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (agent/)
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (lakebase/)
+Result: Validation OK! for all three.
+
+PASS: git diff main --exit-code -- agent/src/authorities.py
+Result: empty diff; deterministic money math is untouched (guardrail).
+
+PASS: uv run python docs/evidence/kafka-events/simulate_e2e.py
+Result: all 6 dedup assertions PASS (see end-to-end-dedup.json). Every stage
+re-delivers its events; no stage double-processes.
+
+Grounded (read-only) infra check:
+- aiven MCP aiven_service_get: service fe-bar-kafka RUNNING (free-0), topics
+  claim.submitted + claim.adjudicated ACTIVE (2 partitions, RF 2, 168h). See
+  topic-config.json. No billed cluster created.
+
+Blocked on the human (documented, not looped on):
+- Kafka SASL password + CA cert are [REDACTED] through the Aiven MCP connector, so
+  the secret scope fe-bar-aiven-kafka cannot be populated programmatically and the
+  live broker E2E cannot run from here. Runbook is in README.md (this dir) and
+  services/README.md. The dedup contract is proven end-to-end in-memory instead.

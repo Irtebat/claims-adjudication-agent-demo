@@ -1,0 +1,45 @@
+resources:
+  jobs:
+    producer:
+      name: fe-bar-services-producer
+      max_concurrent_runs: 1
+      description: |
+        Checkpointed Spark Structured Streaming producer.
+        Reads INSERT events from native CDF table fe-bar-ir.cdf.lb_claims_history
+        and emits claim.submitted events to Kafka topic claim.submitted.
+
+        Default: scheduled serverless (availableNow trigger, hourly). Initial snapshot
+        replays all ~5000 seeded claims; checkpoint then advances so only new claims stream.
+
+        CONTINUOUS MODE TOGGLE (for live demo):
+        - Replace 'periodic' trigger below with a 'continuous' block:
+          continuous:
+            pause_status: UNPAUSED
+        - In producer.py, replace .trigger(availableNow=True) with
+          .trigger(processingTime='30 seconds')
+        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar`
+        - The job will stream new claims every 30 seconds in real time.
+
+      tasks:
+        - task_key: producer
+          notebook_task:
+            notebook_path: ../src/producer.py
+            base_parameters:
+              cdf_claims_table: ${var.cdf_claims_table}
+              checkpoint: ${var.producer_checkpoint}
+              topic: claim.submitted
+          timeout_seconds: 3600
+          max_retries: 0
+
+      # Default: scheduled serverless, hourly.
+      trigger:
+        pause_status: UNPAUSED
+        periodic:
+          interval: 1
+          unit: HOURS
+
+      # CONTINUOUS MODE (uncomment to toggle):
+      # trigger:
+      #   pause_status: UNPAUSED
+      #   continuous:
+      #     pause_status: UNPAUSED
