@@ -5,10 +5,12 @@ a stable ``event_id`` so downstream achieves exactly-once BUSINESS processing by
 deduplicating on it — re-delivery of the same logical event is a no-op.
 
 - ``claim.submitted`` is built here (producer) and consumed by the worker.
-- ``claim.adjudicated`` is produced by ``agent/src/writer.py`` into the Postgres
-  ``outbox`` (that module mirrors :func:`build_adjudicated_payload`'s shape because it
-  is bundled with the serving model and cannot import this package); the relay
-  publishes it verbatim and the consumers parse it here.
+- ``claim.adjudicated`` is produced on HUMAN FINALIZATION by the Databricks App's
+  finalize transaction into the Postgres ``outbox`` (the App mirrors
+  :func:`build_adjudicated_payload`'s shape); the relay publishes it verbatim and the
+  consumers parse it here. The agent's recommendation write (``agent/src/writer.py``)
+  no longer emits this event — a claim stays ``RECOMMENDED`` until an adjuster
+  finalizes it, so the fan-out fires exactly once, on the final human decision.
 
 This module is pure Python (stdlib only) so the dedup contract is unit-testable
 without Kafka, Spark, or Lakebase.
@@ -113,8 +115,9 @@ def build_adjudicated_payload(record: dict, *, verdict: str, event_id: str) -> d
     """Build the claim.adjudicated event value from a decision record.
 
     ``verdict`` is the operational verdict stored on ``adjudications.verdict``
-    (APPROVE/DENY/PEND). Kept identical to the inline builder in
-    ``agent/src/writer.py`` (which is the authoritative producer at runtime).
+    (APPROVE/DENY/PEND). This is the canonical payload shape; the Databricks App's
+    finalize transaction (the authoritative producer at runtime) mirrors it, reflecting
+    the FINAL human decision (verdict/disposition/approved_amount).
     """
     flags = record.get("flags") or {}
     return {
