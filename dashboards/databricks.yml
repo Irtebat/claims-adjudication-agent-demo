@@ -1,0 +1,27 @@
+bundle:
+  name: steel-claims-dashboards
+
+variables:
+  catalog:
+    default: fe-bar-ir
+  schema:
+    default: gold
+  warehouse_id:
+    default: 38e458a09de4a055
+
+resources:
+  dashboards:
+    quality_claims:
+      display_name: Steel Quality Claims Analytics
+      file_path: ./quality_claims.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}
+
+targets:
+  prod:
+    default: true
+    mode: production
+    workspace:
+      profile: fe-bar
+      root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims-dashboards/prod

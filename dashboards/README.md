@@ -1,26 +1,50 @@
-# dashboards
+# AI/BI dashboard and Genie space
 
-Planned layer — not yet implemented. This directory will hold AI/BI (Lakeview)
-dashboard definitions and Genie space definitions built over the gold analytical
-tables.
+This directory contains the deployed Steel Quality Claims Analytics dashboard and its linked, curated Genie space.
 
-## Intended purpose
+## Dashboard
 
-- Operational and quality KPIs over `gold.claims_current` /
-  `gold.adjudications_current` and the full `gold.*_history` timelines — for
-  example approval/denial rates, settlement amounts, supplier-attributable
-  trends, and fraud-cluster counts.
-- A Genie space for natural-language questions over the same gold data.
+`quality_claims.lvdash.json` has four pages: Executive COPQ, Quality / Metallurgy, Finance / Recovery, and Trust / Ops. Governed quality KPIs come from `gold.quality_claims_metrics`; cycle time and specialized analytics come from the corresponding `gold_*` analytics tables. The four leakage categories remain separate because they may overlap.
 
-## Available inputs
+### Data sources
 
-- `gold.gold_claim_adjudication_fact` for cross-filterable detail.
-- `gold.gold_quality_kpis`, `gold.gold_failure_mode_analytics`,
-  `gold.gold_supplier_recovery_analytics`, `gold.gold_fraud_cluster_analytics`,
-  `gold.gold_agent_human_alignment`, and `gold.gold_retrieval_citation_kpis` for
-  dashboard-ready aggregates.
-- `gold.quality_claims_metrics` for governed reusable measures in Genie and AI/BI.
+- `gold.gold_claim_adjudication_fact` — cross-filterable claim-grain detail.
+- `gold.gold_quality_kpis`, `gold.gold_failure_mode_analytics`, `gold.gold_supplier_recovery_analytics`, `gold.gold_fraud_cluster_analytics`, `gold.gold_agent_human_alignment`, and `gold.gold_retrieval_citation_kpis` — dashboard-ready aggregates.
+- `gold.quality_claims_metrics` — governed reusable measures shared by the dashboard and Genie.
 
-The KPI sources are ready for the next Genie/dashboard layer. Dashboard JSON and
-Genie configuration are not yet built here. Workflow-backlog visuals remain
-deferred until settlement, recovery, and investigation events exist.
+Workflow-backlog visuals remain deferred until settlement, recovery, and investigation events exist (downstream services, not yet built).
+
+Deploy with the authenticated `fe-bar` profile:
+
+```sh
+cd dashboards
+databricks bundle validate --strict -t prod --profile fe-bar
+databricks bundle deploy -t prod --profile fe-bar
+databricks bundle summary -t prod --profile fe-bar
+```
+
+## Genie
+
+`genie/genie_space.json` is the parsed, version-controlled serialized space. It uses the metric view plus failure-mode, supplier-recovery, fraud-cluster, and agent-human-alignment analytics. It does not attach the underlying wide claim fact.
+
+Create a new space reproducibly:
+
+```sh
+SERIALIZED=$(jq -c '.' dashboards/genie/genie_space.json | jq -Rs '.')
+jq -n --arg warehouse_id '38e458a09de4a055' \
+  --arg title 'Steel Quality Claims Analytics' \
+  --arg parent_path '/Workspace/Users/<user>/genie-spaces' \
+  --argjson serialized_space "$SERIALIZED" \
+  '{warehouse_id:$warehouse_id,title:$title,parent_path:$parent_path,serialized_space:$serialized_space}' \
+  > /tmp/create-genie.json
+databricks genie create-space --json @/tmp/create-genie.json --profile fe-bar
+```
+
+To update the deployed space, build the same `SERIALIZED` value and run:
+
+```sh
+jq -n --argjson serialized_space "$SERIALIZED" '{serialized_space:$serialized_space}' > /tmp/update-genie.json
+databricks genie update-space <space-id> --json @/tmp/update-genie.json --profile fe-bar
+```
+
+The dashboard's `uiSettings.genieSpace.overrideId` links to the deployed space. Change it when importing into another workspace.
