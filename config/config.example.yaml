@@ -46,14 +46,21 @@ lakebase:
   catalog_mirror: fe_bar_operational
   # Credentials come from the SDK OAuth credential provider at runtime (no scope needed).
 
-# Kafka (Aiven) — provision and verify for event streaming.
+# Kafka (Aiven) — existing service fe-bar-kafka (project kafka-dbx-pipeline-001).
 kafka:
   provider: aiven
-  bootstrap_servers: "TBD_KAFKA"
+  service: fe-bar-kafka                 # existing free-0 service; do NOT create a new cluster
+  bootstrap_servers: "fe-bar-kafka-kafka-dbx-pipeline-001.i.aivencloud.com:25358"  # SASL_SSL
+  security_protocol: SASL_SSL
+  sasl_mechanism: SCRAM-SHA-256
   topics:
-    claim_submitted: claim.submitted
+    claim_submitted: claim.submitted    # 2 partitions, RF 2, 7d retention (free-0 caps)
     claim_adjudicated: claim.adjudicated
-  secret_scope: "TBD_KAFKA"            # SASL creds by secret name, never inline
+  # SASL creds + CA cert live ONLY in this scope, referenced by name, never inline.
+  secret_scope: fe-bar-aiven-kafka
+  secret_keys: [bootstrap-servers, sasl-username, sasl-password, ssl-ca-pem]
+  # Services auth to the endpoint/Lakebase AS the Wave 6 app SP (claims-agent scope).
+  app_sp_secret_scope: claims-agent
 
 # Google Slides — living architecture/value walkthrough deck.
 slides:

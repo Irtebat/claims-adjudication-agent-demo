@@ -1,0 +1,24 @@
+resources:
+  jobs:
+    migrate:
+      name: fe-bar-services-migrate
+      max_concurrent_runs: 1
+      # Run-once / manual: `databricks bundle run migrate -t prod --profile fe-bar`.
+      environments:
+        - environment_key: services
+          spec:
+            client: "4"
+            dependencies:
+              - databricks-sdk>=0.81.0
+              - psycopg[binary]==3.2.10
+      tasks:
+        - task_key: migrate
+          environment_key: services
+          notebook_task:
+            notebook_path: ../src/migrate.py
+            base_parameters:
+              endpoint: ${var.endpoint}
+              postgres_database: ${var.postgres_database}
+              sp_role: ${var.sp_role}
+          timeout_seconds: 900
+          max_retries: 0

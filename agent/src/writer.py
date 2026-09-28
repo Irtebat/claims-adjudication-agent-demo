@@ -1,11 +1,16 @@
-"""Atomic recommendation writer — adjudications + decision record in one transaction.
+"""Atomic recommendation writer — adjudications + decision record + outbox in one tx.
 
 One psycopg transaction writes the adjudication recommendation into
-``public.adjudications`` AND the full canonical row into
-``public.adjudication_decision_records``. The two writes commit together or not at
-all. Retries are idempotent: the decision record uses
+``public.adjudications``, the full canonical row into
+``public.adjudication_decision_records``, AND the ``claim.adjudicated`` event into
+the transactional ``public.outbox``. All three writes commit together or not at all,
+so an adjudication and its published-intent event can never diverge. Retries are
+idempotent: the decision record uses
 ``ON CONFLICT (adjudication_id, record_version) DO NOTHING`` (append-only,
-immutable), and the adjudications recommendation row upserts on ``adjudication_id``.
+immutable), the adjudications recommendation row upserts on ``adjudication_id``, and
+the outbox row uses ``ON CONFLICT (event_id) DO NOTHING`` on a stable event id
+(``adj-<adjudication_id>``). The outbox relay (services/) publishes the row to Kafka
+and sets ``published_at`` only after the broker acks (transactional-outbox pattern).
 
 The agent verdict (APPROVE/DENY/PEND_INVESTIGATE) is mapped to the operational
 ``adjudications.verdict`` value (APPROVE/DENY/PEND) that the silver history
@@ -24,7 +29,8 @@ from decision_record import (
 
 # Recommendation-carrying columns written to public.adjudications. The row is a
 # RECOMMENDED (not finalized) adjudication: an adjuster later writes the human-final
-# verdict + outbox row (a separate workstream). verdict is set to the mapped agent
+# verdict. The claim.adjudicated outbox row is written here in the same tx (below).
+# verdict is set to the mapped agent
 # verdict so the row satisfies the silver business invariant even before finalization.
 ADJUDICATION_COLUMNS = [
     "adjudication_id",
@@ -60,6 +66,48 @@ _ADJUDICATION_JSONB = frozenset({"flags", "advisory_risk", "precedent"})
 _ADJUDICATION_PK = "adjudication_id"
 DECISION_RECORD_PK = ("adjudication_id", "record_version")
 DATA_PROVENANCE = "agent_recommendation"
+
+# Transactional outbox for the claim.adjudicated event. event_id is stable+unique
+# per adjudication so the insert is idempotent on retry and downstream (relay,
+# consumers) can dedup on it for exactly-once BUSINESS processing. published_at is
+# left NULL (DB default); the relay sets it only after the Kafka broker acks. The
+# payload shape mirrors services/src/events.py:build_adjudicated_payload
+# (this module is bundled with the serving model and cannot import that package).
+OUTBOX_COLUMNS = ["event_id", "aggregate_id", "event_type", "payload"]
+_OUTBOX_PK = ("event_id",)
+EVENT_CLAIM_ADJUDICATED = "claim.adjudicated"
+EVENT_SCHEMA_VERSION = "claim-event/v1"
+
+
+def _adjudicated_event(record: dict) -> dict:
+    """Build the outbox row (event_id, aggregate_id, event_type, payload) for a record."""
+    from datetime import datetime, timezone
+
+    flags = record.get("flags") or {}
+    duplicate = record.get("duplicate") or {}
+    adjudication_id = record["adjudication_id"]
+    payload = {
+        "event_id": f"adj-{adjudication_id}",
+        "event_type": EVENT_CLAIM_ADJUDICATED,
+        "schema_version": EVENT_SCHEMA_VERSION,
+        "claim_id": record["claim_id"],
+        "adjudication_id": adjudication_id,
+        "verdict": adjudication_verdict(record["recommended_verdict"]),
+        "recommended_verdict": record["recommended_verdict"],
+        "disposition": record["recommended_disposition"],
+        "approved_amount": record["approved_amount"],
+        "supplier_attributable": bool(flags.get("supplier_attributable")),
+        "recovery_supplier_id": record.get("recovery_supplier_id"),
+        "duplicate_of_claim_id": duplicate.get("duplicate_of_claim_id"),
+        "idempotency_key": record["idempotency_key"],
+        "recommended_at": datetime.now(timezone.utc).isoformat(),
+    }
+    return {
+        "event_id": payload["event_id"],
+        "aggregate_id": record["claim_id"],
+        "event_type": EVENT_CLAIM_ADJUDICATED,
+        "payload": _jsonb(payload),
+    }
 
 
 def _json_default(obj: Any):
@@ -147,24 +195,32 @@ def _decision_record_row(record: dict) -> dict:
 
 
 def write_adjudication(conn: Any, record: dict) -> dict:
-    """Write the recommendation and decision record atomically in one transaction.
+    """Write the recommendation, decision record, and outbox event atomically.
 
-    ``conn`` must be a non-autocommit psycopg connection (``db.connect(...)``).
-    Returns a small summary including whether the decision record was newly
-    inserted (``inserted``) or already present (idempotent retry).
+    ``conn`` must be a non-autocommit psycopg connection (``db.connect(...)``). One
+    transaction writes ``adjudications`` (upsert), ``adjudication_decision_records``
+    (insert-ignore), and the ``claim.adjudicated`` ``outbox`` row (insert-ignore on a
+    stable event id). Returns a small summary including whether the decision record
+    and the outbox event were newly inserted or already present (idempotent retry).
     """
     adjudication_sql = _upsert_sql("adjudications", ADJUDICATION_COLUMNS, _ADJUDICATION_PK)
     record_sql = _insert_ignore_sql(
         "adjudication_decision_records", DECISION_RECORD_COLUMNS, DECISION_RECORD_PK
     )
+    outbox_sql = _insert_ignore_sql("outbox", OUTBOX_COLUMNS, _OUTBOX_PK)
+    outbox_row = _adjudicated_event(record)
     with conn.transaction():
         with conn.cursor() as cur:
             cur.execute(adjudication_sql, _adjudication_row(record))
             cur.execute(record_sql, _decision_record_row(record))
             inserted = cur.rowcount == 1
+            cur.execute(outbox_sql, outbox_row)
+            outbox_inserted = cur.rowcount == 1
     return {
         "adjudication_id": record["adjudication_id"],
         "record_version": record["record_version"],
         "idempotency_key": record["idempotency_key"],
         "decision_record_inserted": inserted,
+        "outbox_event_id": outbox_row["event_id"],
+        "outbox_event_inserted": outbox_inserted,
     }

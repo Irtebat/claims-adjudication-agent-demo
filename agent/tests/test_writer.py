@@ -1,4 +1,5 @@
-"""The transactional writer: atomic, idempotent, correct verdict mapping."""
+"""The transactional writer: atomic (adjudication + decision record + outbox),
+idempotent, correct verdict mapping, and a well-formed claim.adjudicated outbox event."""
 
 from contextlib import contextmanager
 
@@ -85,20 +86,29 @@ def _patch_jsonb(monkeypatch):
     monkeypatch.setattr(writer, "_jsonb", lambda value: {"__jsonb__": value})
 
 
-def test_writes_both_tables_in_one_transaction(monkeypatch):
+def test_writes_all_three_in_one_transaction(monkeypatch):
     _patch_jsonb(monkeypatch)
     conn = _Conn()
     result = writer.write_adjudication(conn, _record())
     assert conn.transactions == 1
-    assert len(conn.cur.calls) == 2  # adjudications upsert + decision-record insert
+    # adjudications upsert + decision-record insert + outbox insert, one transaction.
+    assert len(conn.cur.calls) == 3
     adjudication_sql, adjudication_params = conn.cur.calls[0]
     record_sql, _ = conn.cur.calls[1]
+    outbox_sql, outbox_params = conn.cur.calls[2]
     assert "INSERT INTO adjudications" in adjudication_sql
     assert "ON CONFLICT (adjudication_id) DO UPDATE" in adjudication_sql
     assert "INSERT INTO adjudication_decision_records" in record_sql
     assert "ON CONFLICT (adjudication_id, record_version) DO NOTHING" in record_sql
+    assert "INSERT INTO outbox" in outbox_sql
+    assert "ON CONFLICT (event_id) DO NOTHING" in outbox_sql
     assert adjudication_params["decision_status"] == "RECOMMENDED"
+    assert outbox_params["event_id"] == "adj-ADJ-abc"
+    assert outbox_params["aggregate_id"] == "CLM-9"
+    assert outbox_params["event_type"] == "claim.adjudicated"
     assert result["decision_record_inserted"] is True
+    assert result["outbox_event_inserted"] is True
+    assert result["outbox_event_id"] == "adj-ADJ-abc"
 
 
 def test_pend_verdict_maps_to_operational_pend(monkeypatch):
@@ -116,9 +126,42 @@ def test_pend_verdict_maps_to_operational_pend(monkeypatch):
 def test_idempotent_retry_reports_not_inserted(monkeypatch):
     _patch_jsonb(monkeypatch)
     conn = _Conn()
-    conn.cur.rowcount = 0  # ON CONFLICT DO NOTHING matched an existing record
+    conn.cur.rowcount = 0  # ON CONFLICT DO NOTHING matched existing record + outbox event
     result = writer.write_adjudication(conn, _record())
     assert result["decision_record_inserted"] is False
+    assert result["outbox_event_inserted"] is False
+
+
+def test_outbox_event_payload_shape(monkeypatch):
+    _patch_jsonb(monkeypatch)
+    conn = _Conn()
+    writer.write_adjudication(
+        conn, _record(verdict="PEND_INVESTIGATE", disposition="PEND_INVESTIGATE", approved=0.0)
+    )
+    _, outbox_params = conn.cur.calls[2]
+    payload = outbox_params["payload"]["__jsonb__"]  # _jsonb is patched to wrap the dict
+    assert payload["event_id"] == "adj-ADJ-abc"
+    assert payload["event_type"] == "claim.adjudicated"
+    assert payload["schema_version"] == "claim-event/v1"
+    assert payload["claim_id"] == "CLM-9"
+    assert payload["verdict"] == "PEND"  # operational mapping of PEND_INVESTIGATE
+    assert payload["recommended_verdict"] == "PEND_INVESTIGATE"
+    assert payload["approved_amount"] == 0.0
+    assert payload["idempotency_key"] == "abc"
+
+
+def test_outbox_event_carries_duplicate_and_supplier_context(monkeypatch):
+    _patch_jsonb(monkeypatch)
+    conn = _Conn()
+    record = _record(verdict="DENY", disposition="DUPLICATE", approved=0.0, dup=True)
+    record["flags"]["supplier_attributable"] = True
+    record["recovery_supplier_id"] = "SUP-7"
+    writer.write_adjudication(conn, record)
+    payload = conn.cur.calls[2][1]["payload"]["__jsonb__"]
+    assert payload["verdict"] == "DENY"
+    assert payload["duplicate_of_claim_id"] == "CLM-1"
+    assert payload["supplier_attributable"] is True
+    assert payload["recovery_supplier_id"] == "SUP-7"
 
 
 def test_duplicate_carries_reference(monkeypatch):
