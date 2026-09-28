@@ -59,12 +59,31 @@ benign-re-snapshot failure).
    for OBO on the governed surfaces (Genie + warehouse). Confirm user authorization
    is enabled on the deployed app and that both Genie spaces grant CAN_RUN to the
    invoking users.
-4. **Role → group mapping.** Set `ADJUSTER_GROUPS`/`BUSINESS_GROUPS` (Databricks group
-   display names) and wire the group lookup, or set `ADJUSTER_USERS`/`BUSINESS_USERS`
-   (emails) for the demo. Without one of these, all guarded routes hard-deny.
+4. **Role allowlists.** Set `ADJUSTER_USERS`/`BUSINESS_USERS` (comma-separated emails)
+   — the sole server-side role mechanism (group-based mapping is intentionally not
+   wired; see the review-fixes note below). Without them, all guarded routes hard-deny.
 5. **git push.** The active `gh` account is pull-only for this repo (see repo memory);
    all Stage-A work is committed locally on `copilot-app-backend`. The push + PR is
    handed off.
+
+## Cross-vendor review fixes (CHANGES-REQUESTED → resolved)
+
+- **BLOCKING 1 — finalize all-or-nothing.** `runFinalize` now asserts the human-final
+  decision-record version insert affected exactly one row; if not, it throws so the
+  whole transaction rolls back (no outbox emit, no FINAL flip) — closing the audit
+  hole where a FINAL adjudication could exist with no human-final audit version. The
+  `ON CONFLICT DO NOTHING` on that insert was dropped (the row-locked UPDATE guard
+  serializes finalization, and a version collision now fails the tx instead of being
+  swallowed). New test: zero-row version insert → tx rolls back, no outbox.
+- **BLOCKING 2 — authorization config matches enforcement.** Group-based mapping is
+  removed (the typed experimental workspace-client `currentUser.me()` does not expose
+  group membership, so a governed group lookup isn't feasible in this scaffold).
+  Per-user allowlists (`ADJUSTER_USERS`/`BUSINESS_USERS`) are now the sole role
+  mechanism, advertised consistently in code + README + this runbook. New
+  `identity.test.ts` covers the per-user resolver.
+- **Non-blocking — default-DENY.** The authz guard is mounted globally (fixing an
+  `app.use('/api', …)` prefix-strip bug) and now fail-closes any unmapped `/api/*`
+  route, so a future endpoint can't bypass authz. New test covers it.
 
 ## Attribution note
 

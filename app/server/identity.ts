@@ -8,7 +8,7 @@
  */
 
 import type { Request } from 'express';
-import { type Role, resolveRoleFromGroups, type RoleResolver } from './authz';
+import { type Role, type RoleResolver } from './authz';
 
 export interface UserIdentity {
   email: string | null;
@@ -41,37 +41,27 @@ function csv(name: string): string[] {
 }
 
 /**
- * Build the production role resolver from app configuration.
+ * Build the role resolver from app configuration.
  *
- * Resolution order for a request's OBO user (by email):
- *   1. Explicit per-user allowlists — env `ADJUSTER_USERS` / `BUSINESS_USERS`
- *      (comma-separated emails). Convenient for demos and pinning specific users.
- *   2. Databricks group membership — env `ADJUSTER_GROUPS` / `BUSINESS_GROUPS`
- *      (comma-separated group display names) resolved against the caller's groups
- *      via the injected `groupLookup`. In production wire `groupLookup` to a SCIM /
- *      workspace-client group query for the user; it is injected (not hard-coded) so
- *      this module stays unit-testable and does not fabricate an SDK signature.
+ * SOLE mechanism: an explicit per-user allowlist keyed on the OBO user's email —
+ * env `ADJUSTER_USERS` / `BUSINESS_USERS` (comma-separated). This is what actually
+ * enforces role-based access server-side, and the config advertises nothing more.
  *
- * Returns null (=> 403) when the caller matches neither role.
+ * Group-based mapping is deliberately NOT wired: the typed experimental
+ * workspace-client `currentUser.me()` does not expose group membership, and a SCIM
+ * group-enumeration lookup cannot be typed/verified in this scaffold — so wiring it
+ * would risk a deploy whose config does not match enforcement. A caller who matches
+ * no allowlist resolves to null and is hard-denied by the authz middleware.
  */
-export function makeDatabricksRoleResolver(opts?: {
-  groupLookup?: (email: string) => Promise<readonly string[]>;
-}): RoleResolver {
+export function makeDatabricksRoleResolver(): RoleResolver {
   const adjusterUsers = new Set(csv('ADJUSTER_USERS'));
   const businessUsers = new Set(csv('BUSINESS_USERS'));
-  const adjusterGroups = csv('ADJUSTER_GROUPS');
-  const businessGroups = csv('BUSINESS_GROUPS');
-  const groupLookup = opts?.groupLookup;
 
-  return async function resolveRole(req: Request): Promise<Role | null> {
+  return function resolveRole(req: Request): Role | null {
     const email = getUserIdentity(req).email?.toLowerCase();
     if (!email) return null;
     if (adjusterUsers.has(email)) return 'adjuster';
     if (businessUsers.has(email)) return 'business_user';
-    if (groupLookup && (adjusterGroups.length || businessGroups.length)) {
-      const groups = await groupLookup(email);
-      return resolveRoleFromGroups(groups, { adjusterGroups, businessGroups });
-    }
     return null;
   };
 }

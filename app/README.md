@@ -11,24 +11,27 @@ Two roles, enforced on **every** `/api` route by a global guard registered in
 `onPluginsReady` (so it precedes the deferred plugin-route mount and also guards the
 auto-mounted Genie/analytics routes). Never enforced in the client.
 
-| Surface | Adjuster | Business User |
-| --- | --- | --- |
-| `GET /api/queue` (pending queue) | ✅ | ❌ |
-| `GET /api/claims/:id` (cockpit detail) | ✅ | ❌ |
-| `POST /api/claims/:id/finalize` | ✅ | ❌ |
-| `GET /api/history` (finalized claims) | ✅ | ✅ |
-| `POST /api/genie/cockpit/*` (cockpit copilot) | ✅ | ❌ |
-| `POST /api/genie/business/*` (business chat) | ❌ | ✅ |
-| `/api/analytics/*`, `/api/business/dashboard` (business dashboard) | ❌ | ✅ |
+| Surface                                                            | Adjuster | Business User |
+| ------------------------------------------------------------------ | -------- | ------------- |
+| `GET /api/queue` (pending queue)                                   | ✅       | ❌            |
+| `GET /api/claims/:id` (cockpit detail)                             | ✅       | ❌            |
+| `POST /api/claims/:id/finalize`                                    | ✅       | ❌            |
+| `GET /api/history` (finalized claims)                              | ✅       | ✅            |
+| `POST /api/genie/cockpit/*` (cockpit copilot)                      | ✅       | ❌            |
+| `POST /api/genie/business/*` (business chat)                       | ❌       | ✅            |
+| `/api/analytics/*`, `/api/business/dashboard` (business dashboard) | ❌       | ✅            |
 
 Contract denials honored: Business Users are denied decision/finalize/queue;
 Adjusters are denied the business-dashboard data endpoint.
 
-**Role source:** Databricks **group membership**. The app is configured with the
-group display names that map to each role (`ADJUSTER_GROUPS` / `BUSINESS_GROUPS`),
-resolved for the OBO user via an injected group lookup (SCIM/workspace-client — wire
-in prod). An explicit per-user allowlist (`ADJUSTER_USERS` / `BUSINESS_USERS`, comma
-emails) is supported for demos/pinning. A failed role lookup is a hard deny.
+**Role source:** an explicit **per-user allowlist** keyed on the authenticated
+caller's email — env `ADJUSTER_USERS` / `BUSINESS_USERS` (comma-separated). This is
+the **sole** role mechanism, and the config advertises nothing more. Group-based
+mapping is intentionally not wired: the typed experimental workspace-client
+`currentUser.me()` in this scaffold does not expose group membership, so a governed
+group lookup isn't available here — wiring one would risk a deploy whose config
+doesn't match enforcement. A caller matching no allowlist is **hard-denied**, and any
+unmapped `/api/*` route is denied by default (fail-closed).
 
 ## Authentication
 
@@ -100,8 +103,8 @@ app's own service principal, whose id is needed to grant Lakebase. Order:
      documented grants (`docs/evidence/serving-endpoint/README.md`) — a NEW grant.
 3. Enable **user authorization** with scopes `dashboards.genie` + `sql` (in
    `databricks.yml`, applied on deploy) so OBO works for Genie + the warehouse.
-4. Grant the two roles' groups (see `ADJUSTER_GROUPS`/`BUSINESS_GROUPS`) and wire the
-   group lookup, or set `ADJUSTER_USERS`/`BUSINESS_USERS` for the demo.
+4. Set the role allowlists `ADJUSTER_USERS` / `BUSINESS_USERS` (comma-separated
+   emails) — the sole role mechanism. Without them all guarded routes hard-deny.
 
 Steps 1–4 need the deployed app SP id and may need account-admin — they are the
 Stage-A STOP-AND-REPORT items (see `docs/evidence/copilot-app-backend/`).

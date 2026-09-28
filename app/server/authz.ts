@@ -11,12 +11,14 @@
  * decision/finalize/queue endpoints; Adjusters are DENIED the business-dashboard
  * data endpoint. Both roles may read claims history.
  *
- * ROLE SOURCE: Databricks group membership. The app is configured (env, injected
- * as an App resource / app.yaml value) with the group name that maps to each role;
- * `resolveRoleFromGroups` maps a caller's Databricks groups to a role. An explicit
- * per-user allowlist (env) is supported as an override for demos. The OBO user
- * identity (x-forwarded-email / x-forwarded-user) is the subject; role resolution
- * itself is a governed lookup, so it must run server-side.
+ * ROLE SOURCE: an explicit per-user allowlist keyed on the authenticated caller's
+ * email (env `ADJUSTER_USERS` / `BUSINESS_USERS`, comma-separated). The subject is
+ * the OBO user identity (`x-forwarded-email` / `x-forwarded-user`), so resolution is
+ * server-side. This is the SOLE role mechanism (see identity.ts). Group-based
+ * mapping is intentionally NOT wired: the typed workspace-client `currentUser.me()`
+ * in this scaffold does not expose group membership, so a governed group lookup is
+ * not available here; the config reflects only what actually enforces. A caller who
+ * matches no allowlist is hard-denied by default.
  */
 
 import type { Request, Response, NextFunction } from 'express';
@@ -66,36 +68,27 @@ export function actionForPath(method: string, path: string): Action | null {
   return null;
 }
 
-/**
- * Resolve a role from a caller's Databricks group memberships, given the
- * app-configured group names. Adjuster takes precedence if a caller is somehow in
- * both groups (least-surprising: the write-capable role is explicit and audited).
- * Returns null when the caller is in neither group.
- */
-export function resolveRoleFromGroups(
-  groups: readonly string[],
-  cfg: { adjusterGroups: readonly string[]; businessGroups: readonly string[] }
-): Role | null {
-  const set = new Set(groups.map((g) => g.toLowerCase()));
-  const inAdjuster = cfg.adjusterGroups.some((g) => set.has(g.toLowerCase()));
-  if (inAdjuster) return 'adjuster';
-  const inBusiness = cfg.businessGroups.some((g) => set.has(g.toLowerCase()));
-  if (inBusiness) return 'business_user';
-  return null;
-}
-
 /** A request-scoped role resolver. Injected so the middleware is unit-testable. */
 export type RoleResolver = (req: Request) => Promise<Role | null> | Role | null;
 
 /**
- * Express middleware enforcing the permission matrix on every guarded /api route.
- * Registered as a global `/api` guard so it runs before plugin-mounted routes.
- * Ungarded paths (null action) pass through. 403 on role/permission failure.
+ * Express middleware enforcing the permission matrix. Registered GLOBALLY (no mount
+ * prefix) in onPluginsReady so `req.path` is the full path and the guard runs before
+ * the deferred plugin-route mount — covering the Genie/analytics plugin routes too.
+ *
+ * Default-DENY: a request under `/api/` that maps to no known action is rejected
+ * (403), so a future endpoint added without a matrix entry cannot silently bypass
+ * authz. Non-API paths (static assets, `/health`) pass through untouched.
  */
 export function makeAuthz(resolveRole: RoleResolver) {
   return async function authz(req: Request, res: Response, next: NextFunction): Promise<void> {
     const action = actionForPath(req.method, req.path);
     if (action === null) {
+      if (req.path.startsWith('/api/')) {
+        // Unmapped API route — fail closed rather than leak an unguarded surface.
+        res.status(403).json({ error: 'forbidden', reason: 'unmapped_api_route' });
+        return;
+      }
       next();
       return;
     }

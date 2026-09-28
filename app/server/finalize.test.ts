@@ -169,7 +169,9 @@ describe('decisionRecordInsertSql', () => {
     // deterministic baseline columns are carried forward from the prior version.
     expect(text).toContain('deterministic_verdict, deterministic_disposition');
     expect(text).toContain('max(record_version) + 1');
-    expect(text).toContain('ON CONFLICT (adjudication_id, record_version) DO NOTHING');
+    // No ON CONFLICT: a version collision must fail the tx (caller asserts rowCount),
+    // never be silently swallowed.
+    expect(text).not.toContain('ON CONFLICT');
     expect(params).toEqual(['ADJ-1', 4000, false, 'APPROVE', 'CREDIT', 'a@x', 'goodwill']);
   });
 });
@@ -313,5 +315,22 @@ describe('runFinalize', () => {
     const result = await runFinalize(new FakePool(client), 'ADJ-x', confirmReq);
     expect(result.status).toBe('not_found');
     expect(client.didOutbox()).toBe(false);
+  });
+
+  it('rolls back the whole tx (no outbox, no commit) if the version insert writes zero rows', async () => {
+    // Simulate the human-final decision_record insert affecting zero rows (missing
+    // baseline or a version collision). The transaction MUST roll back so no FINAL
+    // adjudication is left without its audit version and no outbox event is emitted.
+    const client = new FakeClient((text) => {
+      if (/FOR UPDATE/.test(text)) return { rows: [RECOMMENDED_ROW], rowCount: 1 };
+      if (/UPDATE public\.adjudications/.test(text)) return { rows: [{ ...RECOMMENDED_ROW }], rowCount: 1 };
+      if (/INSERT INTO public\.adjudication_decision_records/.test(text)) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    });
+    await expect(runFinalize(new FakePool(client), 'ADJ-1', confirmReq)).rejects.toThrow(/version not written/);
+    expect(client.didOutbox()).toBe(false); // outbox insert never reached
+    expect(client.committed()).toBe(false); // never committed
+    expect(client.calls.some((c) => /^\s*ROLLBACK/.test(c.text))).toBe(true);
+    expect(client.released).toBe(true);
   });
 });

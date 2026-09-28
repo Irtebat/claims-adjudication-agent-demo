@@ -180,6 +180,11 @@ export function finalizeUpdateSql(
  * forward, overriding ONLY the human-decision columns and preserving the
  * deterministic baseline (deterministic_verdict/disposition, settlement, and every
  * other authored column) so the immutable audit shows both.
+ *
+ * No ON CONFLICT clause: the row-locked UPDATE guard in runFinalize serializes
+ * finalization so this insert runs at most once per adjudication, and the caller
+ * asserts rowCount === 1 — a record_version collision or missing baseline therefore
+ * fails the whole transaction rather than being silently swallowed.
  */
 export function decisionRecordInsertSql(
   adjudicationId: string,
@@ -226,8 +231,7 @@ export function decisionRecordInsertSql(
            FROM public.adjudication_decision_records
            WHERE adjudication_id = $1
            ORDER BY record_version DESC
-           LIMIT 1
-           ON CONFLICT (adjudication_id, record_version) DO NOTHING`,
+           LIMIT 1`,
     params: [
       adjudicationId,
       v.approvedAmount,
@@ -370,7 +374,17 @@ export async function runFinalize(
       decidedBy,
       overrideReason,
     });
-    await client.query(rec.text, rec.params);
+    const recWritten = await client.query(rec.text, rec.params);
+    if (recWritten.rowCount !== 1) {
+      // The immutable human-final version MUST be written for the finalization to be
+      // valid — otherwise we'd COMMIT a FINAL adjudication + outbox event with no
+      // audit version (an SCD2/audit-integrity hole). Zero rows here means either no
+      // baseline record to copy or a record_version collision; throw so the WHOLE
+      // transaction rolls back (no outbox emit, no FINAL flip).
+      throw new Error(
+        `finalize decision-record version not written for ${adjudicationId} (rowCount=${recWritten.rowCount})`
+      );
+    }
 
     const event = buildAdjudicatedEvent(
       adjudicationId,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Request, Response } from 'express';
-import { authorize, actionForPath, resolveRoleFromGroups, makeAuthz, type Role } from './authz';
+import { authorize, actionForPath, makeAuthz, type Role } from './authz';
 
 describe('permission matrix', () => {
   it('adjuster may queue/cockpit/finalize/history/copilot, not business surfaces', () => {
@@ -49,18 +49,6 @@ describe('actionForPath', () => {
   it('returns null for unguarded paths', () => {
     expect(actionForPath('GET', '/health')).toBeNull();
     expect(actionForPath('GET', '/assets/app.js')).toBeNull();
-  });
-});
-
-describe('resolveRoleFromGroups', () => {
-  const cfg = { adjusterGroups: ['claims-adjusters'], businessGroups: ['claims-business'] };
-  it('resolves adjuster and business from group membership (case-insensitive)', () => {
-    expect(resolveRoleFromGroups(['Claims-Adjusters'], cfg)).toBe('adjuster');
-    expect(resolveRoleFromGroups(['claims-business'], cfg)).toBe('business_user');
-  });
-  it('adjuster wins if in both; null if in neither', () => {
-    expect(resolveRoleFromGroups(['claims-adjusters', 'claims-business'], cfg)).toBe('adjuster');
-    expect(resolveRoleFromGroups(['some-other-group'], cfg)).toBeNull();
   });
 });
 
@@ -157,12 +145,22 @@ describe('makeAuthz middleware', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('passes through unguarded paths without resolving a role', async () => {
+  it('passes through non-API paths without resolving a role', async () => {
     const resolve = vi.fn(() => null);
     const res = mkRes();
     const next = vi.fn();
     await makeAuthz(resolve)(mkReq('GET', '/health'), res, next);
     expect(next).toHaveBeenCalledOnce();
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it('default-DENIES an unmapped /api/* route (fail closed), without resolving a role', async () => {
+    const resolve = vi.fn(() => 'adjuster' as Role);
+    const res = mkRes();
+    const next = vi.fn();
+    await makeAuthz(resolve)(mkReq('GET', '/api/some-new-endpoint'), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
     expect(resolve).not.toHaveBeenCalled();
   });
 });

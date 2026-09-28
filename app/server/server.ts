@@ -43,7 +43,9 @@ createApp({
     // mount so it guards custom routes AND the Genie/analytics plugin routes.
     const authz = makeAuthz(makeDatabricksRoleResolver());
     appkit.server.extend((app) => {
-      app.use('/api', authz);
+      // Global (no mount prefix) so req.path is the full path and the guard precedes
+      // the deferred plugin-route mount. Default-denies unmapped /api/* (see authz.ts).
+      app.use(authz);
     });
     registerRoutes(appkit);
   },
