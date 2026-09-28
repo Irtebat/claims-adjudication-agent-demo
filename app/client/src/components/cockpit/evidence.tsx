@@ -11,7 +11,7 @@
 
 import type { ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@databricks/appkit-ui/react';
-import { CheckCircle2, FileText, MinusCircle, ShieldCheck, XCircle } from 'lucide-react';
+import { CheckCircle2, FileText, MinusCircle, ShieldAlert, ShieldCheck, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EvidenceInfo } from '@/components/EvidenceTooltip';
 import { VerdictChip } from '@/components/StatusChip';
@@ -267,21 +267,33 @@ function ContextRow({ title, row }: { title: string; row: Record<string, unknown
 }
 
 export function ContextPanel({ context }: { context: CockpitContext }) {
-  const heatRisk = context.customer_heat_risk;
+  // Gate on the gold `high_risk` column: an alarming banner appears ONLY when it is strictly
+  // true (its `risk_reason` string is the explanation). A pairing that was assessed but not
+  // flagged gets a quiet, neutral marker instead — never the alarming treatment. Both fields
+  // are read defensively (they may be absent on rows predating the fraud workstream).
+  const chr = context.customer_heat_risk;
+  const highRisk = chr?.high_risk === true;
+  const riskReason = typeof chr?.risk_reason === 'string' ? chr.risk_reason : null;
+  const riskScore = chr?.risk_score;
   return (
     <div className="space-y-4">
-      {heatRisk && (
-        <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <div>
-            <p className="font-semibold">Heat-risk flag</p>
-            <p className="text-warning/90">
-              This customer + heat combination is flagged.{' '}
-              {scalar(heatRisk['risk_level'] ?? heatRisk['risk_score'] ?? '')}
-            </p>
+      {highRisk ? (
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/12 px-3 py-2 text-sm text-warning">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <p className="font-semibold">High fraud risk</p>
+            <p className="text-warning/90">{riskReason ?? 'This customer and heat form a flagged fraud cluster.'}</p>
           </div>
         </div>
-      )}
+      ) : chr ? (
+        <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <p className="font-medium text-foreground">Customer–heat risk assessed</p>
+            <p>Not flagged as high-risk{riskScore != null ? ` · risk ${pct(riskScore)}` : ''}.</p>
+          </div>
+        </div>
+      ) : null}
       <ContextRow title="Coil / heat" row={context.heats_coils} />
       <ContextRow title="Mill test certificate" row={context.mill_test_cert} />
       <ContextRow title="Customer" row={context.customer} />

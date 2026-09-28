@@ -170,7 +170,18 @@ export function cockpitDecisionRecordsSql(adjudicationId: string): Sql {
   };
 }
 
-/** Cockpit context: heat/coil, MTC, customer, and customer-heat risk for a claim. */
+/**
+ * Cockpit context: heat/coil, MTC, customer, and customer-heat risk for a claim.
+ *
+ * `customer_heat_risk` is selected as `to_jsonb(r)` over the WHOLE reference.customer_heat_risk
+ * row, which INCLUDES the gold/synced fraud columns `high_risk` (risk_score >= 0.6 AND
+ * cluster_size >= 3) and `risk_reason` that the parallel fraud-tuning workstream adds to that
+ * table. Reading them via the row projection — rather than naming the columns explicitly — is
+ * deliberately defensive: the query keeps working (and the client simply sees the fields
+ * absent) on any environment where those columns have not landed yet, instead of erroring on
+ * an unknown column. The cockpit gates the fraud chip on `high_risk === true` and renders
+ * `risk_reason` as its tooltip (see client types: CustomerHeatRisk).
+ */
 export function cockpitContextSql(coilId: string, customerId: string): Sql {
   return {
     text: `SELECT
@@ -181,6 +192,8 @@ export function cockpitContextSql(coilId: string, customerId: string): Sql {
                ORDER BY m.cert_date DESC NULLS LAST, m.cert_id DESC
                LIMIT 1) AS mill_test_cert,
              (SELECT to_jsonb(cu) FROM reference.customers cu WHERE cu.customer_id = $2) AS customer,
+             -- to_jsonb(r) carries high_risk + risk_reason when present (fraud workstream);
+             -- absent columns are simply omitted from the jsonb (read defensively client-side).
              (SELECT to_jsonb(r) FROM reference.customer_heat_risk r
                WHERE r.customer_id = $2
                  AND r.heat_no = (SELECT heat_no FROM reference.heats_coils WHERE coil_id = $1)

@@ -125,7 +125,7 @@ export function DataGrid<T>({
   return (
     <div className="overflow-auto rounded-lg border border-border bg-card">
       <Table aria-label={ariaLabel} className="text-sm">
-        <TableHeader className="sticky top-0 z-10 bg-secondary/80 backdrop-blur">
+        <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
           <TableRow className="border-border hover:bg-transparent">
             {columns.map((col) => {
               const active = sortKey === col.key;
@@ -135,7 +135,7 @@ export function DataGrid<T>({
                   key={col.key}
                   aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
                   className={cn(
-                    'h-9 px-4 text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground',
+                    'h-9 px-4 text-xs font-medium text-muted-foreground',
                     col.align === 'right' && 'text-right',
                     col.width,
                     col.headerClassName
@@ -185,10 +185,11 @@ export function DataGrid<T>({
                 onFocus={activatable ? () => setFocusedIndex(index) : undefined}
                 onKeyDown={activatable ? (e) => onRowKeyDown(e, index, row) : undefined}
                 className={cn(
-                  'border-border transition-colors',
+                  'border-border transition-colors duration-100',
                   activatable &&
-                    'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                  activeRowId === id && 'bg-accent'
+                    'cursor-pointer hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                  // Selected row: a subtle lift plus a thin inset indigo rail on the left.
+                  activeRowId === id && 'bg-accent shadow-[inset_2px_0_0_0_var(--db-accent)]'
                 )}
               >
                 {columns.map((col) => (

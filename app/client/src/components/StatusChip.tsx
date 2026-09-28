@@ -1,25 +1,28 @@
 /**
- * Compact status chips for the dense adjuster surfaces. Semantic color is reserved for
- * verdicts (approve/deny/investigate); lifecycle status and dispositions read as calm
- * neutrals so the queue doesn't turn into a wall of color. Chips are small, uppercase,
- * and use tabular caps so columns of them line up.
+ * Compact status chips for the dense adjuster surfaces, in the Linear idiom: small,
+ * hairline-outlined, tinted labels in normal case (not shouty caps), with tabular figures
+ * so columns of them line up. Semantic color is reserved for verdicts
+ * (approve/deny/investigate) and genuine risk; lifecycle status and dispositions read as
+ * calm neutrals so a queue never becomes a wall of color.
  */
 
 import type { ComponentProps } from 'react';
-import { Badge } from '@databricks/appkit-ui/react';
-import { AlertTriangle, Copy, ShieldAlert } from 'lucide-react';
+import { Badge, Tooltip, TooltipContent, TooltipTrigger } from '@databricks/appkit-ui/react';
+import { Copy, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { verdictLabel, dispositionLabel, titleCase } from '@/lib/format';
 import type { Str } from '@/lib/types';
 
-type Tone = 'approve' | 'deny' | 'investigate' | 'neutral' | 'attention';
+type Tone = 'approve' | 'deny' | 'investigate' | 'neutral' | 'attention' | 'risk';
 
 const TONE: Record<Tone, string> = {
-  approve: 'bg-success/10 text-success border-success/30',
-  deny: 'bg-destructive/10 text-destructive border-destructive/30',
-  investigate: 'bg-warning/12 text-warning border-warning/30',
-  attention: 'bg-warning/12 text-warning border-warning/30',
-  neutral: 'bg-secondary text-secondary-foreground border-border',
+  approve: 'border-success/30 bg-success/12 text-success',
+  deny: 'border-destructive/30 bg-destructive/12 text-destructive',
+  investigate: 'border-warning/30 bg-warning/12 text-warning',
+  attention: 'border-warning/30 bg-warning/12 text-warning',
+  // Risk is the strongest attention tone — the "gold" high-risk flag.
+  risk: 'border-warning/40 bg-warning/15 text-warning',
+  neutral: 'border-border bg-secondary text-secondary-foreground',
 };
 
 function Chip({ tone, className, ...props }: { tone: Tone } & ComponentProps<typeof Badge>) {
@@ -27,7 +30,7 @@ function Chip({ tone, className, ...props }: { tone: Tone } & ComponentProps<typ
     <Badge
       variant="outline"
       className={cn(
-        'gap-1 rounded-sm px-1.5 py-0 text-[0.68rem] font-semibold uppercase tracking-wide tabular-nums',
+        'gap-1 rounded-[5px] px-1.5 py-0 text-xs font-medium leading-5 tracking-normal tabular-nums',
         TONE[tone],
         className
       )}
@@ -76,31 +79,64 @@ export function DecisionStatusChip({ status, className }: { status: Str; classNa
   );
 }
 
-/** Small risk flags shown on the queue and cockpit (duplicate / heat / fraud). */
+/**
+ * Risk flags shown on the queue and cockpit header. Duplicate + fraud-cluster are simple
+ * neutral-attention markers. The HIGH-RISK chip is different: it appears only when the
+ * fraud workstream's `high_risk` gold column is strictly true, and it carries the
+ * `risk_reason` string as a hover tooltip (e.g. "Fraud cluster: 4 claims from 1 customer
+ * on heat H-4821 (concentration 0.80)."). Lower-risk claims get no alarming chip here.
+ */
 export function RiskFlags({
   duplicateOf,
   fraudCluster,
-  heatRisk,
+  highRisk,
+  riskReason,
   className,
 }: {
   duplicateOf?: Str;
   fraudCluster?: Str;
-  heatRisk?: boolean;
+  highRisk?: boolean;
+  riskReason?: Str;
   className?: string;
 }) {
-  const flags: { key: string; label: string; icon: typeof Copy }[] = [];
-  if (duplicateOf) flags.push({ key: 'dup', label: 'Duplicate', icon: Copy });
-  if (fraudCluster) flags.push({ key: 'fraud', label: 'Fraud cluster', icon: ShieldAlert });
-  if (heatRisk) flags.push({ key: 'heat', label: 'Heat risk', icon: AlertTriangle });
-  if (flags.length === 0) return null;
+  const hasAny = Boolean(duplicateOf || fraudCluster || highRisk);
+  if (!hasAny) return null;
   return (
     <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
-      {flags.map(({ key, label, icon: Icon }) => (
-        <Chip key={key} tone="attention">
-          <Icon className="h-3 w-3" aria-hidden />
-          {label}
+      {duplicateOf && (
+        <Chip tone="attention">
+          <Copy className="h-3 w-3" aria-hidden />
+          Duplicate
         </Chip>
-      ))}
+      )}
+      {fraudCluster && (
+        <Chip tone="attention">
+          <ShieldAlert className="h-3 w-3" aria-hidden />
+          Fraud cluster
+        </Chip>
+      )}
+      {highRisk &&
+        (riskReason ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                tabIndex={0}
+                className="rounded-[5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Chip tone="risk" className="cursor-help">
+                  <ShieldAlert className="h-3 w-3" aria-hidden />
+                  High risk
+                </Chip>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-pretty leading-relaxed">{riskReason}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Chip tone="risk">
+            <ShieldAlert className="h-3 w-3" aria-hidden />
+            High risk
+          </Chip>
+        ))}
     </span>
   );
 }

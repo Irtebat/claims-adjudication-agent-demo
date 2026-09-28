@@ -63,19 +63,20 @@ function NavList({ role, onNavigate }: { role: Role | null; onNavigate?: () => v
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
+              'flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors duration-100',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               isActive
-                ? 'bg-secondary text-foreground'
-                : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+                ? 'bg-sidebar-accent text-foreground'
+                : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground'
             )
           }
         >
           {({ isActive }) => (
             <>
+              {/* A thin indigo rail marks the active surface — the one earned accent in nav. */}
               <span
                 aria-hidden
-                className={cn('h-4 w-0.5 rounded-full', isActive ? 'bg-[var(--db-lava)]' : 'bg-transparent')}
+                className={cn('h-4 w-0.5 rounded-full', isActive ? 'bg-[var(--db-accent)]' : 'bg-transparent')}
               />
               <Icon className="h-4 w-4 shrink-0" aria-hidden />
               {label}

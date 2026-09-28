@@ -1,144 +1,168 @@
 @import '@databricks/appkit-ui/styles.css';
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..700;1,14..32,400..600&display=swap');
 
 /*
- * Databricks brand theming for the Steel Claims Cockpit.
+ * Linear-style theming for the Steel Claims Cockpit.
  *
- * The AppKit stylesheet (imported above) defines the shadcn design tokens and maps
- * every Tailwind color utility to `var(--<token>)` via its `@theme inline` block, so
- * overriding the raw tokens here re-skins the whole component library at once. We map
- * them to the official Databricks corporate palette:
- *   - Light  #F9F7F4  page surface        - Navy 900 #0B2026  text + primary
- *   - Oat    #EEEDE9  subtle fills          - Lava 600 #FF3621  the 10%-accent, EARNED
- * Lava is reserved for focus rings and a few high-signal moments (active nav, the
- * lead KPI, the heat-risk flag) — never as a general fill. Deny/danger uses Rose so it
- * reads as "serious" rather than borrowing the accent. Typography is DM Sans / DM Mono.
+ * The AppKit stylesheet (imported above) defines the shadcn design tokens and maps every
+ * Tailwind color utility to `var(--<token>)` via its `@theme inline` block, so overriding
+ * the raw tokens here re-skins the whole component library at once. We replace the former
+ * Databricks corporate palette with a Linear-inspired system (linear.app):
+ *   - canvas   #08090A  page background      - text    #F7F8F8  primary foreground
+ *   - surface  #0F1011  cards / panels        - muted   #8A8F98  secondary text
+ *   - hairline #23252A  1px separators        - indigo  #5E6AD2  interactive accent
+ * Indigo is spent ONLY on interactive intent — focus rings, selection, the active nav
+ * item, and the single primary action. Separation comes from hairline borders and subtle
+ * background lifts, never drop shadows. Deny/danger uses a calm red; investigate/risk uses
+ * a restrained amber. Typography is Inter (system monospace for ids/codes).
+ *
+ * The app is Linear-dark throughout. We bind the tokens under `:root:not(.light)` — the
+ * same shape and specificity AppKit uses for its own dark block, so ours wins by source
+ * order on every OS (not gated on prefers-color-scheme), giving one consistent dark theme.
  */
 
 @theme {
-  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
-:root {
-  /* Raw brand palette — referenced directly for the few earned accents. */
-  --db-lava: #ff3621;
-  --db-navy: #0b2026;
-  --db-oat: #f9f7f4;
-  --db-oat-medium: #eeede9;
+:root,
+:root:not(.light) {
+  color-scheme: dark;
 
+  /* Raw accents — referenced directly for the few earned, non-token moments. */
+  --db-accent: #5e6ad2; /* Linear indigo — interactive/selection/focus only */
+  --db-accent-strong: #6e79e0; /* hover shade for the indigo primary */
+
+  /* Corner radii: Linear's small, calm curvature — 4 / 6 / 8 / 12px off a 0.5rem base. */
   --radius: 0.5rem;
-  color-scheme: light;
 
-  --background: #f9f7f4;
-  --foreground: #0b2026;
-  --card: #ffffff;
-  --card-foreground: #0b2026;
-  --popover: #ffffff;
-  --popover-foreground: #0b2026;
-  --primary: #0b2026;
-  --primary-foreground: #f9f7f4;
-  --secondary: #eeede9;
-  --secondary-foreground: #0b2026;
-  --muted: #eeede9;
-  --muted-foreground: #55636d;
-  --accent: #eeede9;
-  --accent-foreground: #0b2026;
-  --destructive: #98102a;
+  /* Surfaces & text */
+  --background: #08090a; /* canvas */
+  --foreground: #f7f8f8; /* primary text */
+  --card: #0f1011; /* surface — panels, grids, cards */
+  --card-foreground: #f7f8f8;
+  --popover: #17181a; /* lifted — menus, tooltips, dropdowns */
+  --popover-foreground: #f7f8f8;
+
+  /* Primary = the indigo action. Reserved for the single primary button / brand mark. */
+  --primary: #5e6ad2;
+  --primary-foreground: #ffffff;
+
+  /* Secondary / muted / accent = quiet neutral lifts off the canvas. */
+  --secondary: #1c1c1f;
+  --secondary-foreground: #eceef1;
+  --muted: #151517;
+  --muted-foreground: #8a8f98; /* Linear's secondary/diminished text */
+  --accent: #1c1c1f; /* hover / active neutral fill */
+  --accent-foreground: #f7f8f8;
+
+  /* Semantic tones — tuned to read on the near-black canvas, used sparingly. */
+  --destructive: #f2555a; /* deny / danger */
   --destructive-foreground: #ffffff;
-  --success: #00795a;
-  --success-foreground: #ffffff;
-  --warning: #8a5a00;
-  --warning-foreground: #ffffff;
-  --border: #dcdfe4;
-  --input: #c4ccd6;
-  --ring: #ff3621;
+  --success: #4cb782; /* approve / covered */
+  --success-foreground: #06130d;
+  --warning: #e5a94e; /* investigate / risk — the "gold" attention tone */
+  --warning-foreground: #0b0a06;
 
-  /* Charts — Databricks categorical order, navy/teal-led with Lava as one voice. */
-  --chart-1: #0b2026;
-  --chart-2: #1b5162;
-  --chart-3: #ff3621;
-  --chart-4: #fbb300;
-  --chart-5: #4462c9;
-  --chart-6: #00a972;
-  --chart-7: #98102a;
-  --chart-8: #618794;
-  --chart-cat-1: #0b2026;
-  --chart-cat-2: #1b5162;
-  --chart-cat-3: #ff3621;
-  --chart-cat-4: #fbb300;
-  --chart-cat-5: #4462c9;
-  --chart-cat-6: #00a972;
-  --chart-cat-7: #98102a;
-  --chart-cat-8: #618794;
+  /* Lines & fields */
+  --border: #23252a; /* the hairline — primary separation device */
+  --input: #2a2b2e; /* field borders — a touch more present than a hairline */
+  --ring: #5e6ad2; /* focus ring — indigo */
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0b2026;
-  --sidebar-primary: #0b2026;
-  --sidebar-primary-foreground: #f9f7f4;
-  --sidebar-accent: #eeede9;
-  --sidebar-accent-foreground: #0b2026;
-  --sidebar-border: #dcdfe4;
-  --sidebar-ring: #ff3621;
-}
+  /* Charts — indigo-led categorical set on the dark canvas (AppKit chart surfaces). */
+  --chart-1: #5e6ad2;
+  --chart-2: #55cdff;
+  --chart-3: #4cb782;
+  --chart-4: #e5a94e;
+  --chart-5: #f79ce0;
+  --chart-6: #9aa0aa;
+  --chart-7: #f2555a;
+  --chart-8: #7c8cf8;
+  --chart-cat-1: #5e6ad2;
+  --chart-cat-2: #55cdff;
+  --chart-cat-3: #4cb782;
+  --chart-cat-4: #e5a94e;
+  --chart-cat-5: #f79ce0;
+  --chart-cat-6: #9aa0aa;
+  --chart-cat-7: #f2555a;
+  --chart-cat-8: #7c8cf8;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-
-    --background: #0b2026;
-    --foreground: #f5f3f0;
-    --card: #102c34;
-    --card-foreground: #f5f3f0;
-    --popover: #102c34;
-    --popover-foreground: #f5f3f0;
-    --primary: #f5f3f0;
-    --primary-foreground: #0b2026;
-    --secondary: #17333c;
-    --secondary-foreground: #f5f3f0;
-    --muted: #17333c;
-    --muted-foreground: #a7b4bd;
-    --accent: #17333c;
-    --accent-foreground: #f5f3f0;
-    --destructive: #e06a78;
-    --destructive-foreground: #1a0407;
-    --success: #34c88a;
-    --success-foreground: #052a1f;
-    --warning: #f5b72a;
-    --warning-foreground: #241a00;
-    --border: #294049;
-    --input: #33505a;
-    --ring: #ff6a4d;
-
-    --chart-1: #7fb0c0;
-    --chart-2: #4a9d8f;
-    --chart-3: #ff6a4d;
-    --chart-4: #fbb300;
-    --chart-5: #7f97e0;
-    --chart-6: #34c88a;
-    --chart-7: #e06a78;
-    --chart-8: #9fc0cc;
-
-    --sidebar: #0d2830;
-    --sidebar-foreground: #f5f3f0;
-    --sidebar-primary: #f5f3f0;
-    --sidebar-primary-foreground: #0b2026;
-    --sidebar-accent: #17333c;
-    --sidebar-accent-foreground: #f5f3f0;
-    --sidebar-border: #294049;
-    --sidebar-ring: #ff6a4d;
-  }
+  /* Sidebar rail — canvas-dark, set apart by a hairline and a faint lift. */
+  --sidebar: #0b0c0d;
+  --sidebar-foreground: #f7f8f8;
+  --sidebar-primary: #5e6ad2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #17181a;
+  --sidebar-accent-foreground: #f7f8f8;
+  --sidebar-border: #1b1d21;
+  --sidebar-ring: #5e6ad2;
 }
 
 body {
   font-family: var(--font-sans);
+  /* Inter contextual alternates + tighter tabular; the negative tracking is the Linear feel. */
   font-feature-settings:
     'cv05' 1,
     'ss01' 1;
+  letter-spacing: -0.011em;
+  background-color: var(--background);
+  color: var(--foreground);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* Tabular figures wherever numbers must line up (amounts, counts, IDs). */
+/* Headings carry Linear's slightly tighter tracking; sizes/weights live in components. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.018em;
+}
+
+/* Tabular figures wherever numbers must line up (amounts, counts, ids). */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* Thin, quiet scrollbars — Linear keeps chrome out of the way. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--border) 90%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Text selection in the interactive accent. */
+::selection {
+  background-color: color-mix(in oklab, var(--db-accent) 34%, transparent);
+  color: var(--foreground);
+}
+
+/* Honor reduced-motion: keep the UI still for users who ask for it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
