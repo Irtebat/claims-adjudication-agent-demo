@@ -1,0 +1,89 @@
+bundle:
+  name: steel-claims-demo
+
+variables:
+  catalog:
+    description: Unity Catalog
+    default: fe-bar-ir
+  count:
+    description: Number of synthetic claims to generate
+    default: "500"
+  seed:
+    description: Random seed for deterministic generation
+    default: "42"
+  mode:
+    description: Adjudication mode (serving_endpoint or in_process)
+    default: serving_endpoint
+  endpoint:
+    description: Lakebase endpoint (OAuth credential minted at runtime; no secret stored)
+    default: projects/fe-bar-operational-plane/branches/production/endpoints/primary
+  postgres_database:
+    description: Postgres database name
+    default: databricks_postgres
+
+resources:
+  jobs:
+    demo_backlog:
+      name: steel-claims-demo-backlog
+      description: |
+        Generate N fresh synthetic claims consistent with the label-pattern distribution
+        and run them through the adjudication agent to produce RECOMMENDED adjudications
+        in the adjuster queue.
+
+        The job:
+        1. Generates N synthetic claims with deterministic seed (consistent with
+           pipelines/src/generate.py label distribution)
+        2. Inserts them into Lakebase public.claims with data_provenance='synthetic_demo_backlog'
+        3. Runs each through the agent (serving endpoint or in-process) with persist=true
+           to produce RECOMMENDED adjudications
+        4. Populates the adjuster queue with recommended adjudications
+
+        Important: The recommendation write emits NO public.outbox row — the claim.adjudicated
+        event fan-out fires only on human finalization in the App.
+
+      max_concurrent_runs: 1
+
+      environments:
+        - environment_key: demo
+          spec:
+            client: "4"
+            dependencies:
+              - psycopg[binary]==3.2.10
+              - databricks-sdk>=0.81.0
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: count
+          default: ${var.count}
+        - name: seed
+          default: ${var.seed}
+        - name: mode
+          default: ${var.mode}
+        - name: endpoint
+          default: ${var.endpoint}
+        - name: postgres_database
+          default: ${var.postgres_database}
+
+      tasks:
+        - task_key: generate_and_adjudicate
+          environment_key: demo
+          notebook_task:
+            notebook_path: ./src/runner.py
+            base_parameters:
+              catalog: ${var.catalog}
+              count: ${var.count}
+              seed: ${var.seed}
+              mode: ${var.mode}
+              endpoint: ${var.endpoint}
+              postgres_database: ${var.postgres_database}
+          timeout_seconds: 7200
+          max_retries: 0
+
+targets:
+  prod:
+    default: true
+    mode: production
+    workspace:
+      profile: fe-bar
+      root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims-demo/prod
