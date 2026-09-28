@@ -1,0 +1,327 @@
+/**
+ * Claim Decision Cockpit — a near-full-screen modal opened from the Work Queue and from
+ * Claims History. It shows the persisted agent recommendation, the deterministic
+ * supporting sources, the cited clauses, and the coil/heat/customer context, alongside
+ * the Claim Copilot. RECOMMENDED claims get the decision form; already-FINAL claims are
+ * read-only and show who decided, when, and the diff from the recommendation (the
+ * finalize endpoint is idempotent, so this is a faithful record, not a second action).
+ */
+
+import { useEffect, useState } from 'react';
+import {
+  Badge,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@databricks/appkit-ui/react';
+import { CircleCheck, Clock, TriangleAlert, UserCheck } from 'lucide-react';
+import { getClaim, ApiError } from '@/lib/api';
+import { DASH, money, pct, shortDate, verdictLabel, dispositionLabel } from '@/lib/format';
+import type { ClaimDetail, DecisionRecord, FinalizeResult } from '@/lib/types';
+import { DecisionStatusChip, RiskFlags, VerdictChip, DispositionChip } from '@/components/StatusChip';
+import { MetaStat } from '@/components/PageHeader';
+import { ErrorState, LoadingPanel } from '@/components/States';
+import { SupportingSources, Citations, ContextPanel, SimilarClaims } from './evidence';
+import { CopilotPanel } from './CopilotPanel';
+import { DecisionForm } from './DecisionForm';
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2.5">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+/** The persisted agent recommendation — always shown, prominent. */
+function RecommendationHeader({ detail }: { detail: ClaimDetail }) {
+  const a = detail.adjudication;
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-4">
+      <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+        <span className="text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+          Recommended verdict
+        </span>
+        <div className="flex items-center gap-2">
+          <VerdictChip verdict={a.recommended_verdict} />
+          <DispositionChip disposition={a.recommended_disposition} />
+        </div>
+      </div>
+      <MetaStat label="Recommended amount" value={money(a.approved_amount)} />
+      <MetaStat label="Claimed" value={money(a.claimed_amount)} />
+      <MetaStat label="Confidence" value={pct(a.confidence)} />
+    </div>
+  );
+}
+
+function ClaimFacts({ detail }: { detail: ClaimDetail }) {
+  const a = detail.adjudication;
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-3 lg:grid-cols-4">
+      <MetaStat label="Claim type" value={a.claim_type ?? DASH} />
+      <MetaStat label="Defect" value={a.defect_code ?? DASH} />
+      <MetaStat label="Claim date" value={shortDate(a.claim_date)} />
+      <MetaStat label="Installed" value={shortDate(a.install_date)} />
+      <MetaStat label="Coil" value={<span className="font-mono">{a.coil_id ?? DASH}</span>} />
+      <MetaStat label="Customer" value={<span className="font-mono">{a.customer_id ?? DASH}</span>} />
+      <MetaStat label="Claimed tonnage" value={a.claimed_tonnage != null ? `${a.claimed_tonnage} t` : DASH} />
+      <MetaStat label="Environment" value={a.environment ?? DASH} />
+      {a.defect_narrative && (
+        <div className="col-span-2 sm:col-span-3 lg:col-span-4">
+          <span className="text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+            Defect narrative
+          </span>
+          <p className="mt-0.5 text-sm text-foreground">{a.defect_narrative}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A single rec → final change line for the diff. */
+function DiffLine({ label, from, to, changed }: { label: string; from: string; to: string; changed: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      {changed ? (
+        <span className="tabular-nums">
+          <span className="text-muted-foreground line-through">{from}</span>
+          <span className="mx-1.5 text-muted-foreground">→</span>
+          <span className="font-semibold text-foreground">{to}</span>
+        </span>
+      ) : (
+        <span className="font-medium text-foreground tabular-nums">{to}</span>
+      )}
+    </div>
+  );
+}
+
+/** Read-only summary for an already-finalized claim: who / what / when + the diff. */
+function FinalizedSummary({ detail }: { detail: ClaimDetail }) {
+  const a = detail.adjudication;
+  const records = detail.decision_records;
+  const finalRec: DecisionRecord | null = records.length ? records[records.length - 1] : null;
+  const baseRec: DecisionRecord | null = records.length ? records[0] : null;
+
+  const recVerdict = a.recommended_verdict;
+  const recDisposition = a.recommended_disposition;
+  const recAmount = baseRec?.approved_amount ?? null;
+  const finalVerdict = finalRec?.recommended_verdict ?? a.verdict;
+  const finalDisposition = finalRec?.recommended_disposition ?? a.disposition;
+  const finalAmount = a.approved_amount;
+
+  const overridden = Boolean(a.override_flag);
+  const verdictChanged = verdictLabel(finalVerdict) !== verdictLabel(recVerdict);
+  const dispChanged = dispositionLabel(finalDisposition) !== dispositionLabel(recDisposition);
+  const amountChanged = money(finalAmount) !== money(recAmount);
+
+  return (
+    <div className="space-y-3 p-4">
+      <div
+        className={`flex items-start gap-2 rounded-md border px-3 py-2 ${
+          overridden ? 'border-warning/30 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'
+        }`}
+      >
+        {overridden ? (
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        ) : (
+          <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        )}
+        <div>
+          <p className="text-sm font-semibold">
+            {overridden ? 'Finalized with override' : 'Finalized — accepted recommendation'}
+          </p>
+          <p className="text-xs opacity-90">
+            This claim is closed. The finalize action is idempotent and read-only here.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded-md border border-border bg-card p-3">
+        <DiffLine
+          label="Verdict"
+          from={verdictLabel(recVerdict)}
+          to={verdictLabel(finalVerdict)}
+          changed={verdictChanged}
+        />
+        <DiffLine
+          label="Disposition"
+          from={dispositionLabel(recDisposition)}
+          to={dispositionLabel(finalDisposition)}
+          changed={dispChanged}
+        />
+        <DiffLine label="Amount" from={money(recAmount)} to={money(finalAmount)} changed={amountChanged} />
+      </div>
+
+      <div className="space-y-1.5 text-sm">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <UserCheck className="h-4 w-4" aria-hidden />
+          Decided by <span className="font-medium text-foreground">{a.decided_by ?? DASH}</span>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Clock className="h-4 w-4" aria-hidden />
+          {shortDate(a.finalized_at)}
+        </div>
+      </div>
+
+      {overridden && a.override_reason && (
+        <div className="rounded-md border border-border bg-secondary/40 p-3">
+          <p className="mb-1 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+            Override reason
+          </p>
+          <p className="text-sm text-foreground">{a.override_reason}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ClaimCockpit({
+  claimId,
+  onClose,
+  onFinalized,
+}: {
+  claimId: string | null;
+  onClose: () => void;
+  onFinalized?: () => void;
+}) {
+  const [detail, setDetail] = useState<ClaimDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
+
+  useEffect(() => {
+    if (!claimId) return;
+    const ctrl = new AbortController();
+    let live = true;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      setNotFound(false);
+      try {
+        const d = await getClaim(claimId, ctrl.signal);
+        if (live) setDetail(d);
+      } catch (err: unknown) {
+        if (!live || ctrl.signal.aborted) return;
+        if (err instanceof ApiError && err.status === 404) setNotFound(true);
+        else setError(err instanceof Error ? err.message : 'Failed to load the claim');
+      } finally {
+        if (live) setLoading(false);
+      }
+    })();
+    return () => {
+      live = false;
+      ctrl.abort();
+    };
+  }, [claimId, reloadNonce]);
+
+  // The loaded detail is only "current" when it matches the open claim — this both
+  // prevents a stale flash when switching claims and avoids resetting state
+  // synchronously inside the effect.
+  const current = detail && detail.adjudication.claim_id === claimId ? detail : null;
+  const a = current?.adjudication;
+  const isFinal = a?.decision_status === 'FINAL';
+  const latestRecord: DecisionRecord | null =
+    current && current.decision_records.length ? current.decision_records[current.decision_records.length - 1] : null;
+  const heatRisk = Boolean(current?.context.customer_heat_risk);
+  const showLoading = Boolean(claimId) && (loading || (!current && !error && !notFound));
+
+  function handleFinalized(_result: FinalizeResult) {
+    onFinalized?.();
+    // Reload so the modal flips to the read-only, finalized view (who/what/when + diff).
+    setReloadNonce((n) => n + 1);
+  }
+
+  return (
+    <Dialog open={Boolean(claimId)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton
+        className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0"
+      >
+        <DialogHeader className="shrink-0 space-y-0 border-b border-border px-5 py-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pr-8">
+            <DialogTitle className="font-mono text-base">{claimId}</DialogTitle>
+            {a && (
+              <>
+                <Badge variant="outline" className="font-normal">
+                  {a.claim_type ?? 'Claim'}
+                </Badge>
+                <DecisionStatusChip status={a.decision_status} />
+                <RiskFlags
+                  duplicateOf={a.duplicate_of_claim_id}
+                  fraudCluster={a.fraud_cluster_id}
+                  heatRisk={heatRisk}
+                />
+              </>
+            )}
+          </div>
+          <DialogDescription className="sr-only">
+            Claim decision cockpit: recommendation, supporting evidence, context, and the decision.
+          </DialogDescription>
+        </DialogHeader>
+
+        {showLoading && (
+          <div className="flex-1 overflow-auto p-6">
+            <LoadingPanel lines={10} />
+          </div>
+        )}
+
+        {notFound && !showLoading && (
+          <div className="flex-1 p-6">
+            <ErrorState title="Claim not found" message={`No adjudication exists for ${claimId ?? 'this claim'}.`} />
+          </div>
+        )}
+
+        {error && !showLoading && (
+          <div className="flex-1 p-6">
+            <ErrorState message={error} onRetry={() => setReloadNonce((n) => n + 1)} />
+          </div>
+        )}
+
+        {current && a && !showLoading && !error && !notFound && (
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_420px]">
+            {/* Analysis (scrollable) */}
+            <div className="min-w-0 space-y-6 overflow-auto p-5">
+              <Section title="Agent recommendation">
+                <RecommendationHeader detail={current} />
+              </Section>
+              <Section title="Claim">
+                <ClaimFacts detail={current} />
+              </Section>
+              <Section title="Supporting sources">
+                <SupportingSources record={latestRecord} />
+              </Section>
+              <Section title="Citations">
+                <Citations record={latestRecord} />
+              </Section>
+              <Section title="Context">
+                <ContextPanel context={current.context} />
+              </Section>
+              <Section title="Similar prior claims">
+                <SimilarClaims claims={current.prior_claims} />
+              </Section>
+            </div>
+
+            {/* Decision + Copilot (fixed rail) */}
+            <div className="flex min-h-0 flex-col border-t border-border lg:border-l lg:border-t-0">
+              <div className="shrink-0 overflow-auto border-b border-border">
+                {isFinal ? (
+                  <FinalizedSummary detail={current} />
+                ) : (
+                  <div className="p-4">
+                    <DecisionForm adjudication={a} onFinalized={handleFinalized} />
+                  </div>
+                )}
+              </div>
+              <CopilotPanel claimId={a.claim_id} record={latestRecord} priorClaims={current.prior_claims} />
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

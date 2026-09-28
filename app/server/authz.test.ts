@@ -23,6 +23,12 @@ describe('permission matrix', () => {
     expect(authorize('business_user', 'cockpit_copilot')).toBe(false);
   });
 
+  it('both roles may read their own identity; a null role may not', () => {
+    expect(authorize('adjuster', 'identity')).toBe(true);
+    expect(authorize('business_user', 'identity')).toBe(true);
+    expect(authorize(null, 'identity')).toBe(false);
+  });
+
   it('a null role is denied everything', () => {
     expect(authorize(null, 'claims_history')).toBe(false);
     expect(authorize(null, 'queue')).toBe(false);
@@ -31,6 +37,7 @@ describe('permission matrix', () => {
 
 describe('actionForPath', () => {
   it('maps each guarded surface', () => {
+    expect(actionForPath('GET', '/api/whoami')).toBe('identity');
     expect(actionForPath('GET', '/api/queue')).toBe('queue');
     expect(actionForPath('GET', '/api/claims/CLM-1')).toBe('cockpit');
     expect(actionForPath('POST', '/api/claims/CLM-1/finalize')).toBe('finalize');
@@ -125,6 +132,24 @@ describe('makeAuthz middleware', () => {
       await makeAuthz(resolver(role))(mkReq('GET', '/api/history'), res, next);
       expect(next).toHaveBeenCalledOnce();
     }
+  });
+
+  it('allows both roles to read their own identity (/api/whoami)', async () => {
+    for (const role of ['adjuster', 'business_user'] as Role[]) {
+      const res = mkRes();
+      const next = vi.fn();
+      await makeAuthz(resolver(role))(mkReq('GET', '/api/whoami'), res, next);
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.statusCode).toBeUndefined();
+    }
+  });
+
+  it('denies /api/whoami to a no-role caller (403)', async () => {
+    const res = mkRes();
+    const next = vi.fn();
+    await makeAuthz(resolver(null))(mkReq('GET', '/api/whoami'), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
   });
 
   it('a no-role caller is denied a guarded route', async () => {
