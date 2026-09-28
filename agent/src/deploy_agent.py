@@ -37,7 +37,7 @@ def main() -> None:
             "DATABRICKS_HOST": workspace.config.host,
             "APP_SP_CLIENT_ID": "{{secrets/claims-agent/app-sp-client-id}}",
             "APP_SP_CLIENT_SECRET": "{{secrets/claims-agent/app-sp-client-secret}}",
-            "LAKEBASE_DB_USER": "{{secrets/claims-agent/app-sp-client-id}}",
+            "LAKEBASE_DB_USER": "{{secrets/claims-agent/lakebase-db-user}}",
         },
     )
     print(
