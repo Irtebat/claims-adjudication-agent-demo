@@ -5,9 +5,13 @@ in-spec-should-DENY, over-claim, duplicate, out-of-warranty, supplier-attributab
 fraud-cluster), runs the in-process agent (the same ``agent.py`` that is registered
 and deployed) on each, and proves the CORE PRINCIPLE: the LLM's recommendation
 never overrides an authority. It records, per claim, the recommendation vs the
-deterministic authority outputs and any invariant corrections; reads back the
-decision records written to Lakebase; and writes the evidence under
-``docs/evidence/claims-adjudication-agent/``.
+deterministic authority outputs and any invariant corrections, and writes the
+evidence under ``docs/evidence/claims-adjudication-agent/``.
+
+Validation runs the agent with ``persist=False`` — it must NEVER write adjudications
+to Lakebase. Persisting here would seed stray ``RECOMMENDED`` rows against the seeded
+FINAL sample claims and pollute the adjuster queue, so the proof is taken purely from
+the in-process outcome; nothing is read back from the database.
 
 Run with the reasoning endpoint reachable and ``DATABRICKS_CONFIG_PROFILE=fe-bar``;
 ``LAKEBASE_PROFILE=fe-bar`` selects the Lakebase workspace for the agent.
@@ -101,7 +105,10 @@ def run(profile: str, experiment: str, destination: Path) -> dict:
 
     results = []
     for pattern, claim in sample.items():
-        outcome = AGENT.adjudicate(claim, persist=True)
+        # persist=False: validation must never write adjudications to Lakebase (doing so
+        # would seed stray RECOMMENDED rows against the FINAL sample claims and pollute
+        # the adjuster queue). The proof is taken from the in-process outcome below.
+        outcome = AGENT.adjudicate(claim, persist=False)
         record = outcome["record"]
         det = outcome["deterministic"]
         # The proof: the persisted verdict/amount equal the deterministic authority's.
@@ -134,33 +141,16 @@ def run(profile: str, experiment: str, destination: Path) -> dict:
             }
         )
 
-    # Read back the decision records from Lakebase to prove the transactional write.
-    adjudication_ids = [r["adjudication_id"] for r in results]
-    written = []
-    with connect(profile=profile, autocommit=True) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT adjudication_id, claim_id, record_version, recommended_verdict, "
-                "approved_amount, duplicate_flag, over_claim_flag, "
-                "array_length(cited_clause_ids, 1) AS n_citations, "
-                "invariant_violations, schema_version "
-                "FROM adjudication_decision_records WHERE adjudication_id = ANY(%(ids)s) "
-                "ORDER BY adjudication_id",
-                {"ids": adjudication_ids},
-            )
-            columns = [d.name for d in cur.description]
-            written = [
-                {k: _num(v) for k, v in dict(zip(columns, row)).items()} for row in cur.fetchall()
-            ]
-
+    # No Lakebase readback: validation runs with persist=False, so nothing is written to
+    # read back. The authority-never-overridden proof comes from the in-process outcome
+    # (approved_amount vs the deterministic authority; duplicate never paid) captured above.
     summary = {
         "sample_size": len(results),
         "patterns": sorted(sample),
         "authority_never_overridden": all(r["authority_never_overridden"] for r in results),
         "llm_used_count": sum(1 for r in results if r["llm_used"]),
-        "decision_records_written": len(written),
+        "persisted": False,
         "results": results,
-        "decision_records_readback": written,
     }
     if set(sample) != set(PATTERN_SQL):
         missing = sorted(set(PATTERN_SQL) - set(sample))

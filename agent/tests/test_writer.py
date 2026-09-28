@@ -124,6 +124,27 @@ def test_no_outbox_row_written_at_recommendation_time(monkeypatch):
     assert "outbox_event_inserted" not in result
 
 
+def test_recommended_at_is_omitted_so_ddl_default_now_applies(monkeypatch):
+    """recommended_at must NOT be bound: omitting the column lets the DDL
+
+    `recommended_at timestamptz DEFAULT now()` fill it. Binding it (even as an explicit
+    NULL, the previous bug) overrides the default and leaves the recommendation timestamp
+    NULL — which then sorts unpredictably in the queue/cockpit. The written RECOMMENDED
+    row therefore gets a non-null recommended_at from the database default.
+    """
+    _patch_jsonb(monkeypatch)
+    conn = _Conn()
+    writer.write_adjudication(conn, _record())
+    adjudication_sql, adjudication_params = conn.cur.calls[0]
+    # The column is absent from the INSERT column list and from the bound params, so the
+    # DB default now() applies rather than an explicit value.
+    assert "recommended_at" not in adjudication_sql
+    assert "recommended_at" not in adjudication_params
+    # finalized_at (no default) is still bound NULL — set only at human finalization.
+    assert "finalized_at" in adjudication_params
+    assert adjudication_params["finalized_at"] is None
+
+
 def test_pend_verdict_maps_to_operational_pend(monkeypatch):
     _patch_jsonb(monkeypatch)
     conn = _Conn()

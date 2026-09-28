@@ -68,7 +68,10 @@ ADJUDICATION_COLUMNS = [
     "precedent",
     "idempotency_key",
     "decision_record_version",
-    "recommended_at",
+    # recommended_at is intentionally OMITTED from the INSERT so the DDL
+    # `DEFAULT now()` applies. Binding it (even as an explicit NULL) would override the
+    # default and leave the recommendation timestamp NULL. finalized_at stays NULL here —
+    # it has no default and is set only by the App's human-finalization transaction.
     "finalized_at",
     "duplicate_of_claim_id",
     "fraud_cluster_id",
@@ -137,7 +140,8 @@ def _adjudication_row(record: dict) -> dict:
         "precedent": _jsonb(record.get("precedent") or []),
         "idempotency_key": record["idempotency_key"],
         "decision_record_version": record["record_version"],
-        "recommended_at": None,  # DB default now() applies when omitted; explicit NULL is fine
+        # recommended_at deliberately not set here — omitted from ADJUDICATION_COLUMNS so
+        # the DDL `DEFAULT now()` fills it. (An explicit NULL would override the default.)
         "finalized_at": None,
         "duplicate_of_claim_id": (record.get("duplicate") or {}).get("duplicate_of_claim_id"),
         "fraud_cluster_id": advisory.get("cluster_id"),

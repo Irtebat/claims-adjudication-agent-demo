@@ -141,7 +141,13 @@ export function registerRoutes(appkit: CockpitAppKit): void {
     app.get('/api/claims/:id', async (req: Request, res: Response) => {
       try {
         const claimId = String(req.params.id);
-        const adjQ = cockpitAdjudicationSql(claimId);
+        // The queue/history row that opened the cockpit passes its exact adjudication_id
+        // so we open precisely the selected adjudication (a claim can have several). When
+        // absent (e.g. a direct link), cockpitAdjudicationSql falls back to its
+        // RECOMMENDED-first ordering.
+        const selectedAdjudicationId =
+          typeof req.query.adjudication_id === 'string' ? req.query.adjudication_id : undefined;
+        const adjQ = cockpitAdjudicationSql(claimId, selectedAdjudicationId);
         const adj = await lb.query(adjQ.text, adjQ.params);
         if (adj.rows.length === 0) {
           res.status(404).json({ error: 'claim_not_found' });

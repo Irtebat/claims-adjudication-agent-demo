@@ -51,7 +51,10 @@ export function WorkQueuePage() {
   const [disposition, setDisposition] = useState('all');
   const [risk, setRisk] = useState<RiskFilter>('all');
 
+  // Track the exact row the adjuster opened: its claim_id (drives the modal + DataGrid
+  // active row) and its adjudication_id (so the cockpit opens precisely that adjudication).
   const [openClaim, setOpenClaim] = useState<string | null>(null);
+  const [openAdjId, setOpenAdjId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -295,7 +298,10 @@ export function WorkQueuePage() {
           rows={filtered}
           columns={columns}
           getRowId={(r) => r.claim_id}
-          onRowActivate={(r) => setOpenClaim(r.claim_id)}
+          onRowActivate={(r) => {
+            setOpenClaim(r.claim_id);
+            setOpenAdjId(r.adjudication_id);
+          }}
           activeRowId={openClaim ?? undefined}
           initialSort={{ key: 'age', dir: 'desc' }}
           ariaLabel="Work queue"
@@ -304,7 +310,11 @@ export function WorkQueuePage() {
 
       <ClaimCockpit
         claimId={openClaim}
-        onClose={() => setOpenClaim(null)}
+        adjudicationId={openAdjId}
+        onClose={() => {
+          setOpenClaim(null);
+          setOpenAdjId(null);
+        }}
         onFinalized={() => setReloadNonce((n) => n + 1)}
       />
     </div>
