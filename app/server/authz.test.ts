@@ -9,18 +9,28 @@ describe('permission matrix', () => {
     expect(authorize('adjuster', 'finalize')).toBe(true);
     expect(authorize('adjuster', 'claims_history')).toBe(true);
     expect(authorize('adjuster', 'cockpit_copilot')).toBe(true);
+    expect(authorize('adjuster', 'history_chat')).toBe(true);
     expect(authorize('adjuster', 'business_dashboard')).toBe(false);
     expect(authorize('adjuster', 'business_chat')).toBe(false);
   });
 
-  it('business_user may business dashboard/chat + history, not adjuster surfaces', () => {
+  it('business_user may business dashboard/chat + history + history assistant, not adjuster surfaces', () => {
     expect(authorize('business_user', 'business_dashboard')).toBe(true);
     expect(authorize('business_user', 'business_chat')).toBe(true);
     expect(authorize('business_user', 'claims_history')).toBe(true);
+    // The operational Claims-History assistant is allowed to both roles...
+    expect(authorize('business_user', 'history_chat')).toBe(true);
     expect(authorize('business_user', 'queue')).toBe(false);
     expect(authorize('business_user', 'cockpit')).toBe(false);
     expect(authorize('business_user', 'finalize')).toBe(false);
+    // ...but the adjuster-only cockpit copilot is NOT widened by that.
     expect(authorize('business_user', 'cockpit_copilot')).toBe(false);
+  });
+
+  it('both roles may read their own identity; a null role may not', () => {
+    expect(authorize('adjuster', 'identity')).toBe(true);
+    expect(authorize('business_user', 'identity')).toBe(true);
+    expect(authorize(null, 'identity')).toBe(false);
   });
 
   it('a null role is denied everything', () => {
@@ -31,11 +41,13 @@ describe('permission matrix', () => {
 
 describe('actionForPath', () => {
   it('maps each guarded surface', () => {
+    expect(actionForPath('GET', '/api/whoami')).toBe('identity');
     expect(actionForPath('GET', '/api/queue')).toBe('queue');
     expect(actionForPath('GET', '/api/claims/CLM-1')).toBe('cockpit');
     expect(actionForPath('POST', '/api/claims/CLM-1/finalize')).toBe('finalize');
     expect(actionForPath('GET', '/api/history')).toBe('claims_history');
     expect(actionForPath('POST', '/api/genie/cockpit/messages')).toBe('cockpit_copilot');
+    expect(actionForPath('POST', '/api/genie/history/messages')).toBe('history_chat');
     expect(actionForPath('POST', '/api/genie/business/messages')).toBe('business_chat');
     expect(actionForPath('GET', '/api/business/dashboard')).toBe('business_dashboard');
     expect(actionForPath('GET', '/api/analytics/query')).toBe('business_dashboard');
@@ -125,6 +137,42 @@ describe('makeAuthz middleware', () => {
       await makeAuthz(resolver(role))(mkReq('GET', '/api/history'), res, next);
       expect(next).toHaveBeenCalledOnce();
     }
+  });
+
+  it('allows both roles the operational Claims-History assistant (/api/genie/history)', async () => {
+    for (const role of ['adjuster', 'business_user'] as Role[]) {
+      const res = mkRes();
+      const next = vi.fn();
+      await makeAuthz(resolver(role))(mkReq('POST', '/api/genie/history/messages'), res, next);
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.statusCode).toBeUndefined();
+    }
+  });
+
+  it('still denies a business user the adjuster-only cockpit copilot (/api/genie/cockpit)', async () => {
+    const res = mkRes();
+    const next = vi.fn();
+    await makeAuthz(resolver('business_user'))(mkReq('POST', '/api/genie/cockpit/messages'), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('allows both roles to read their own identity (/api/whoami)', async () => {
+    for (const role of ['adjuster', 'business_user'] as Role[]) {
+      const res = mkRes();
+      const next = vi.fn();
+      await makeAuthz(resolver(role))(mkReq('GET', '/api/whoami'), res, next);
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.statusCode).toBeUndefined();
+    }
+  });
+
+  it('denies /api/whoami to a no-role caller (403)', async () => {
+    const res = mkRes();
+    const next = vi.fn();
+    await makeAuthz(resolver(null))(mkReq('GET', '/api/whoami'), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
   });
 
   it('a no-role caller is denied a guarded route', async () => {

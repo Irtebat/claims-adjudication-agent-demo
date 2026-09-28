@@ -25,18 +25,38 @@ import type { Request, Response, NextFunction } from 'express';
 export type Role = 'adjuster' | 'business_user';
 
 export type Action =
+  | 'identity'
   | 'queue'
   | 'cockpit'
   | 'finalize'
   | 'claims_history'
   | 'cockpit_copilot'
+  | 'history_chat'
   | 'business_dashboard'
   | 'business_chat';
 
-/** The permission matrix — the single source of truth for role → allowed actions. */
+/**
+ * The permission matrix — the single source of truth for role → allowed actions.
+ * `identity` (the /api/whoami echo of the caller's own resolved role) is allowed to
+ * BOTH roles; it exposes nothing beyond who the caller already is.
+ *
+ * `history_chat` is the OPERATIONAL Genie assistant scoped to the Claims-History
+ * surface. It is allowed to BOTH roles (everyone who can see Claims History), and is
+ * DISTINCT from `cockpit_copilot` so exposing it to Business Users does not widen the
+ * adjuster-only cockpit copilot. Both run OBO, so answers still respect each caller's
+ * own Unity Catalog grants.
+ */
 export const PERMISSIONS: Record<Role, ReadonlySet<Action>> = {
-  adjuster: new Set<Action>(['queue', 'cockpit', 'finalize', 'claims_history', 'cockpit_copilot']),
-  business_user: new Set<Action>(['business_dashboard', 'business_chat', 'claims_history']),
+  adjuster: new Set<Action>([
+    'identity',
+    'queue',
+    'cockpit',
+    'finalize',
+    'claims_history',
+    'cockpit_copilot',
+    'history_chat',
+  ]),
+  business_user: new Set<Action>(['identity', 'business_dashboard', 'business_chat', 'claims_history', 'history_chat']),
 };
 
 /** True iff `role` may perform `action`. Pure. */
@@ -52,13 +72,17 @@ export function authorize(role: Role | null, action: Action): boolean {
  */
 export function actionForPath(method: string, path: string): Action | null {
   const p = path.replace(/\/+$/, '');
+  // The signed-in caller reading back their own identity + resolved role (both roles).
+  if (p === '/api/whoami') return 'identity';
   if (p === '/api/queue') return 'queue';
   if (/^\/api\/claims\/[^/]+\/finalize$/.test(p) && method === 'POST') return 'finalize';
   if (/^\/api\/claims\/[^/]+$/.test(p) && method === 'GET') return 'cockpit';
   if (p === '/api/history') return 'claims_history';
   // Genie surfaces are auto-mounted by the plugin under /api/genie/:alias/... —
   // guard them by alias so a Business User cannot reach the cockpit copilot and an
-  // Adjuster cannot reach the business chat.
+  // Adjuster cannot reach the business chat. The `history` alias (operational space,
+  // both roles) is separate from `cockpit` (operational space, adjuster only).
+  if (p.startsWith('/api/genie/history')) return 'history_chat';
   if (p.startsWith('/api/genie/cockpit')) return 'cockpit_copilot';
   if (p.startsWith('/api/genie/business')) return 'business_chat';
   if (p.startsWith('/api/business/dashboard')) return 'business_dashboard';
@@ -108,6 +132,10 @@ export function makeAuthz(resolveRole: RoleResolver) {
       });
       return;
     }
+    // Expose the resolved role to downstream handlers (e.g. /api/whoami) so they need
+    // not re-run the SCIM lookup. `res.locals` is always present under Express; the
+    // guard keeps the middleware usable with the lightweight test mocks.
+    if (res.locals) (res.locals as Record<string, unknown>).role = role;
     next();
   };
 }

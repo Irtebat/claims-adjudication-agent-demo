@@ -8,3 +8,8 @@ env:
     valueFrom: genie-space-business
   - name: LAKEBASE_ENDPOINT
     valueFrom: postgres
+  # Governed AI/BI dashboard embedded on the Business-Leader surface. Embedding also
+  # requires the deployed app's domain on the workspace AI/BI embedding approved-domains
+  # allowlist; until then the app shows an open-in-Databricks fallback.
+  - name: DATABRICKS_DASHBOARD_ID
+    value: '01f1bac220111001a171872b5185e8e6'

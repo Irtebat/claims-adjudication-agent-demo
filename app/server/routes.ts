@@ -15,7 +15,8 @@
 
 import { z } from 'zod';
 import type { Application, Request, Response } from 'express';
-import { decidedBy } from './identity';
+import { decidedBy, getUserIdentity } from './identity';
+import type { Role } from './authz';
 import { runFinalize, type Pool } from './finalize';
 import {
   queueSql,
@@ -49,6 +50,23 @@ function asText(v: unknown): string {
   return '';
 }
 
+/** The gold AI/BI dashboard embedded on the business surface (overridable via env). */
+const DASHBOARD_ID = process.env.DATABRICKS_DASHBOARD_ID ?? '01f1bac220111001a171872b5185e8e6';
+
+/** Normalize the workspace host the Apps runtime injects to `https://<host>` (no slash). */
+function workspaceHost(): string | null {
+  const raw = (process.env.DATABRICKS_HOST ?? '').trim();
+  if (!raw) return null;
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withScheme.replace(/\/+$/, '');
+}
+
+/** The AI/BI dashboard embed URL, or null when the host is not yet known (local dev). */
+function dashboardEmbedUrl(): string | null {
+  const host = workspaceHost();
+  return host ? `${host}/embed/dashboardsv3/${DASHBOARD_ID}` : null;
+}
+
 function listFilters(req: Request): ListFilters {
   const q = req.query;
   const str = (k: string): string | undefined => (typeof q[k] === 'string' ? q[k] : undefined);
@@ -71,6 +89,15 @@ export function registerRoutes(appkit: CockpitAppKit): void {
   const lb = appkit.lakebase;
 
   appkit.server.extend((app: Application) => {
+    // (0) Identity echo — the signed-in user + the role the authz guard resolved for
+    // them (stashed on res.locals). The client uses this only to shape navigation;
+    // every route below independently re-enforces the permission matrix.
+    app.get('/api/whoami', (req: Request, res: Response) => {
+      const { email, user } = getUserIdentity(req);
+      const role = (res.locals as { role?: Role | null }).role ?? null;
+      res.json({ email, user, role });
+    });
+
     // (a) Adjuster queue — RECOMMENDED adjudications joined to their claim.
     app.get('/api/queue', async (req: Request, res: Response) => {
       try {
@@ -179,14 +206,19 @@ export function registerRoutes(appkit: CockpitAppKit): void {
       }
     });
 
-    // (f) Business dashboard — the tabular data is served by the analytics plugin's
-    // config/queries (governed warehouse), and the chat by the Genie 'business'
-    // alias; both are behind the authz guard. This endpoint surfaces the wiring so
-    // the business dashboard has an explicit, role-guarded backend contract.
+    // (f) Business dashboard — wiring for the Business-User surface (this endpoint is
+    // mapped to the `business_dashboard` action, so Adjusters are denied it). It returns
+    // the embed URL for the governed AI/BI dashboard and the Genie alias for the gold
+    // analytics chat (OBO). `embeddable` is false until the workspace host is known
+    // (local dev) OR when embedding must still be enabled workspace-side; the client
+    // falls back to an open-in-Databricks link in that case.
     app.get('/api/business/dashboard', (_req: Request, res: Response) => {
+      const embedUrl = dashboardEmbedUrl();
       res.json({
-        analytics_query_keys: ['business_kpis'],
         genie_chat_alias: 'business',
+        dashboard_id: DASHBOARD_ID,
+        embed_url: embedUrl,
+        embeddable: Boolean(embedUrl),
       });
     });
   });

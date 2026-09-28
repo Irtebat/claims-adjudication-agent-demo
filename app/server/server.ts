@@ -31,7 +31,13 @@ createApp({
     analytics(),
     genie({
       spaces: {
+        // `cockpit` and `history` both resolve to the OPERATIONAL space: the cockpit
+        // copilot (adjuster-only) and the Claims-History assistant (both roles) ask
+        // claim-level operational questions. They are separate aliases so authz can
+        // expose `history` to Business Users WITHOUT widening the adjuster-only cockpit
+        // copilot. `business` is the gold-analytics space for the dashboard chat only.
         cockpit: OPERATIONAL_GENIE_SPACE,
+        history: OPERATIONAL_GENIE_SPACE,
         business: BUSINESS_GENIE_SPACE,
       },
     }),

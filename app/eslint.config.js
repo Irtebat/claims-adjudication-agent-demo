@@ -16,6 +16,11 @@ export default tseslint.config(
       '**/coverage/**',
       'client/dist/**',
       '**.databricks/**',
+      // AppKit-generated type stubs (marked DO NOT EDIT). `appkit generate-types`
+      // always imports the full SQL marker set and emits an empty MetricRegistry when
+      // no metric views are defined, which trips no-unused-vars / no-empty-object-type;
+      // generated declaration files are not hand-maintained, so they are not linted.
+      'shared/appkit-types/**',
     ],
   },
 

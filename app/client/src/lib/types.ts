@@ -1,0 +1,233 @@
+/**
+ * Client-side view of the Stage-A backend payloads (server/routes.ts + server/sql.ts).
+ *
+ * Lakebase numeric/timestamp columns arrive over node-postgres as strings (numeric) or
+ * numbers depending on type, so money/score/date fields are typed `Num`/`Str` and are
+ * always coerced through lib/format.ts rather than trusted as a specific JS type. jsonb
+ * evidence structs mirror the shapes frozen in the gold decision-record transform
+ * (pipelines/src/transformations/gold_adjudication_decision_records.py).
+ */
+
+/** A numeric column that may arrive as number or string (pg `numeric`), or be null. */
+export type Num = number | string | null;
+/** A text/timestamp column that may be null. */
+export type Str = string | null;
+
+export type Role = 'adjuster' | 'business_user';
+
+export type Verdict = 'APPROVE' | 'DENY' | 'PEND_INVESTIGATE';
+/** The operational adjudications.verdict value (PEND_INVESTIGATE collapses to PEND). */
+export type OperationalVerdict = 'APPROVE' | 'DENY' | 'PEND';
+export type DecisionStatus = 'RECOMMENDED' | 'FINAL';
+
+export interface Whoami {
+  email: Str;
+  user: Str;
+  role: Role | null;
+}
+
+/** One row of the adjuster work queue (`GET /api/queue`). */
+export interface QueueItem {
+  adjudication_id: string;
+  claim_id: string;
+  customer_id: Str;
+  claim_type: Str;
+  claim_date: Str;
+  defect_code: Str;
+  defect_narrative: Str;
+  claimed_tonnage: Num;
+  claimed_freight: Num;
+  verdict: Str;
+  recommended_verdict: Str;
+  recommended_disposition: Str;
+  approved_amount: Num;
+  claimed_amount: Num;
+  confidence: Num;
+  duplicate_of_claim_id: Str;
+  fraud_cluster_id: Str;
+  supplier_attributable: boolean | null;
+  recommended_at: Str;
+}
+
+/** One row of claims history (`GET /api/history`, FINAL adjudications). */
+export interface HistoryItem {
+  adjudication_id: string;
+  claim_id: string;
+  customer_id: Str;
+  claim_type: Str;
+  claim_date: Str;
+  defect_code: Str;
+  verdict: Str;
+  disposition: Str;
+  approved_amount: Num;
+  claimed_amount: Num;
+  override_flag: boolean | null;
+  override_reason: Str;
+  decided_by: Str;
+  finalized_at: Str;
+  recommended_verdict: Str;
+  recommended_disposition: Str;
+}
+
+/** The current adjudication for one claim (`a.*` joined to the claim columns). */
+export interface Adjudication {
+  adjudication_id: string;
+  claim_id: string;
+  decision_status: DecisionStatus;
+  verdict: Str;
+  disposition: Str;
+  recommended_verdict: Str;
+  recommended_disposition: Str;
+  approved_amount: Num;
+  claimed_amount: Num;
+  confidence: Num;
+  override_flag: boolean | null;
+  override_reason: Str;
+  decided_by: Str;
+  recommended_at: Str;
+  finalized_at: Str;
+  duplicate_of_claim_id: Str;
+  fraud_cluster_id: Str;
+  supplier_attributable: boolean | null;
+  recovery_supplier_id: Str;
+  // Claim columns joined in cockpitAdjudicationSql.
+  coil_id: Str;
+  customer_id: Str;
+  claim_type: Str;
+  claim_date: Str;
+  install_date: Str;
+  environment: Str;
+  installation: Str;
+  coast_distance_km: Num;
+  defect_code: Str;
+  defect_narrative: Str;
+  claimed_tonnage: Num;
+  claimed_freight: Num;
+}
+
+// --- Deterministic evidence structs (frozen jsonb shapes) --------------------
+
+export interface ConformanceEvidence {
+  conforms: boolean;
+  nonconforming_properties: string[];
+}
+export interface CoverageEvidence {
+  covered: boolean;
+  elapsed_months: number;
+  proration_factor: number;
+  exclusions_hit: string[];
+}
+export interface SettlementEvidence {
+  approved_amount: number;
+  claimed_amount: number;
+  covered_tonnage: number;
+  freight_amount: number;
+  freight_covered: boolean;
+  over_claim_detected: boolean;
+  is_partial: boolean;
+}
+export interface DuplicateEvidence {
+  is_duplicate: boolean;
+  duplicate_of_claim_id: Str;
+  narrative_similarity: number;
+  candidates_considered: number;
+}
+export interface Citation {
+  citation_key: string;
+  section_ref: string;
+  clause_text_sha256: Str;
+}
+export interface PrecedentRef {
+  claim_id: string;
+  verdict: Str;
+  approved_amount: Num;
+  rrf_score: Num;
+}
+
+/** One immutable decision-record version (`GET /api/claims/:id` -> decision_records). */
+export interface DecisionRecord {
+  record_version: number;
+  deterministic_verdict: Str;
+  deterministic_disposition: Str;
+  recommended_verdict: Str;
+  recommended_disposition: Str;
+  approved_amount: Num;
+  over_claim_flag: boolean | null;
+  duplicate_flag: boolean | null;
+  conformance: ConformanceEvidence | null;
+  coverage: CoverageEvidence | null;
+  settlement: SettlementEvidence | null;
+  duplicate: DuplicateEvidence | null;
+  citations: Citation[] | null;
+  cited_clause_ids: string[] | null;
+  precedent: PrecedentRef[] | null;
+  advisory_risk: Record<string, unknown> | null;
+  rationale: Str;
+  confidence: Num;
+  invariant_violations: string[] | null;
+  decided_by: Str;
+  override_reason: Str;
+  created_at: Str;
+}
+
+/** A prior claim referenced as precedent (`GET /api/claims/:id` -> prior_claims). */
+export interface PriorClaim {
+  claim_id: string;
+  coil_id: Str;
+  grade: Str;
+  coating_class: Str;
+  defect_code: Str;
+  defect_narrative: Str;
+  claim_date: Str;
+  verdict: Str;
+  approved_amount: Num;
+}
+
+/** Cockpit context: coil/heat, MTC, customer, and customer-heat risk (jsonb rows). */
+export interface CockpitContext {
+  heats_coils: Record<string, unknown> | null;
+  mill_test_cert: Record<string, unknown> | null;
+  customer: Record<string, unknown> | null;
+  customer_heat_risk: Record<string, unknown> | null;
+}
+
+/** The full cockpit detail payload (`GET /api/claims/:id`). */
+export interface ClaimDetail {
+  adjudication: Adjudication;
+  decision_records: DecisionRecord[];
+  context: CockpitContext;
+  prior_claims: PriorClaim[];
+}
+
+// --- Finalize ----------------------------------------------------------------
+
+export interface FinalizeBody {
+  final_verdict: Verdict;
+  final_disposition: string;
+  approved_amount: number;
+  override_reason?: string | null;
+}
+
+export type FinalizeResult =
+  | { status: 'finalized'; adjudicationId: string; decidedBy: string; overrideFlag: boolean; eventId: string }
+  | { status: 'already_final'; adjudicationId: string }
+  | { status: 'not_found'; adjudicationId: string }
+  | { status: 'invalid'; adjudicationId: string; errors: string[] };
+
+/** Business dashboard wiring (`GET /api/business/dashboard`). */
+export interface BusinessDashboardConfig {
+  genie_chat_alias: string;
+  dashboard_id: Str;
+  embed_url: Str;
+  embeddable: boolean;
+}
+
+export interface ListFilters {
+  claim_type?: string;
+  customer_id?: string;
+  verdict?: string;
+  sort?: string;
+  order?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
