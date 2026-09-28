@@ -1,9 +1,17 @@
 /**
  * Claims History — finalized claims (decision_status FINAL), visible to both roles. A
- * dense, sortable/filterable table of decisions of record; a row opens the Claim
- * Cockpit in its read-only, finalized view. A role-aware Genie panel answers
- * natural-language questions about past claims (OBO): adjusters use the operational
- * space, business users the gold analytics space — the two the server permits per role.
+ * dense, sortable/filterable table of decisions of record.
+ *
+ * Row drill-in is ADJUSTER-ONLY: activating a row opens the Claim Cockpit (GET
+ * /api/claims/:id, an adjuster-only surface) in its read-only, finalized view. Business
+ * Users get the list + assistant only — rows are not activatable for them, so no offered
+ * interaction leads to a server 403 and the adjudication detail is never exposed.
+ *
+ * The Genie panel answers claim-level questions about past claims via the OPERATIONAL
+ * Genie space (OBO) for BOTH roles — history questions are operational, not gold
+ * analytics. It is a distinct `history` alias from the adjuster-only cockpit copilot, so
+ * the server can permit it to both roles without widening the cockpit copilot. (The gold
+ * analytics space stays on the Business dashboard chat.)
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -195,8 +203,11 @@ export function ClaimsHistoryPage() {
     },
   ];
 
-  const assistantAlias = role === 'business_user' ? 'business' : 'cockpit';
-  const assistantSpace = role === 'business_user' ? 'Gold analytics Genie space' : 'Operational Genie space';
+  // Claim-level history Q&A is operational for both roles (distinct `history` alias,
+  // permitted to Adjuster + Business server-side). Only Adjusters may drill into a claim.
+  const assistantAlias = 'history';
+  const assistantSpace = 'Operational Genie space';
+  const canOpenCockpit = role === 'adjuster';
 
   return (
     <div className="space-y-4">
@@ -306,8 +317,10 @@ export function ClaimsHistoryPage() {
               rows={filtered}
               columns={columns}
               getRowId={(r) => r.claim_id}
-              onRowActivate={(r) => setOpenClaim(r.claim_id)}
-              activeRowId={openClaim ?? undefined}
+              // Adjuster-only drill-in. Business Users get a read-only list (no
+              // activatable rows) so no offered action hits the adjuster-only cockpit.
+              onRowActivate={canOpenCockpit ? (r) => setOpenClaim(r.claim_id) : undefined}
+              activeRowId={canOpenCockpit ? (openClaim ?? undefined) : undefined}
               initialSort={{ key: 'finalized', dir: 'desc' }}
               ariaLabel="Claims history"
             />
@@ -332,11 +345,14 @@ export function ClaimsHistoryPage() {
         </aside>
       </div>
 
-      <ClaimCockpit
-        claimId={openClaim}
-        onClose={() => setOpenClaim(null)}
-        onFinalized={() => setReloadNonce((n) => n + 1)}
-      />
+      {/* The cockpit is an adjuster-only surface; never mount it for Business Users. */}
+      {canOpenCockpit && (
+        <ClaimCockpit
+          claimId={openClaim}
+          onClose={() => setOpenClaim(null)}
+          onFinalized={() => setReloadNonce((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }

@@ -39,6 +39,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /** The persisted agent recommendation — always shown, prominent. */
 function RecommendationHeader({ detail }: { detail: ClaimDetail }) {
   const a = detail.adjudication;
+  // The recommended amount is the ORIGINAL persisted decision record's amount, not the
+  // adjudication's approved_amount — the latter is overwritten on an amount override and
+  // would misrepresent what the agent recommended. The recommended verdict/disposition
+  // are stored on the adjudication as the recommendation and are not overwritten.
+  const baseRec = detail.decision_records[0] ?? null;
+  const recommendedAmount = baseRec?.approved_amount ?? a.approved_amount;
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-4">
       <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
@@ -50,7 +56,7 @@ function RecommendationHeader({ detail }: { detail: ClaimDetail }) {
           <DispositionChip disposition={a.recommended_disposition} />
         </div>
       </div>
-      <MetaStat label="Recommended amount" value={money(a.approved_amount)} />
+      <MetaStat label="Recommended amount" value={money(recommendedAmount)} />
       <MetaStat label="Claimed" value={money(a.claimed_amount)} />
       <MetaStat label="Confidence" value={pct(a.confidence)} />
     </div>

@@ -51,6 +51,9 @@ export function DataGrid<T>({
 }: DataGridProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(initialSort?.key ?? null);
   const [sortDir, setSortDir] = useState<SortDir>(initialSort?.dir ?? 'desc');
+  // Roving tabindex: exactly one row is in the tab order at a time (the last-focused
+  // one), so Tab enters the grid once and arrow keys move within it.
+  const [focusedIndex, setFocusedIndex] = useState(0);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
 
   const sorted = useMemo(() => {
@@ -115,6 +118,10 @@ export function DataGrid<T>({
     }
   }
 
+  // Which row currently holds the tab stop. Clamp so a sort/filter that shrinks the set
+  // never strands the tab stop on a removed row.
+  const rovingIndex = focusedIndex < sorted.length ? focusedIndex : 0;
+
   return (
     <div className="overflow-auto rounded-lg border border-border bg-card">
       <Table aria-label={ariaLabel} className="text-sm">
@@ -172,9 +179,10 @@ export function DataGrid<T>({
                 key={id}
                 data-grid-row
                 data-active={activeRowId === id ? '' : undefined}
-                tabIndex={activatable ? 0 : undefined}
+                tabIndex={activatable ? (index === rovingIndex ? 0 : -1) : undefined}
                 role={activatable ? 'button' : undefined}
                 onClick={activatable ? () => onRowActivate?.(row) : undefined}
+                onFocus={activatable ? () => setFocusedIndex(index) : undefined}
                 onKeyDown={activatable ? (e) => onRowKeyDown(e, index, row) : undefined}
                 className={cn(
                   'border-border transition-colors',

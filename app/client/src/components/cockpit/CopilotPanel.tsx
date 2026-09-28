@@ -10,7 +10,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@databricks/appkit-ui/react';
 import { pct } from '@/lib/format';
 import { GenieAssistant } from '@/components/GenieAssistant';
-import { useRole } from '@/components/whoami';
 import { EmptyState, InlineNotice } from '@/components/States';
 import { SimilarClaims } from './evidence';
 import type { DecisionRecord, PriorClaim } from '@/lib/types';
@@ -25,13 +24,11 @@ export function CopilotPanel({
   priorClaims: PriorClaim[];
 }) {
   const violations = record?.invariant_violations ?? [];
-  // Pick the Genie space the caller's role is permitted to reach: adjusters use the
-  // operational cockpit space; business users use the gold analytics space. This keeps
-  // the copilot usable when a business user opens a finalized claim from history without
-  // tripping the server's per-alias authorization.
-  const role = useRole();
-  const alias = role === 'business_user' ? 'business' : 'cockpit';
-  const spaceLabel = role === 'business_user' ? 'Gold analytics Genie space' : 'Operational Genie space';
+  // The cockpit is an adjuster-only surface, so the copilot always talks to the
+  // operational Genie space (the adjuster-only `cockpit` alias). Business Users never
+  // reach the cockpit — Claims History offers them the list + `history` assistant only.
+  const alias = 'cockpit';
+  const spaceLabel = 'Operational Genie space';
   return (
     <Tabs defaultValue="ask" className="flex min-h-0 flex-1 flex-col gap-0">
       <TabsList className="mx-3 mt-3 w-[calc(100%-1.5rem)] shrink-0">

@@ -31,6 +31,7 @@ export type Action =
   | 'finalize'
   | 'claims_history'
   | 'cockpit_copilot'
+  | 'history_chat'
   | 'business_dashboard'
   | 'business_chat';
 
@@ -38,10 +39,24 @@ export type Action =
  * The permission matrix — the single source of truth for role → allowed actions.
  * `identity` (the /api/whoami echo of the caller's own resolved role) is allowed to
  * BOTH roles; it exposes nothing beyond who the caller already is.
+ *
+ * `history_chat` is the OPERATIONAL Genie assistant scoped to the Claims-History
+ * surface. It is allowed to BOTH roles (everyone who can see Claims History), and is
+ * DISTINCT from `cockpit_copilot` so exposing it to Business Users does not widen the
+ * adjuster-only cockpit copilot. Both run OBO, so answers still respect each caller's
+ * own Unity Catalog grants.
  */
 export const PERMISSIONS: Record<Role, ReadonlySet<Action>> = {
-  adjuster: new Set<Action>(['identity', 'queue', 'cockpit', 'finalize', 'claims_history', 'cockpit_copilot']),
-  business_user: new Set<Action>(['identity', 'business_dashboard', 'business_chat', 'claims_history']),
+  adjuster: new Set<Action>([
+    'identity',
+    'queue',
+    'cockpit',
+    'finalize',
+    'claims_history',
+    'cockpit_copilot',
+    'history_chat',
+  ]),
+  business_user: new Set<Action>(['identity', 'business_dashboard', 'business_chat', 'claims_history', 'history_chat']),
 };
 
 /** True iff `role` may perform `action`. Pure. */
@@ -65,7 +80,9 @@ export function actionForPath(method: string, path: string): Action | null {
   if (p === '/api/history') return 'claims_history';
   // Genie surfaces are auto-mounted by the plugin under /api/genie/:alias/... —
   // guard them by alias so a Business User cannot reach the cockpit copilot and an
-  // Adjuster cannot reach the business chat.
+  // Adjuster cannot reach the business chat. The `history` alias (operational space,
+  // both roles) is separate from `cockpit` (operational space, adjuster only).
+  if (p.startsWith('/api/genie/history')) return 'history_chat';
   if (p.startsWith('/api/genie/cockpit')) return 'cockpit_copilot';
   if (p.startsWith('/api/genie/business')) return 'business_chat';
   if (p.startsWith('/api/business/dashboard')) return 'business_dashboard';

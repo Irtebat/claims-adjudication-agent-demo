@@ -8,7 +8,7 @@
  * fallback instead of a blank frame.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@databricks/appkit-ui/react';
 import { BarChart3, ExternalLink, LayoutDashboard } from 'lucide-react';
 import { getBusinessDashboardConfig, ApiError } from '@/lib/api';
@@ -16,6 +16,15 @@ import type { BusinessDashboardConfig } from '@/lib/types';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorState, InlineNotice, LoadingPanel } from '@/components/States';
 import { GenieAssistant } from '@/components/GenieAssistant';
+
+/**
+ * How long to wait for the embedded dashboard's handshake before falling back. A working
+ * AI/BI embed posts messages to the parent (auth/resize) as it initializes; a frame
+ * blocked by X-Frame-Options / CSP frame-ancestors runs no script and posts nothing, and
+ * its `onError` does not reliably fire — so "no message from the embed origin within this
+ * window" is our signal to show the open-in-Databricks fallback rather than a blank frame.
+ */
+const EMBED_READY_TIMEOUT_MS = 8000;
 
 function DashboardFallback({ embedUrl }: { embedUrl: string | null }) {
   return (
@@ -45,7 +54,8 @@ export function BusinessDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
-  const [iframeFailed, setIframeFailed] = useState(false);
+  const [embedReady, setEmbedReady] = useState(false);
+  const [embedFailed, setEmbedFailed] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
@@ -55,7 +65,8 @@ export function BusinessDashboardPage() {
       setLoading(true);
       setError(null);
       setForbidden(false);
-      setIframeFailed(false);
+      setEmbedReady(false);
+      setEmbedFailed(false);
       try {
         const cfg = await getBusinessDashboardConfig(ctrl.signal);
         if (live) setConfig(cfg);
@@ -73,7 +84,36 @@ export function BusinessDashboardPage() {
     };
   }, [reloadNonce]);
 
-  const canEmbed = Boolean(config?.embeddable && config?.embed_url) && !iframeFailed;
+  const embedOrigin = useMemo(() => {
+    if (!config?.embed_url) return null;
+    try {
+      return new URL(config.embed_url).origin;
+    } catch {
+      return null;
+    }
+  }, [config?.embed_url]);
+
+  // Readiness watch: mark the embed ready on the first handshake message from its origin,
+  // and fall back if none arrives before the timeout (see EMBED_READY_TIMEOUT_MS). Runs
+  // only while we're actually attempting to embed.
+  const attemptEmbed = Boolean(config?.embeddable && config?.embed_url);
+  useEffect(() => {
+    if (!attemptEmbed) return;
+    const timer = window.setTimeout(() => setEmbedFailed(true), EMBED_READY_TIMEOUT_MS);
+    function onMessage(e: MessageEvent) {
+      if (embedOrigin && e.origin === embedOrigin) {
+        setEmbedReady(true);
+        window.clearTimeout(timer);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('message', onMessage);
+    };
+  }, [attemptEmbed, embedOrigin, reloadNonce]);
+
+  const canEmbed = attemptEmbed && !embedFailed;
 
   return (
     <div className="flex flex-col gap-4">
@@ -113,13 +153,20 @@ export function BusinessDashboardPage() {
                 <BarChart3 className="h-4 w-4 text-muted-foreground" aria-hidden />
                 Steel quality claims analytics
               </div>
-              <iframe
-                src={config.embed_url}
-                title="Steel quality claims analytics dashboard"
-                loading="lazy"
-                className="min-h-0 w-full flex-1 border-0"
-                onError={() => setIframeFailed(true)}
-              />
+              <div className="relative min-h-0 flex-1">
+                <iframe
+                  src={config.embed_url}
+                  title="Steel quality claims analytics dashboard"
+                  loading="lazy"
+                  className="h-full w-full border-0"
+                  onError={() => setEmbedFailed(true)}
+                />
+                {!embedReady && (
+                  <div className="absolute inset-0 grid place-items-center bg-card p-6">
+                    <LoadingPanel lines={8} className="w-full max-w-md" />
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex min-h-[70vh] flex-1 flex-col">
