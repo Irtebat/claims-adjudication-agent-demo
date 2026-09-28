@@ -24,14 +24,39 @@ auto-mounted Genie/analytics routes). Never enforced in the client.
 Contract denials honored: Business Users are denied decision/finalize/queue;
 Adjusters are denied the business-dashboard data endpoint.
 
-**Role source:** an explicit **per-user allowlist** keyed on the authenticated
-caller's email — env `ADJUSTER_USERS` / `BUSINESS_USERS` (comma-separated). This is
-the **sole** role mechanism, and the config advertises nothing more. Group-based
-mapping is intentionally not wired: the typed experimental workspace-client
-`currentUser.me()` in this scaffold does not expose group membership, so a governed
-group lookup isn't available here — wiring one would risk a deploy whose config
-doesn't match enforcement. A caller matching no allowlist is **hard-denied**, and any
-unmapped `/api/*` route is denied by default (fail-closed).
+**Role source (`server/identity.ts`):** governed **group membership** is the
+**primary** mechanism. The signed-in user's OBO token (`x-forwarded-access-token`) is
+presented to the Databricks **SCIM `/Me`** endpoint, and their **direct** group
+memberships are mapped to a role by matching each group's display name **or** id
+against `ADJUSTER_GROUPS` / `BUSINESS_GROUPS` (comma-separated). A **per-user
+allowlist** (`ADJUSTER_USERS` / `BUSINESS_USERS`, keyed on `x-forwarded-email`) is an
+**override** checked first — the escape hatch for individuals the group config can't
+(yet) cover. Resolution order: **allowlist → (no OBO token ⇒ deny) → group lookup →
+deny by default.**
+
+- **Namespace:** `GROUP_SCOPE` selects `account` (→ `/api/2.0/account/scim/v2/Me`) or
+  `workspace` (→ `/api/2.0/preview/scim/v2/Me`). **Default `account`.**
+- **No extra grant / scope:** the `/Me` lookup rides the OBO token's default
+  `iam.current-user:read` capability — **no** additional `user_api_scope` and **no**
+  account-admin grant is required.
+- **Fail-closed:** a caller matched by neither mechanism is hard-denied; any SCIM
+  error/timeout hard-denies (never opens the door); any unmapped `/api/*` route is
+  denied by default. Resolved roles are cached per user for ~120s (the OBO token is
+  never cached; failures are never cached).
+
+### Role configuration (plain app env vars — no resource/grant needed)
+
+| Env var           | Purpose                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| `ADJUSTER_GROUPS` | **Primary.** Group display names / ids → `adjuster` (comma-sep).       |
+| `BUSINESS_GROUPS` | **Primary.** Group display names / ids → `business_user` (comma-sep).  |
+| `GROUP_SCOPE`     | `account` (default) or `workspace` — which SCIM `/Me` to call.         |
+| `ADJUSTER_USERS`  | Override. Emails pinned to `adjuster` (checked first, comma-sep).      |
+| `BUSINESS_USERS`  | Override. Emails pinned to `business_user` (checked first, comma-sep). |
+
+`DATABRICKS_HOST` (SCIM host) is injected by the Apps runtime. `.env` is git-ignored;
+set these locally in your own `.env` for `npm run dev`. With none set, every guarded
+route hard-denies.
 
 ## Authentication
 
@@ -77,13 +102,18 @@ adjudication is a no-op (no double outbox, no new version).
 ## Gates (all green, offline)
 
 ```
-npm run test           # vitest — 33 tests (authz matrix + finalize contract)
-npx tsc -b tsconfig.server.json   # server typecheck
-npm run lint           # eslint
-npx appkit lint        # ast-grep (no-double-type-assertion, etc.)
-npm run format         # prettier
+npm run test           # vitest — 48 tests (authz matrix + finalize contract + identity/group resolver)
+npx tsc -b tsconfig.server.json   # server typecheck — clean
+npx appkit lint        # ast-grep (no-double-type-assertion, etc.) — clean
 databricks bundle validate --profile fe-bar   # Validation OK
 ```
+
+`server/**` (the backend contract) is eslint- and prettier-clean. Note: repo-wide
+`npm run lint` / `npm run format` also surface pre-existing warnings confined to the
+`databricks apps init` UI scaffold (`client/src/**`) and auto-generated appkit type
+stubs (`shared/appkit-types/*.d.ts`, the offline `hello_world` query stub) — untouched
+by this headless backend stage and cleaned up when the Stage-B UI + a warehouse-backed
+`generate-types` run land.
 
 ## Deploy runbook (LIVE — Stage A stops before these; several need the app SP)
 
@@ -103,8 +133,19 @@ app's own service principal, whose id is needed to grant Lakebase. Order:
      documented grants (`docs/evidence/serving-endpoint/README.md`) — a NEW grant.
 3. Enable **user authorization** with scopes `dashboards.genie` + `sql` (in
    `databricks.yml`, applied on deploy) so OBO works for Genie + the warehouse.
-4. Set the role allowlists `ADJUSTER_USERS` / `BUSINESS_USERS` (comma-separated
-   emails) — the sole role mechanism. Without them all guarded routes hard-deny.
+4. Set the role config (plain app env vars — no resource/grant needed):
+   `ADJUSTER_GROUPS` / `BUSINESS_GROUPS` (comma-separated group display names or ids)
+   as the **primary** mechanism, and optionally `ADJUSTER_USERS` / `BUSINESS_USERS`
+   (comma-separated emails) as the per-user **override**. Optionally set `GROUP_SCOPE`
+   (`account` | `workspace`, default `account`). With none set, all guarded routes
+   hard-deny. The SCIM `/Me` group lookup needs **no** extra `user_api_scope` and
+   **no** admin grant (default `iam.current-user:read` covers `/Me`). See
+   `.env.example`.
+5. **Deploy-time verification (not a blocker, no grant):** on the deployed app, confirm
+   the narrowly-scoped OBO token returns a populated `groups[]` under
+   `iam.current-user:read` — the server logs the resolved group count once per real
+   request. The `/Me` endpoint + body shape are confirmed with a full user token; the
+   scoped-token case is the only bit that can only be verified live.
 
 Steps 1–4 need the deployed app SP id and may need account-admin — they are the
 Stage-A STOP-AND-REPORT items (see `docs/evidence/copilot-app-backend/`).

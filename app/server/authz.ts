@@ -11,14 +11,13 @@
  * decision/finalize/queue endpoints; Adjusters are DENIED the business-dashboard
  * data endpoint. Both roles may read claims history.
  *
- * ROLE SOURCE: an explicit per-user allowlist keyed on the authenticated caller's
- * email (env `ADJUSTER_USERS` / `BUSINESS_USERS`, comma-separated). The subject is
- * the OBO user identity (`x-forwarded-email` / `x-forwarded-user`), so resolution is
- * server-side. This is the SOLE role mechanism (see identity.ts). Group-based
- * mapping is intentionally NOT wired: the typed workspace-client `currentUser.me()`
- * in this scaffold does not expose group membership, so a governed group lookup is
- * not available here; the config reflects only what actually enforces. A caller who
- * matches no allowlist is hard-denied by default.
+ * ROLE SOURCE (server-side; see identity.ts): governed GROUP membership is the
+ * PRIMARY mechanism — the OBO user's token (`x-forwarded-access-token`) is presented
+ * to SCIM `/Me` and their direct groups are mapped to a role via env
+ * `ADJUSTER_GROUPS` / `BUSINESS_GROUPS`. A per-user allowlist (`ADJUSTER_USERS` /
+ * `BUSINESS_USERS`, keyed on `x-forwarded-email`) is an OVERRIDE checked first — the
+ * escape hatch for callers the group config can't cover. A caller matched by neither
+ * is hard-denied by default, and any SCIM lookup failure hard-denies (never opens).
  */
 
 import type { Request, Response, NextFunction } from 'express';
