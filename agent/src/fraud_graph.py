@@ -18,6 +18,25 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+# A cluster is treated as high-risk / fraud only when the customer-concentration
+# score is strong AND the heat component is more than a couple of claims. Raw
+# positive risk is far too common (a single repeat customer on a 2-claim heat) to
+# call "fraud"; requiring both a >=0.6 score and >=3 claims keeps the flag rare and
+# meaningful (PLAN §6.3). The app renders a chip/tooltip off ``high_risk`` +
+# ``risk_reason``; both are persisted here so the read side stays a pure lookup.
+HIGH_RISK_SCORE_THRESHOLD = 0.6
+HIGH_RISK_MIN_CLUSTER_SIZE = 3
+
+
+def _risk_reason(cluster_size: int, n_customers: int, heat_no: str, concentration: float) -> str:
+    """One human-readable sentence explaining why a cluster is flagged (for hover)."""
+    claims = "claim" if cluster_size == 1 else "claims"
+    customers = "customer" if n_customers == 1 else "customers"
+    return (
+        f"Fraud cluster: {cluster_size} {claims} from {n_customers} {customers} "
+        f"on heat {heat_no} (concentration {concentration:.2f})."
+    )
+
 
 def _chain_edges(groups: dict) -> list[tuple[str, str]]:
     """Turn same-key groups into a spanning chain of edges (union-find collapses them)."""
@@ -75,6 +94,11 @@ def score_clusters(claims: list[dict]) -> dict:
     risk_score in [0, 1] is driven by customer concentration within a heat cluster:
     an ordinary heat draws claims from as many customers as coils, but a collusion
     ring reuses a small set of customer identities across the heat's coils.
+
+    Each risk row also carries the app-facing fields ``cluster_size``,
+    ``n_customers``, a boolean ``high_risk`` (``risk_score >= 0.6`` AND
+    ``cluster_size >= 3``), and a one-sentence ``risk_reason`` (populated only when
+    ``high_risk``). These persist to ``gold.customer_heat_risk`` and serve down.
     """
     node_ids = [c["claim_id"] for c in claims]
     roots = connected_components(node_ids, build_edges(claims))
@@ -116,14 +140,32 @@ def score_clusters(claims: list[dict]) -> dict:
         stats = cluster_stats[root]
         key = (customer, heat)
         if key not in risk_rows or stats["risk_score"] > risk_rows[key]["risk_score"]:
+            n_claims = stats["n_claims"]
+            n_customers = stats["n_customers"]
+            concentration = 1.0 - (n_customers / n_claims) if n_claims else 0.0
+            high_risk = (
+                stats["risk_score"] >= HIGH_RISK_SCORE_THRESHOLD
+                and n_claims >= HIGH_RISK_MIN_CLUSTER_SIZE
+            )
             risk_rows[key] = {
                 "customer_id": customer,
                 "heat_no": heat,
                 "cluster_id": root,
-                "cluster_size": stats["n_claims"],
-                "distinct_customers_in_cluster": stats["n_customers"],
+                "cluster_size": n_claims,
+                "n_customers": n_customers,
+                # distinct_customers_in_cluster is the same count under its original
+                # name; kept for the existing runtime read (heat_risk.py) contract.
+                "distinct_customers_in_cluster": n_customers,
                 "distinct_heats_in_cluster": stats["n_heats"],
                 "repeat_customers": stats["repeat_customers"],
                 "risk_score": stats["risk_score"],
+                "high_risk": high_risk,
+                # A reason is only meaningful for a flagged cluster; benign rows carry
+                # None so the app shows a tooltip only where high_risk is true.
+                "risk_reason": (
+                    _risk_reason(n_claims, n_customers, heat, concentration)
+                    if high_risk
+                    else None
+                ),
             }
     return {"clusters": cluster_stats, "risk_rows": list(risk_rows.values())}

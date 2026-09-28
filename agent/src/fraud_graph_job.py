@@ -47,10 +47,15 @@ schema = T.StructType(
         T.StructField("heat_no", T.StringType()),
         T.StructField("cluster_id", T.StringType()),
         T.StructField("cluster_size", T.IntegerType()),
+        T.StructField("n_customers", T.IntegerType()),
         T.StructField("distinct_customers_in_cluster", T.IntegerType()),
         T.StructField("distinct_heats_in_cluster", T.IntegerType()),
         T.StructField("repeat_customers", T.BooleanType()),
         T.StructField("risk_score", T.DoubleType()),
+        # high_risk (risk_score >= 0.6 AND cluster_size >= 3) and its one-sentence
+        # reason are what the App chip/tooltip render; served down to Lakebase.
+        T.StructField("high_risk", T.BooleanType()),
+        T.StructField("risk_reason", T.StringType()),
     ]
 )
 computed_at = dt.datetime.now(dt.timezone.utc)
@@ -73,7 +78,8 @@ summary = {
     "claims_scored": len(rows),
     "clusters": len(result["clusters"]),
     "risk_rows": len(result["risk_rows"]),
-    "high_risk_rows": sum(1 for r in result["risk_rows"] if r["risk_score"] >= 0.5),
+    # high_risk is the tuned fraud flag: risk_score >= 0.6 AND cluster_size >= 3.
+    "high_risk_rows": sum(1 for r in result["risk_rows"] if r["high_risk"]),
 }
 print(summary)
 dbutils.notebook.exit(str(summary))

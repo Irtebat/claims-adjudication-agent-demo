@@ -7,7 +7,11 @@ touch ``public.outbox``. The event-payload shape is covered by
 ``services/tests/test_events.py`` (``build_adjudicated_payload``), which the App
 finalizer mirrors."""
 
+import os
+import uuid
 from contextlib import contextmanager
+
+import pytest
 
 import writer
 
@@ -278,3 +282,65 @@ def test_duplicate_carries_reference(monkeypatch):
     _, params = conn.cur.calls[0]
     assert params["duplicate_of_claim_id"] == "CLM-1"
     assert params["verdict"] == "DENY"
+
+
+# --------------------------------------------------------------------------- #
+# Integration: the recommended_at DDL DEFAULT actually fires on a real write.
+# test_recommended_at_is_omitted_... proves the column is left out of the INSERT;
+# this proves the *consequence* — a RECOMMENDED row read back from Lakebase has a
+# NON-NULL recommended_at (the default now() populated it). Gated on a live
+# connection and skipped without one, mirroring test_authorities_runtime's live
+# smoke. The write is done inside an outer transaction that is rolled back after the
+# read-back, so it exercises the real default without persisting a test row (and
+# without needing DELETE on the immutable decision-record table).
+# --------------------------------------------------------------------------- #
+
+
+class _RollbackSentinel(Exception):
+    """Raised to abort the integration transaction after the read-back assertions."""
+
+
+def test_live_written_recommendation_has_non_null_recommended_at():
+    if os.getenv("RUN_LIVE_LAKEBASE_TESTS") != "1":
+        pytest.skip("set RUN_LIVE_LAKEBASE_TESTS=1 for the live Lakebase write/read-back test")
+    pytest.importorskip("psycopg")
+    try:
+        from db import connect
+    except Exception as exc:  # pragma: no cover
+        pytest.skip(f"db module unavailable: {exc}")
+
+    adjudication_id = f"ADJ-ITEST-{uuid.uuid4().hex[:12]}"
+    record = _record()
+    record["adjudication_id"] = adjudication_id
+    record["claim_id"] = f"CLM-ITEST-{uuid.uuid4().hex[:8]}"
+    record["idempotency_key"] = adjudication_id
+
+    try:
+        cm = connect(profile="fe-bar")
+        conn = cm.__enter__()
+    except Exception as exc:  # no creds / Lakebase unreachable -> skip
+        pytest.skip(f"fe-bar Lakebase not reachable: {exc}")
+    try:
+        # Outer transaction so write_adjudication's own transaction() nests as a
+        # savepoint (visible to our read-back) rather than committing immediately.
+        try:
+            with conn.transaction():
+                result = writer.write_adjudication(conn, record)
+                assert result["adjudication_inserted"] is True
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT recommended_at, decision_status FROM adjudications "
+                        "WHERE adjudication_id = %(id)s",
+                        {"id": adjudication_id},
+                    )
+                    row = cur.fetchone()
+                assert row is not None, "written RECOMMENDED row must be read back"
+                recommended_at, decision_status = row
+                assert decision_status == "RECOMMENDED"
+                # The core assertion: the DDL DEFAULT now() populated recommended_at.
+                assert recommended_at is not None
+                raise _RollbackSentinel  # abort so no test row persists
+        except _RollbackSentinel:
+            pass
+    finally:
+        cm.__exit__(None, None, None)

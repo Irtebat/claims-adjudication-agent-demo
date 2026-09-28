@@ -1,6 +1,12 @@
 """Heat-cluster risk: customer concentration surfaces a collusion ring, not normal heats."""
 
-from fraud_graph import build_edges, connected_components, score_clusters
+from fraud_graph import (
+    HIGH_RISK_MIN_CLUSTER_SIZE,
+    HIGH_RISK_SCORE_THRESHOLD,
+    build_edges,
+    connected_components,
+    score_clusters,
+)
 
 # A collusion ring: one heat, five claims, but only three customer identities reused
 # across its coils (customer concentration). A normal heat draws one customer per coil.
@@ -43,3 +49,63 @@ def test_ring_scores_above_normal_and_isolated():
 
 def test_scoring_is_deterministic():
     assert score_clusters(RING + NORMAL)["risk_rows"] == score_clusters(RING + NORMAL)["risk_rows"]
+
+
+# --------------------------------------------------------------------------- #
+# Sensitivity tuning: cluster_size / n_customers, the high_risk threshold, and the
+# one-sentence reason. These are the fields the App chip/tooltip render, persisted
+# to gold.customer_heat_risk and served down.
+# --------------------------------------------------------------------------- #
+
+
+def _heat(heat_no: str, n_claims: int, n_customers: int) -> list[dict]:
+    """One heat with n_claims claims spread across exactly n_customers identities."""
+    assert 1 <= n_customers <= n_claims
+    return [
+        {"claim_id": f"{heat_no}-{i}", "customer_id": f"C{i % n_customers}", "heat_no": heat_no}
+        for i in range(n_claims)
+    ]
+
+
+def test_cluster_size_and_n_customers_counts():
+    # 6 claims, 2 reused identities on one heat.
+    rows = score_clusters(_heat("H-SIZE", 6, 2))["risk_rows"]
+    assert rows  # one row per (customer, heat) — two customers here
+    assert all(r["cluster_size"] == 6 for r in rows)
+    assert all(r["n_customers"] == 2 for r in rows)
+    # n_customers mirrors the original distinct_customers_in_cluster count.
+    assert all(r["n_customers"] == r["distinct_customers_in_cluster"] for r in rows)
+
+
+def test_high_risk_score_boundary():
+    # risk_score == 0.6 exactly (concentration 0.4: 3 of 5 identities), size 5 -> flagged.
+    at = score_clusters(_heat("H-AT", 5, 3))["risk_rows"]
+    assert at and all(r["risk_score"] == HIGH_RISK_SCORE_THRESHOLD for r in at)
+    assert all(r["high_risk"] is True for r in at)
+    # Just below (concentration 0.2 -> risk 0.3), same size -> not flagged.
+    below = score_clusters(_heat("H-BELOW", 5, 4))["risk_rows"]
+    assert below and all(r["risk_score"] < HIGH_RISK_SCORE_THRESHOLD for r in below)
+    assert all(r["high_risk"] is False for r in below)
+
+
+def test_high_risk_cluster_size_boundary():
+    # High score (risk 1.0) but size == 3 -> flagged (meets the minimum).
+    at = score_clusters(_heat("H-3", HIGH_RISK_MIN_CLUSTER_SIZE, 1))["risk_rows"]
+    assert at and all(r["cluster_size"] == HIGH_RISK_MIN_CLUSTER_SIZE for r in at)
+    assert all(r["risk_score"] >= HIGH_RISK_SCORE_THRESHOLD and r["high_risk"] for r in at)
+    # High score (risk 0.75) but only 2 claims -> below the size floor, not flagged.
+    below = score_clusters(_heat("H-2", HIGH_RISK_MIN_CLUSTER_SIZE - 1, 1))["risk_rows"]
+    assert below and all(r["cluster_size"] == 2 for r in below)
+    assert all(r["risk_score"] >= HIGH_RISK_SCORE_THRESHOLD for r in below)
+    assert all(r["high_risk"] is False for r in below)
+
+
+def test_risk_reason_format_and_null_for_benign():
+    # 4 claims from a single reused identity on heat H-4821 -> flagged.
+    flagged = score_clusters(_heat("H-4821", 4, 1))["risk_rows"]
+    assert len(flagged) == 1
+    reason = flagged[0]["risk_reason"]
+    assert reason == "Fraud cluster: 4 claims from 1 customer on heat H-4821 (concentration 0.75)."
+    # Benign heat (one customer per claim, risk 0) carries no reason.
+    benign = score_clusters(_heat("H-OK", 3, 3))["risk_rows"]
+    assert benign and all(not r["high_risk"] and r["risk_reason"] is None for r in benign)
