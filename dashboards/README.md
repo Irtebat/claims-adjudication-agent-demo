@@ -6,6 +6,14 @@ This directory contains the deployed Steel Quality Claims Analytics dashboard an
 
 `quality_claims.lvdash.json` has four pages: Executive COPQ, Quality / Metallurgy, Finance / Recovery, and Trust / Ops. Governed quality KPIs come from `gold.quality_claims_metrics`; cycle time and specialized analytics come from the corresponding `gold_*` analytics tables. The four leakage categories remain separate because they may overlap.
 
+### Data sources
+
+- `gold.gold_claim_adjudication_fact` — cross-filterable claim-grain detail.
+- `gold.gold_quality_kpis`, `gold.gold_failure_mode_analytics`, `gold.gold_supplier_recovery_analytics`, `gold.gold_fraud_cluster_analytics`, `gold.gold_agent_human_alignment`, and `gold.gold_retrieval_citation_kpis` — dashboard-ready aggregates.
+- `gold.quality_claims_metrics` — governed reusable measures shared by the dashboard and Genie.
+
+Workflow-backlog visuals remain deferred until settlement, recovery, and investigation events exist (downstream services, not yet built).
+
 Deploy with the authenticated `fe-bar` profile:
 
 ```sh

@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-09-27T22:06:00Z",
+  "query": "SELECT MEASURE(`Claim Count`), MEASURE(`Approval Rate`), MEASURE(`Claimed Amount`), MEASURE(`Approved Amount`), MEASURE(`Duplicate Blocked Amount`) FROM `fe-bar-ir`.gold.quality_claims_metrics",
+  "result": {
+    "claim_count": 5009,
+    "approval_rate": 0.5000998203234178,
+    "claimed_amount": 84763283.00,
+    "approved_amount": 38644136.42,
+    "duplicate_blocked_amount": 7838598.00
+  }
+}

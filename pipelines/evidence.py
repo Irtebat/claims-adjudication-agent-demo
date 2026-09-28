@@ -25,7 +25,17 @@ TABLES = {
         "claims_history",
         "adjudications_history",
     ],
-    "gold": ["claims_history", "adjudications_history"],
+    "gold": [
+        "claims_history",
+        "adjudications_history",
+        "gold_claim_adjudication_fact",
+        "gold_quality_kpis",
+        "gold_failure_mode_analytics",
+        "gold_supplier_recovery_analytics",
+        "gold_fraud_cluster_analytics",
+        "gold_agent_human_alignment",
+        "gold_retrieval_citation_kpis",
+    ],
 }
 
 
@@ -143,9 +153,21 @@ def capture(sql, catalog, destination):
         "fraud-clusters",
         f"SELECT a.fraud_cluster_id, count(*) claims, count(DISTINCT c.customer_id) customers, count(DISTINCT h.heat_no) heats FROM {c}.gold.adjudications_history a JOIN {c}.gold.claims_history c USING(claim_id) JOIN {c}.silver.heats_coils h USING(coil_id) WHERE a.fraud_cluster_id IS NOT NULL GROUP BY a.fraud_cluster_id ORDER BY a.fraud_cluster_id",
     )
-    from src.checks import integrity_queries
+    save(
+        "gold-analytics-samples",
+        f"SELECT * FROM {c}.gold.gold_quality_kpis ORDER BY claim_date, claim_type LIMIT 10",
+    )
+    save(
+        "gold-analytics-reconciliation",
+        f"SELECT (SELECT count(*) FROM {c}.gold.gold_claim_adjudication_fact) fact_rows, "
+        f"(SELECT count(DISTINCT adjudication_id) FROM {c}.gold.adjudications_current) source_rows, "
+        f"(SELECT sum(approved_amount) FROM {c}.gold.gold_claim_adjudication_fact) fact_approved, "
+        f"(SELECT sum(approved_amount) FROM {c}.gold.adjudications_current) source_approved, "
+        f"(SELECT sum(approved_amount) FROM {c}.gold.gold_quality_kpis) kpi_approved",
+    )
+    from src.checks import gold_analytics_queries, integrity_queries
 
-    checks = integrity_queries(c)
+    checks = integrity_queries(c) | gold_analytics_queries(c)
     results = save(
         "integrity-checks",
         " UNION ALL ".join(

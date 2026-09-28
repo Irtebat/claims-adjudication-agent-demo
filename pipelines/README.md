@@ -27,6 +27,14 @@ Volume: `bronze.raw_landing` — the serverless generator writes raw Parquet her
 | `gold.claims_current`, `gold.adjudications_current` | View | current SCD2 rows (`__END_AT IS NULL`) |
 | `gold.claims_history`, `gold.adjudications_history` | View | full SCD2 version timeline |
 | `gold.adjudication_decision_records` | Streaming table | append-only, immutable canonical decision record per `(adjudication_id, record_version)` |
+| `gold.gold_claim_adjudication_fact` | Materialized view | Current claims and adjudications enriched with deduplicated reference, decision-record, and graph-risk attributes |
+| `gold.gold_quality_kpis` | Materialized view | Daily outcomes, rates, amounts, separate value categories, and cycle time |
+| `gold.gold_failure_mode_analytics` | Materialized view | Monthly defect Pareto, recurrence, affected value/tonnage, and quarantine candidates |
+| `gold.gold_supplier_recovery_analytics` | Materialized view | Supplier-attributable counts and value by supplier/product/line |
+| `gold.gold_fraud_cluster_analytics` | Materialized view | Fraud and graph-risk incidence by cluster/customer/heat |
+| `gold.gold_agent_human_alignment` | Materialized view | Recommendation/final agreement, overrides, and amount delta by model/prompt/schema |
+| `gold.gold_retrieval_citation_kpis` | Materialized view | Citation, authority-hash, and trace coverage |
+| `gold.quality_claims_metrics` | UC metric view | Reusable quality outcome, amount, rate, and separate value-category measures |
 
 Column-mask functions in `silver`: `mask_customer`, `mask_money`.
 
@@ -61,6 +69,10 @@ flowchart TD
   land --> scd["AUTO CDC SCD2<br/>silver.claims_history<br/>silver.adjudications_history"]
   scd --> gcur["gold.claims_current<br/>gold.adjudications_current"]
   scd --> ghist["gold.claims_history<br/>gold.adjudications_history"]
+  gcur --> fact["gold_claim_adjudication_fact<br/>deduplicated reference joins"]
+  silverref --> fact
+  fact --> agg["six gold aggregate materialized views"]
+  fact --> metrics["quality_claims_metrics<br/>UC metric view"]
 ```
 
 Reference/master data is generated once and flows down the medallion, then serves
@@ -134,6 +146,38 @@ Each 100-claim block carries a fixed label mix (20 clean, 20 in-spec denials, 15
 warranty/exclusion denials, 10 duplicates, 15 over-claims, 15 supplier-attributable,
 and a 5-claim fraud cluster). The label is recorded on the finalized adjudication,
 never on the claim — it is evaluation ground truth, not an input to any decision.
+
+## Gold analytics deployment
+
+The analytics transformation is additive: it reads current gold objects and silver
+reference tables without changing any existing streaming table or history view.
+Reference inputs are reduced to one row per primary key with `row_number()` inside
+the fact query before joining. This prevents the known replay duplicates in
+customers, suppliers, and defect codes from inflating facts or KPIs. Aggregate
+materialized views read only from that fan-out-safe fact.
+
+From `pipelines/`, validate, deploy, run the triggered pipeline, then deploy the
+metric-view SQL job. The pipeline run is a normal update; never pass a full-refresh
+flag.
+
+```bash
+databricks bundle validate --strict --target prod --profile fe-bar
+databricks bundle deploy --target prod --profile fe-bar
+databricks bundle run refresh_medallion --target prod --profile fe-bar
+databricks bundle run deploy_metric_views --target prod --profile fe-bar
+uv run --with pyyaml python evidence.py
+```
+
+The metric view is committed at `src/metric_views/quality_claims_metrics.sql` and
+executed by the bundle-managed `deploy_metric_views` SQL job because bundles do not
+have a native metric-view resource. Workflow backlog metrics are deliberately
+excluded while settlement, recovery, and investigation operational tables remain
+empty. Synthetic cycle time is exposed but is expected to be nearly flat at two
+days.
+
+Follow-ups are to fix reference-dimension replay duplication at its silver root
+(using the heats/coils natural-key pattern) and seed downstream operational events
+before adding settlement, recovery, or investigation backlog KPIs.
 
 ## Development checks
 
