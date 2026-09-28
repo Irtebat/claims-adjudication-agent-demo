@@ -1,0 +1,57 @@
+{
+  "captured_at": "2026-09-28",
+  "source": "aiven MCP aiven_service_get (read-only), project kafka-dbx-pipeline-001",
+  "note": "Existing service reused; no billed cluster created. All secret material (SASL password, CA cert, access cert/key, service_uri) is [REDACTED] through the connector, which is why live E2E is blocked on a human secret-population step.",
+  "service": {
+    "service_name": "fe-bar-kafka",
+    "service_type": "kafka",
+    "state": "RUNNING",
+    "plan": "free-0",
+    "plan_price_usd": 0,
+    "cloud_name": "do-tor",
+    "kafka_version": "4.2.1",
+    "node_count": 2,
+    "ip_filter": ["0.0.0.0/0", "::/0"]
+  },
+  "endpoints": {
+    "sasl": {
+      "host": "fe-bar-kafka-kafka-dbx-pipeline-001.i.aivencloud.com",
+      "port": 25358,
+      "security_protocol": "SASL_SSL",
+      "sasl_mechanism": "SCRAM-SHA-256"
+    },
+    "mtls": {
+      "host": "fe-bar-kafka-kafka-dbx-pipeline-001.i.aivencloud.com",
+      "port": 25347,
+      "auth": "certificate"
+    }
+  },
+  "topics": [
+    {
+      "topic_name": "claim.submitted",
+      "state": "ACTIVE",
+      "partitions": 2,
+      "replication": 2,
+      "retention_hours": 168,
+      "retention_bytes": -1,
+      "cleanup_policy": "delete",
+      "min_insync_replicas": 1,
+      "key": "claim_id"
+    },
+    {
+      "topic_name": "claim.adjudicated",
+      "state": "ACTIVE",
+      "partitions": 2,
+      "replication": 2,
+      "retention_hours": 168,
+      "retention_bytes": -1,
+      "cleanup_policy": "delete",
+      "min_insync_replicas": 1,
+      "key": "claim_id (aggregate_id)"
+    }
+  ],
+  "free_0_constraints": {
+    "max_partitions_per_topic": 2,
+    "retention_override": "rejected; default 7d (168h) applies"
+  }
+}

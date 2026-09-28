@@ -1,0 +1,90 @@
+resources:
+  jobs:
+    consumers:
+      name: fe-bar-services-consumers
+      max_concurrent_runs: 1
+      description: |
+        The four downstream consumers of claim.adjudicated, one parallel task each
+        (each is its own Kafka consumer group, so offsets are independent):
+          - settlement        verdict APPROVE -> UPSERT settlements STL-<claim_id>
+          - investigation     verdict PEND    -> INSERT investigation_cases INV-<claim_id> (DO NOTHING)
+          - supplier-recovery attributable    -> INSERT supplier_recovery_cases SRC-<claim_id> (DO NOTHING)
+          - notification      always          -> LOG ONLY (no table)
+        Every write lands behind ON CONFLICT on a deterministic case id derived 1:1
+        from the claim/adjudication, so a re-delivered event is a no-op.
+
+        Default: scheduled serverless, hourly, bounded drain (max_messages) then exit.
+
+        CONTINUOUS MODE TOGGLE (for live demo):
+        - Replace the 'periodic' trigger below with:
+            continuous:
+              pause_status: UNPAUSED
+        - Raise poll_timeout_s (e.g. 30) and max_messages so each consumer task keeps
+          waiting for new events instead of exiting when idle.
+        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar`.
+
+      environments:
+        - environment_key: services
+          spec:
+            client: "4"
+            dependencies:
+              - confluent-kafka==2.6.1
+              - psycopg[binary]==3.2.10
+              - databricks-sdk>=0.81.0
+
+      tasks:
+        - task_key: settlement
+          environment_key: services
+          notebook_task:
+            notebook_path: ../src/consumers.py
+            base_parameters:
+              consumer: settlement
+              topic: claim.adjudicated
+              max_messages: ${var.consumer_max_messages}
+              poll_timeout_s: "10"
+          timeout_seconds: 3600
+          max_retries: 0
+        - task_key: investigation
+          environment_key: services
+          notebook_task:
+            notebook_path: ../src/consumers.py
+            base_parameters:
+              consumer: investigation
+              topic: claim.adjudicated
+              max_messages: ${var.consumer_max_messages}
+              poll_timeout_s: "10"
+          timeout_seconds: 3600
+          max_retries: 0
+        - task_key: supplier_recovery
+          environment_key: services
+          notebook_task:
+            notebook_path: ../src/consumers.py
+            base_parameters:
+              consumer: supplier-recovery
+              topic: claim.adjudicated
+              max_messages: ${var.consumer_max_messages}
+              poll_timeout_s: "10"
+          timeout_seconds: 3600
+          max_retries: 0
+        - task_key: notification
+          environment_key: services
+          notebook_task:
+            notebook_path: ../src/consumers.py
+            base_parameters:
+              consumer: notification
+              topic: claim.adjudicated
+              max_messages: ${var.consumer_max_messages}
+              poll_timeout_s: "10"
+          timeout_seconds: 3600
+          max_retries: 0
+
+      # Default: scheduled serverless, hourly.
+      trigger:
+        pause_status: UNPAUSED
+        periodic:
+          interval: 1
+          unit: HOURS
+
+      # CONTINUOUS MODE (uncomment to toggle; comment out the 'trigger' above):
+      # continuous:
+      #   pause_status: UNPAUSED

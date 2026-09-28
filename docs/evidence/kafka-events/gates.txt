@@ -1,0 +1,58 @@
+Wave 8 Kafka event backbone — gates (2026-09-28 IST; re-run after PR #19 review fixes)
+
+Review fixes applied this pass:
+- BLOCKING 1 (writer.py retry consistency): the adjudication write is now
+  INSERT ... ON CONFLICT (adjudication_id) DO NOTHING — first-write-wins, matching
+  the decision record + outbox — so a same-id retry mutates none of the three and
+  they cannot diverge. Regression tests added (retry consistency + no-DO-UPDATE-path).
+- BLOCKING 2 (relay starvation): SELECT_UNPUBLISHED_SQL now filters
+  event_type = 'claim.adjudicated' in the WHERE (before LIMIT), so foreign/unsupported
+  outbox rows cannot fill the bounded window. Test added proving they don't starve.
+- NON-BLOCKING: softened the double-mark vs double-publish claim in relay_core.py +
+  READMEs (concurrent double-publish is bounded by max_concurrent_runs:1 + consumer
+  idempotency, not by WHERE published_at IS NULL).
+
+PASS: uv run --with pytest pytest services/tests -q
+Result: 34 collected test cases passed (32 test functions; test_redelivery_is_a_noop
+is parametrized over the 3 DB-backed consumers). +2 relay tests this pass. 0.04s.
+
+PASS: uv run --with ruff ruff check services docs/evidence/kafka-events/simulate_e2e.py
+Result: All checks passed.
+
+PASS: uv run --with ruff ruff format --check services docs/evidence/kafka-events/simulate_e2e.py
+Result: all files already formatted.
+
+PASS: uv run --with pytest --with pyyaml --with pydantic --with mlflow --with langchain-core \
+        --with langgraph --with databricks-agents --with 'psycopg[binary]' pytest agent/tests -q
+Result: 85 passed, 2 skipped (+2 writer regression tests this pass). The writer.py
+first-write-wins change integrates with the full agent suite (test_writer.py has 8
+test functions incl. the two new regressions; test_decision_record.py covers mapping).
+
+PASS: uv run --with ruff ruff check agent
+Result: All checks passed.
+
+PASS: uv run --with ruff ruff format --check agent
+Result: 36 files already formatted.
+
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (services/)
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (agent/)
+PASS: databricks bundle validate --strict -t prod --profile fe-bar (lakebase/)
+Result: Validation OK! for all three.
+
+PASS: git diff main --exit-code -- agent/src/authorities.py
+Result: empty diff; deterministic money math is untouched (guardrail).
+
+PASS: uv run python docs/evidence/kafka-events/simulate_e2e.py
+Result: all 6 dedup assertions PASS (see end-to-end-dedup.json). Every stage
+re-delivers its events; no stage double-processes.
+
+Grounded (read-only) infra check:
+- aiven MCP aiven_service_get: service fe-bar-kafka RUNNING (free-0), topics
+  claim.submitted + claim.adjudicated ACTIVE (2 partitions, RF 2, 168h). See
+  topic-config.json. No billed cluster created.
+
+Blocked on the human (documented, not looped on):
+- Kafka SASL password + CA cert are [REDACTED] through the Aiven MCP connector, so
+  the secret scope fe-bar-aiven-kafka cannot be populated programmatically and the
+  live broker E2E cannot run from here. Runbook is in README.md (this dir) and
+  services/README.md. The dedup contract is proven end-to-end in-memory instead.

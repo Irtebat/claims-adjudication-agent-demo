@@ -1,0 +1,54 @@
+resources:
+  jobs:
+    worker:
+      name: fe-bar-services-worker
+      max_concurrent_runs: 1
+      description: |
+        Adjudication worker. Consumes claim.submitted, dedups on the claim id against
+        an existing agent_recommendation adjudication, and invokes the governed
+        endpoint (agents_fe-bar-ir-default-claims_adjudication_agent) with persist=true
+        so the endpoint's writer atomically writes adjudication + decision record +
+        claim.adjudicated outbox row.
+
+        Default: scheduled serverless, hourly, bounded drain (max_messages) then exit.
+
+        CONTINUOUS MODE TOGGLE (for live demo):
+        - Replace the 'periodic' trigger below with:
+            continuous:
+              pause_status: UNPAUSED
+        - Raise poll_timeout_s (e.g. 30) so the consumer waits for new events instead
+          of exiting when idle, and raise max_messages so a run drains a long burst.
+        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar`.
+
+      environments:
+        - environment_key: services
+          spec:
+            client: "4"
+            dependencies:
+              - confluent-kafka==2.6.1
+              - psycopg[binary]==3.2.10
+              - databricks-sdk>=0.81.0
+
+      tasks:
+        - task_key: worker
+          environment_key: services
+          notebook_task:
+            notebook_path: ../src/worker.py
+            base_parameters:
+              group_id: fe-bar-worker-adjudication
+              topic: claim.submitted
+              max_messages: ${var.worker_max_messages}
+              poll_timeout_s: "10"
+          timeout_seconds: 3600
+          max_retries: 0
+
+      # Default: scheduled serverless, hourly.
+      trigger:
+        pause_status: UNPAUSED
+        periodic:
+          interval: 1
+          unit: HOURS
+
+      # CONTINUOUS MODE (uncomment to toggle; comment out the 'trigger' above):
+      # continuous:
+      #   pause_status: UNPAUSED
