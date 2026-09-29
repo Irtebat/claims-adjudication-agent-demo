@@ -41,6 +41,27 @@ improves the agent.
 | dashboards/ | AI/BI dashboards and Genie definitions                         |
 | docs/       | Documentation and committed execution evidence                 |
 
+## Execution model
+
+Every layer uses the **same two execution mechanisms — and only these two**:
+
+1. **DABs bundle — `databricks bundle deploy` + `databricks bundle run <job>` — for
+   anything that runs on Databricks compute** (jobs, pipelines, apps). This is the
+   canonical mechanism; always pass `--target prod --profile fe-bar`. A command that
+   is a plain `bundle` operation is invoked directly, never wrapped in a script.
+2. **Direct `uv run python` only for two cases:**
+   - **(a) the human-gated MLflow model lifecycle** — `agent`'s
+     `register → evaluate → promote`, an interactive operator loop with a human
+     decision at promotion, not a scheduled job; and
+   - **(b) thin wrappers that add real orchestration or guards a plain `bundle run`
+     cannot express** — sourcing the authored warranty schedule into the generator,
+     the Lakebase reseed/CDF-exists guards, and resolving the dynamic native-CDF
+     table names before a medallion run.
+
+Each layer README below states this rule and lists the exact commands for that
+layer. `scripts/bootstrap.py` composes the end-to-end path from these mechanisms
+directly (see `scripts/README.md`).
+
 ## Environment
 
 - Databricks CLI profile: `fe-bar` (always pass `--profile fe-bar`).

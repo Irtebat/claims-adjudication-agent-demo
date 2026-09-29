@@ -24,11 +24,18 @@ def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
     assert ".gold.adjudications_history" not in seed_source
 
     composer = (Path(__file__).parents[2] / "scripts" / "bootstrap.py").read_text()
+    # The plain pipelines deploy is issued as a direct DABs command, not shelled
+    # through a collapsed `pipelines/run.py deploy` shim. Compare whitespace-insensitively
+    # so ruff's one-arg-per-line formatting does not break the assertion.
+    compact = "".join(composer.split())
+    assert '"databricks","bundle","deploy"' in compact
+    assert '"pipelines/run.py","deploy"' not in compact
+    deploy = composer.index('"databricks"')
     generate = composer.index('"pipelines/run.py", "generate"')
     seed = composer.index('"lakebase/run.py", "setup-and-seed"')
     create_cdf = composer.index('"lakebase/run.py", "create-cdf"')
     refresh = composer.index('"pipelines/run.py", "refresh"')
-    assert generate < seed < create_cdf < refresh
+    assert deploy < generate < seed < create_cdf < refresh
 
     runner = (Path(__file__).parents[1] / "run.py").read_text()
     # refresh is a normal incremental medallion run. The stale DROP MATERIALIZED VIEW
