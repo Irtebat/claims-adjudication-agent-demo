@@ -73,10 +73,10 @@ function NavList({ role, onNavigate }: { role: Role | null; onNavigate?: () => v
         >
           {({ isActive }) => (
             <>
-              {/* A thin indigo rail marks the active surface — the one earned accent in nav. */}
+              {/* A thin Lava rail marks the active surface — the one earned accent in nav. */}
               <span
                 aria-hidden
-                className={cn('h-4 w-0.5 rounded-full', isActive ? 'bg-[var(--db-accent)]' : 'bg-transparent')}
+                className={cn('h-4 w-0.5 rounded-full', isActive ? 'bg-[var(--db-lava)]' : 'bg-transparent')}
               />
               <Icon className="h-4 w-4 shrink-0" aria-hidden />
               {label}

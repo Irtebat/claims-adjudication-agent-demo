@@ -49,12 +49,20 @@ export function GenieAssistant({
       </div>
 
       <p className="border-b border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
-        Runs on your behalf (OBO) — answers reflect your Unity Catalog access. AI-generated; verify against the
-        generated SQL and cited sources before acting.
+        AI-generated — verify against the generated SQL and cited sources before acting.
       </p>
 
       <div className="min-h-0 flex-1">
-        <GenieChat alias={alias} placeholder={placeholder} className="h-full" />
+        {/*
+         * Enlarge the Genie input: the built-in textarea ships at rows=1 (cramped). Give it a
+         * comfortable ~3-row floor and a readable 16px body size via descendant-variant classes.
+         * It stays full-width (flex-1) and keeps its auto-grow (min-height is only a floor).
+         */}
+        <GenieChat
+          alias={alias}
+          placeholder={placeholder}
+          className="h-full [&_textarea]:min-h-[5.5rem] [&_textarea]:text-base [&_textarea]:leading-relaxed"
+        />
       </div>
     </div>
   );
