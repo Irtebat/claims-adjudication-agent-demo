@@ -121,8 +121,13 @@ SELECT
   dr.mlflow_trace_id,
   hr.cluster_id AS graph_cluster_id,
   hr.cluster_size AS graph_cluster_size,
+  hr.n_customers AS graph_cluster_customers,
   hr.risk_score AS customer_heat_risk_score,
-  coalesce(hr.risk_score > 0, false) AS customer_heat_risky
+  coalesce(hr.risk_score > 0, false) AS customer_heat_risky,
+  -- Tuned fraud flag (risk_score >= 0.6 AND cluster_size >= 3) + its hover reason,
+  -- surfaced so downstream analytics and the App read one consistent signal.
+  coalesce(hr.high_risk, false) AS customer_heat_high_risk,
+  hr.risk_reason AS customer_heat_risk_reason
 FROM current_adjudications a
 JOIN `${claims.catalog}`.gold.claims_current c USING (claim_id)
 JOIN heats_coils h ON c.coil_id = h.coil_id
