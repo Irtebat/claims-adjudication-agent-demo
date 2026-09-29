@@ -31,9 +31,11 @@ def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
     assert generate < seed < create_cdf < refresh
 
     runner = (Path(__file__).parents[1] / "run.py").read_text()
-    process = runner.index('"bundle", "run", "refresh_medallion"')
-    drop_old = runner.index('"DROP MATERIALIZED VIEW IF EXISTS')
-    assert drop_old < process
+    # refresh is a normal incremental medallion run. The stale DROP MATERIALIZED VIEW
+    # migration — which errored with DROP_COMMAND_TYPE_MISMATCH once the *_history
+    # datasets stopped being materialized views — has been removed.
+    assert '"bundle", "run", "refresh_medallion"' in runner
+    assert "DROP MATERIALIZED VIEW" not in runner
     assert "lakebase_root" not in runner
 
     lakebase_runner = (Path(__file__).parents[2] / "lakebase" / "run.py").read_text()

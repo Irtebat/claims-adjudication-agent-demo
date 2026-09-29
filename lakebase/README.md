@@ -58,7 +58,15 @@ Secret scope `fe-bar-lakebase` — keys `database`, `endpoint`, `host`, `port`,
   profile `fe-bar`; serverless job environment with `databricks-sdk` and
   `psycopg[binary]`.
 - Synced tables use Triggered mode (`scripts/create_synced_tables.sh`, via the
-  `databricks postgres create-synced-table` surface).
+  `databricks postgres create-synced-table` surface). Because a delete+recreate makes
+  the new table owned by a different role and drops its grants, the script finishes by
+  running `scripts/regrant_synced_table_selects.py`, which idempotently re-grants
+  `SELECT` on the `reference.*` synced tables to the documented consumers — the app SP
+  (`docs/evidence/app-deploy/grants.sql`) and the serving SP
+  (`docs/evidence/serving-endpoint/README.md`) — so re-syncs are reproducible without a
+  manual `GRANT` (the app-SP losing SELECT on `reference.customer_heat_risk` 500'd the
+  cockpit on the go-live run). Override the SP ids via `APP_SP_PRINCIPAL` /
+  `SERVING_SP_PRINCIPAL` if they are rotated.
 - The one-time seed tags every synthetic row with
   `data_provenance = 'synthetic_wave_2_baseline'` and is idempotent; it must not be
   rerun after CDF is active (use `pipelines/run.py run` for the guarded sequence).

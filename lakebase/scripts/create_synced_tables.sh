@@ -9,6 +9,14 @@ lakebase_catalog="fe_bar_operational"
 storage_catalog="fe-bar-ir"
 storage_schema="default"
 
+# Roles that must retain SELECT on the reference.* synced tables. A delete+recreate
+# makes the new table owned by a different role and drops prior grants — the app-SP
+# losing SELECT on reference.customer_heat_risk 500'd the cockpit on the go-live run.
+# Ids are documented in docs/evidence/app-deploy/grants.sql (app SP) and
+# docs/evidence/serving-endpoint/README.md (serving SP); override via env if rotated.
+app_sp_principal="${APP_SP_PRINCIPAL:-d5309ee7-a8ea-499f-99d4-4ccbd8369d93}"
+serving_sp_principal="${SERVING_SP_PRINCIPAL:-47643eb1-dbd5-40a6-a51d-5da6b8e2da7a}"
+
 create_sync() {
   local table="$1"
   # Comma-separated primary key column(s); the third arg overrides the source schema.
@@ -39,3 +47,13 @@ create_sync defect_codes defect_code
 # Advisory customer/heat risk, produced by the offline fraud-graph job in gold and
 # served down for the agent's get_customer_heat_risk tool (advisory only).
 create_sync customer_heat_risk "customer_id,heat_no" gold
+
+# Re-grant SELECT to the documented consumers (app-SP + serving-SP). Recreating a
+# synced table drops its grants, so without this a re-sync silently breaks the app's
+# reads until a manual GRANT is restored. Idempotent — safe to run every time.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
+  python "${script_dir}/regrant_synced_table_selects.py" \
+  --profile "${profile}" \
+  --app-principal "${app_sp_principal}" \
+  --serving-principal "${serving_sp_principal}"
