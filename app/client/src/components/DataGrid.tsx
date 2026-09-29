@@ -188,8 +188,8 @@ export function DataGrid<T>({
                   'border-border transition-colors duration-100',
                   activatable &&
                     'cursor-pointer hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                  // Selected row: a subtle lift plus a thin inset indigo rail on the left.
-                  activeRowId === id && 'bg-accent shadow-[inset_2px_0_0_0_var(--db-accent)]'
+                  // Selected row: a subtle lift plus a thin inset Lava rail on the left.
+                  activeRowId === id && 'bg-accent shadow-[inset_2px_0_0_0_var(--db-lava)]'
                 )}
               >
                 {columns.map((col) => (
