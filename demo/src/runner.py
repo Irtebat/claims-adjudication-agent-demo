@@ -3,7 +3,7 @@
 
 # COMMAND ----------
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 from databricks.sdk import WorkspaceClient
 
@@ -104,9 +104,13 @@ if mode == "serving_endpoint":
         """Invoke the serving endpoint for a single claim."""
         import json
 
+        json_safe_claim = {
+            key: value.isoformat() if isinstance(value, (date, datetime)) else value
+            for key, value in claim.items()
+        }
         body = {
-            "input": [{"role": "user", "content": json.dumps(claim)}],
-            "custom_inputs": {"persist": persist, "claim": claim},
+            "input": [{"role": "user", "content": json.dumps(json_safe_claim)}],
+            "custom_inputs": {"persist": persist, "claim": json_safe_claim},
         }
 
         response = w.api_client.do(
@@ -155,7 +159,7 @@ summary = {
     "timestamp": datetime.utcnow().isoformat(),
 }
 
-print(f"\nSummary: {json.dumps(summary, indent=2)}")
+print(f"\nSummary: {json.dumps(summary, indent=2, default=str)}")
 
 # Optional: check queue population
 with psycopg.connect(**conn_params) as conn:
@@ -175,4 +179,4 @@ with psycopg.connect(**conn_params) as conn:
         print(f"Adjuster queue (RECOMMENDED adjudications): {queue_count}")
         summary["queue_count"] = queue_count
 
-dbutils.notebook.exit(json.dumps(summary, indent=2))
+dbutils.notebook.exit(json.dumps(summary, indent=2, default=str))
