@@ -99,6 +99,14 @@ describe('actionForPath', () => {
     expect(actionForPath('GET', '/api/analytics/query')).toBe('business_dashboard');
   });
 
+  it('maps the source drill-through to cockpit (adjuster-only, same as the cockpit detail)', () => {
+    expect(actionForPath('GET', '/api/source/spec_clauses/A653%2FNA%2FE%2Fmechanical')).toBe('cockpit');
+    expect(actionForPath('GET', '/api/source/prior_claims/CLM-1')).toBe('cockpit');
+    expect(actionForPath('GET', '/api/source/customer_heat_risk/CU-1')).toBe('cockpit');
+    // Only GET is a drill-through; a write verb is not this surface.
+    expect(actionForPath('POST', '/api/source/prior_claims/CLM-1')).toBeNull();
+  });
+
   it('finalize requires POST; GET on the claim is cockpit', () => {
     expect(actionForPath('GET', '/api/claims/CLM-1/finalize')).toBeNull();
     expect(actionForPath('GET', '/api/claims/CLM-1')).toBe('cockpit');
@@ -163,6 +171,20 @@ describe('makeAuthz middleware', () => {
     const next = vi.fn();
     await mw(mkReq('GET', '/api/queue'), res, next);
     expect(res.statusCode).toBe(403);
+  });
+
+  it('allows an adjuster the source drill-through, denies a business user (adjuster-only)', async () => {
+    const adj = mkRes();
+    const adjNext = vi.fn();
+    await makeAuthz(resolver('adjuster'))(mkReq('GET', '/api/source/prior_claims/CLM-1'), adj, adjNext);
+    expect(adjNext).toHaveBeenCalledOnce();
+    expect(adj.statusCode).toBeUndefined();
+
+    const biz = mkRes();
+    const bizNext = vi.fn();
+    await makeAuthz(resolver('business_user'))(mkReq('GET', '/api/source/prior_claims/CLM-1'), biz, bizNext);
+    expect(bizNext).not.toHaveBeenCalled();
+    expect(biz.statusCode).toBe(403);
   });
 
   it('denies an adjuster the business dashboard data endpoint (403)', async () => {
