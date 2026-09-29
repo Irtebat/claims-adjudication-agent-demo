@@ -14,11 +14,9 @@ from generator_core import ClaimsGenerator
 catalog = dbutils.widgets.get("catalog")
 count = int(dbutils.widgets.get("count"))
 seed = int(dbutils.widgets.get("seed"))
-mode = dbutils.widgets.get("mode", "serving_endpoint")  # serving_endpoint or in_process
-endpoint = dbutils.widgets.get(
-    "endpoint", "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
-)
-postgres_database = dbutils.widgets.get("postgres_database", "databricks_postgres")
+mode = dbutils.widgets.get("mode")  # serving_endpoint or in_process
+endpoint = dbutils.widgets.get("endpoint")
+postgres_database = dbutils.widgets.get("postgres_database")
 
 if count < 100:
     raise ValueError("count must be >= 100")
