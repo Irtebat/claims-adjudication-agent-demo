@@ -9,9 +9,6 @@ from datetime import datetime
 
 from databricks.sdk import WorkspaceClient
 
-# Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-
 from generator_core import ClaimsGenerator
 
 # COMMAND ----------
