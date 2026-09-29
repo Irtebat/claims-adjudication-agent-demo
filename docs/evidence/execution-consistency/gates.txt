@@ -1,0 +1,20 @@
+# Gates — execution-consistency  (generated 2026-09-29T20:41:16Z)
+
+## GATE: git diff main -- agent/src/authorities.py (MUST be empty)
+exit=0 (no diff above = PASS)
+
+## bundle validate --target prod --profile fe-bar (read-only)
+pipelines: Validation OK!
+lakebase: Validation OK!
+agent: Validation OK!
+eval: Validation OK!
+
+## unit tests
+pipelines: 21 passed in 0.04s
+lakebase: 16 passed in 0.13s
+agent: 91 passed, 3 skipped (uv run --project eval pytest agent/tests -q)
+eval: 48 passed (uv run pytest -q)
+
+## ruff (check + format --check)
+pipelines/scripts/agent/eval: check clean, format clean
+lakebase: check clean; format --check flags 3 PRE-EXISTING files (unchanged vs main; only README.md changed here)

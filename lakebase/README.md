@@ -69,7 +69,8 @@ Secret scope `fe-bar-lakebase` — keys `database`, `endpoint`, `host`, `port`,
   `SERVING_SP_PRINCIPAL` if they are rotated.
 - The one-time seed tags every synthetic row with
   `data_provenance = 'synthetic_wave_2_baseline'` and is idempotent; it must not be
-  rerun after CDF is active (use `pipelines/run.py run` for the guarded sequence).
+  rerun after CDF is active (use `scripts/bootstrap.py`, or `lakebase/run.py
+  setup-and-seed`, for the guarded sequence).
 
 ## Data flow
 
@@ -122,15 +123,36 @@ schema-scoped config streams it. A schema-scoped config detects a newly added ta
 once it has committed WAL activity; the first decision-record write is what moves it
 to `CDF_STATE_STREAMING` and materializes `cdf.lb_adjudication_decision_records_history`.
 
-## Deploy and execute on the workspace
+## Execution model
+
+Two mechanisms only (see the repo-root README). Unlike other layers, `lakebase`
+keeps its `run.py` wrapper because most of its lifecycle is **guarded orchestration a
+plain `bundle run` cannot express**, not a pure passthrough:
+
+- **`setup-and-seed`** refuses to run if a native CDF config already exists (a
+  re-seed's fixture delete/upsert would emit artificial deletes/inserts and create
+  spurious SCD2 versions), then does `bundle deploy` + `bundle run setup_and_seed`
+  **and** runs the non-bundle `src/policy_intake.py` step (local psycopg over 5432,
+  which cannot run as a bundle job) in the correct order.
+- **`create-cdf`** refuses if a config already exists, provisions the schema-scoped
+  native CDF config, and polls until `claims`/`adjudications` reach
+  `CDF_STATE_STREAMING` before returning — a readiness gate, not a job.
+- **`policy-intake`** and **`synced-tables`** run non-bundle steps: the psycopg
+  policy load and `scripts/create_synced_tables.sh` (which also re-grants `SELECT`
+  after each re-sync).
+
+Because these guards protect money-adjacent SCD2 history, run the wrapper rather
+than the raw bundle. The `validate`/`deploy` actions map to plain
+`databricks bundle validate --strict -t prod --profile fe-bar` /
+`databricks bundle deploy -t prod --profile fe-bar` and may be run directly.
 
 ```bash
-uv run --with pyyaml python lakebase/run.py validate
-uv run --with pyyaml python lakebase/run.py deploy
-uv run --with pyyaml python lakebase/run.py setup-and-seed
-uv run --with pyyaml python lakebase/run.py policy-intake
-uv run --with pyyaml python lakebase/run.py create-cdf
-uv run --with pyyaml python lakebase/run.py synced-tables
+uv run --with pyyaml python lakebase/run.py validate        # bundle validate (thin — may run directly)
+uv run --with pyyaml python lakebase/run.py deploy          # bundle deploy   (thin — may run directly)
+uv run --with pyyaml python lakebase/run.py setup-and-seed  # guarded: reseed guard + seed + policy intake
+uv run --with pyyaml python lakebase/run.py policy-intake   # non-bundle psycopg policy load
+uv run --with pyyaml python lakebase/run.py create-cdf      # guarded: create CDF + poll to STREAMING
+uv run --with pyyaml python lakebase/run.py synced-tables   # non-bundle synced-table create + re-grant
 ```
 
 The wrappers always use `-t prod --profile fe-bar`. The underlying bundle job key

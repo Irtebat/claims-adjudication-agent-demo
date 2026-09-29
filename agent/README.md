@@ -76,6 +76,27 @@ trace whose searchable attributes carry claim/adjudication id, claim type, the
 deterministic verdict + duplicate status, model name/version, authorities git-SHA,
 cited clause keys, and the final recommendation — no credentials or PII.
 
+## Retrieval
+
+Two distinct retrieval paths, and only one of them is a semantic/vector search:
+
+- **Clause citation over `spec_clauses` / `warranty_clauses` is metadata-resolved,
+  not semantic.** The applicable parent policy is chosen *deterministically* by
+  resolution — the spec by `(grade, spec_edition, region)` and the warranty by
+  `(product_line, coating_class, region)` plus the effective window at the coil's
+  ship date. `retrieve_policy_clauses` (`src/retrieval.py`) then pre-filters clauses
+  to that resolved parent on exactly those metadata columns and uses **BM25 only**
+  (`clause_tsv <@> to_bm25query(...)` over the `lakebase_bm25` index) to *order*
+  clauses within it. No embedding is computed for clause citation — the `embed_fn`
+  argument is unused on this path. Retrieval only finds and cites the clauses of the
+  already-resolved policy; it never decides which policy applies or moves money.
+- **Genuine dense-vector + BM25 hybrid (RRF) retrieval lives only in the
+  `prior_claims` precedent index.** `find_similar_prior_claims` runs a dense arm
+  (`embedding <=>` cosine distance) and a BM25 arm (`narrative_tsv <@>
+  to_bm25query(...)`), fused by reciprocal-rank fusion. It is advisory
+  precedent / copy-paste-fraud signal only — the deterministic duplicate gate, not
+  this search, is what can deny money.
+
 ## Registration
 
 `src/register_agent.py` logs the agent with `mlflow.pyfunc.log_model`
@@ -89,6 +110,22 @@ the dedicated application service principal using the deployed secret references
 local runs use the explicit workspace profile. Registration never sets `@prod` —
 only `eval/src/promote.py` owns that alias — and does **not** create a serving
 endpoint. Traces land in a named, non-Git MLflow experiment.
+
+## Execution model
+
+Two mechanisms only (see the repo-root README). This layer holds the **one
+legitimate direct-`uv run python` exception**:
+
+- **`register → evaluate → promote` is the human-gated MLflow model lifecycle**, so
+  it runs as direct `uv run python` (`agent/src/register_agent.py`,
+  `eval/src/evaluate.py`, `eval/src/promote.py`). It is an interactive operator loop
+  — a human reviews the evaluation gate and decides promotion — **not a scheduled
+  job**; running it as a bundle job would misrepresent an attended human decision as
+  automation, and `evaluate.py` additionally enforces the explicit `fe-bar` profile
+  as a money-safety guard.
+- **Everything that runs on Databricks compute uses DABs.** `fraud_graph` (builds
+  `gold.customer_heat_risk`) and `deploy_claims_agent` (creates/updates the serving
+  endpoint) are `databricks bundle run` jobs.
 
 ## Release and deployment
 

@@ -55,14 +55,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "action",
+        # Only genuinely-non-bundle orchestration lives here. Pure `databricks bundle`
+        # passthroughs (validate/deploy/summary) were collapsed — run them directly as
+        # `databricks bundle <validate|deploy|summary> --target prod --profile fe-bar`
+        # (see pipelines/README.md). What remains adds real logic a plain `bundle run`
+        # cannot express: warranty-schedule sourcing (generate/check-generator),
+        # dynamic native-CDF table resolution (refresh/decision-records), the preview
+        # probe, account-group/governance rendering, and SQL evidence capture.
         choices=[
-            "validate",
-            "deploy",
             "generate",
             "refresh",
             "decision-records",
             "preview-status",
-            "summary",
             "check-generator",
             "govern",
             "evidence",
@@ -123,21 +127,18 @@ def main():
             raise RuntimeError(result.stderr.strip() or result.stdout.strip())
         return result
 
-    if args.action in {"validate", "deploy", "generate", "summary", "check-generator"}:
-        parts = [
-            "bundle",
-            "run" if args.action in {"generate", "check-generator"} else args.action,
-            "--target",
-            "prod",
-        ]
-        if args.action == "validate":
-            parts.append("--strict")
-        if args.action == "check-generator":
-            parts.append("validate_generator")
-        if args.action == "generate":
-            parts.append("generate_raw")
+    if args.action in {"generate", "check-generator"}:
+        # These are `bundle run`s that stay wrapped ONLY because they inject
+        # BUNDLE_VAR_warranty_schedule (sourced from policy_source.json above) as a
+        # run-time job-parameter override, so the generator applies the authored
+        # warranty schedule and no policy numerics are hardcoded in the bundle. A
+        # plain `databricks bundle run` would use the bundle's empty-list default.
+        job = "generate_raw" if args.action == "generate" else "validate_generator"
         result = subprocess.run(
-            ["databricks", *parts, "--profile", profile], cwd=ROOT, env=env, check=False
+            ["databricks", "bundle", "run", job, "--target", "prod", "--profile", profile],
+            cwd=ROOT,
+            env=env,
+            check=False,
         )
         raise SystemExit(result.returncode)
 

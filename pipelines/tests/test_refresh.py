@@ -3,8 +3,9 @@
 Mocks the databricks CLI (``subprocess.run``) and actually calls ``main()`` with the
 refresh action, asserting it issues NO DROP/query call and exactly the deploy +
 ``bundle run refresh_medallion`` sequence — the fix for the stale DROP MATERIALIZED
-VIEW migration that failed with DROP_COMMAND_TYPE_MISMATCH on go-live. A regression
-test confirms an unchanged passthrough subcommand (deploy) still behaves.
+VIEW migration that failed with DROP_COMMAND_TYPE_MISMATCH on go-live. A companion
+test confirms the pure `databricks bundle` passthroughs (validate/deploy/summary)
+were collapsed out of the wrapper and are now rejected by the parser.
 """
 
 import importlib.util
@@ -105,14 +106,14 @@ def test_refresh_feeds_current_cdf_table_names_to_the_pipeline(monkeypatch):
     assert any("tables" in p and "list" in p for p in calls)
 
 
-def test_deploy_passthrough_unchanged(monkeypatch):
-    # Regression: an untouched passthrough subcommand still issues its plain bundle
-    # command and exits with the CLI's return code — the refactor didn't disturb it.
-    calls = []
-    monkeypatch.setattr(run.subprocess, "run", _make_fake_run(calls))
-    monkeypatch.setattr(sys, "argv", ["run.py", "deploy"])
+@pytest.mark.parametrize("action", ["validate", "deploy", "summary"])
+def test_collapsed_passthrough_actions_are_removed(monkeypatch, action):
+    # These were pure `databricks bundle <cmd>` shims. They were collapsed: the README
+    # now documents them as direct `databricks bundle ... --target prod --profile
+    # fe-bar` commands, and the wrapper's parser rejects them (argparse exits 2 on an
+    # invalid choice). The genuine-orchestration actions stay.
+    monkeypatch.setattr(run.subprocess, "run", _make_fake_run([]))
+    monkeypatch.setattr(sys, "argv", ["run.py", action])
     with pytest.raises(SystemExit) as exc:
         run.main()
-    assert exc.value.code == 0
-    assert ["bundle", "deploy", "--target", "prod"] in calls
-    assert not any("DROP MATERIALIZED VIEW" in " ".join(p) for p in calls)
+    assert exc.value.code == 2

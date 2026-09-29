@@ -82,41 +82,75 @@ insert/update/delete up into the `cdf` landing tables; AUTO CDC applies them int
 the two SCD Type 2 silver histories, and the gold views expose current-state and
 full-history projections.
 
+## Execution model
+
+Two mechanisms only (see the repo-root README):
+
+- **DABs bundle for compute** — the medallion pipeline and all four jobs
+  (`validate_generator`, `generate_raw`, `refresh_medallion`, `deploy_metric_views`).
+  Plain bundle operations are run directly (below); they are never wrapped.
+- **Direct `uv run python pipelines/run.py <action>` only for orchestration a plain
+  `bundle run` cannot express.** `pipelines/run.py` holds *only* those actions; the
+  pure `bundle validate`/`deploy`/`summary` passthroughs were removed.
+
 ## Deploy and run on the workspace
 
 Requires an authenticated Databricks CLI (>= 1.0), `uv`, an accessible UC managed
 storage root, and permission to create schemas, volumes, and account groups. All
-compute is serverless; there is no schedule. From the repository root:
+compute is serverless; there is no schedule. The guarded end-to-end path, from the
+repository root:
 
 ```bash
 uv run --with pyyaml python scripts/bootstrap.py
 ```
 
-The bootstrap is the guarded end-to-end path. For validation, deployment,
-diagnostics, or an already-configured CDF source, use the wrapper actions:
+**Plain DABs operations — run directly** (from `pipelines/`):
 
 ```bash
-uv run --with pyyaml python pipelines/run.py validate
-uv run --with pyyaml python pipelines/run.py deploy
-uv run --with pyyaml python pipelines/run.py check-generator
-uv run --with pyyaml python pipelines/run.py generate
-uv run --with pyyaml python pipelines/run.py preview-status
-uv run --with pyyaml python pipelines/run.py refresh
-uv run --with pyyaml python pipelines/run.py decision-records
-uv run --with pyyaml python pipelines/run.py summary
-uv run --with pyyaml python pipelines/run.py govern
-uv run --with pyyaml python pipelines/run.py evidence
+databricks bundle validate --strict --target prod --profile fe-bar
+databricks bundle deploy            --target prod --profile fe-bar
+databricks bundle summary           --target prod --profile fe-bar
 ```
 
-The bundle resource keys are `validate_generator`, `generate_raw`,
-`refresh_medallion`, and pipeline `medallion`. The latter two require resolved
-`BUNDLE_VAR_cdf_claims_table` and `BUNDLE_VAR_cdf_adjudications_table`; normally
-invoke them through `run.py refresh`, which supplies those values.
+**`run.py` actions — each adds orchestration a plain `bundle run` cannot express:**
 
-`scripts/bootstrap.py` orchestrates raw generation, the one-time Lakebase seed, CDF
-creation/readiness, then the triggered AUTO CDC pipeline. If a CDF config exists,
-it refuses before Lakebase deployment or seeding because replacing the fixture
-would emit artificial deletes/inserts and create spurious SCD2 versions.
+```bash
+uv run --with pyyaml python pipelines/run.py generate         # bundle run generate_raw + inject warranty schedule
+uv run --with pyyaml python pipelines/run.py check-generator  # bundle run validate_generator + inject warranty schedule
+uv run --with pyyaml python pipelines/run.py preview-status   # probe Lakebase CDF preview enablement
+uv run --with pyyaml python pipelines/run.py refresh          # resolve dynamic CDF table names -> deploy + run refresh_medallion
+uv run --with pyyaml python pipelines/run.py decision-records # wait for CDF STREAMING, resolve tables -> deploy + run
+uv run --with pyyaml python pipelines/run.py govern           # create account groups + render/execute governance.sql
+uv run --with pyyaml python pipelines/run.py evidence         # capture SQL evidence snapshots
+```
+
+Why each `run.py` action is not a plain `bundle run`:
+
+- **`generate` / `check-generator`** inject `BUNDLE_VAR_warranty_schedule`, sourced
+  from `lakebase/src/policy_source.json`, as a run-time job-parameter override — so a
+  policy edit propagates into the generated history and no policy numerics are
+  hardcoded in the bundle (which defaults the schedule to `[]`).
+- **`refresh` / `decision-records`** discover the hash-suffixed native-CDF landing
+  table names at runtime and pass them as `BUNDLE_VAR_cdf_*`; the pipeline and
+  `refresh_medallion` cannot resolve those names themselves. `decision-records` also
+  polls until the decision-record table reaches `CDF_STATE_STREAMING`.
+- **`preview-status`** reads the feature-gated CDF preview endpoint (a guard, not a
+  bundle resource). **`govern`** creates account groups and renders `governance.sql`
+  with validated principals. **`evidence`** captures real SQL results to
+  `docs/evidence/`. None maps to a bundle resource.
+
+The bundle resource keys are `validate_generator`, `generate_raw`,
+`refresh_medallion`, `deploy_metric_views`, and pipeline `medallion`. The pipeline
+and `refresh_medallion` require resolved `BUNDLE_VAR_cdf_claims_table` and
+`BUNDLE_VAR_cdf_adjudications_table`; invoke them through `run.py refresh`, which
+supplies those values.
+
+`scripts/bootstrap.py` composes the guarded end-to-end path: it issues the plain
+pipelines `databricks bundle deploy` directly, then `run.py generate`, the Lakebase
+seed and CDF creation (via `lakebase/run.py`), and finally `run.py refresh`. If a
+CDF config exists, the Lakebase steps refuse before deployment or seeding because
+replacing the fixture would emit artificial deletes/inserts and create spurious SCD2
+versions.
 
 `decision-records` is the additive path for the append-only agent decision record.
 The table is created by `lakebase/src/setup_and_seed.py` (with
