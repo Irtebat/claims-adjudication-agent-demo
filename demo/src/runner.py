@@ -3,8 +3,6 @@
 
 # COMMAND ----------
 import json
-import os
-import sys
 from datetime import datetime
 
 from databricks.sdk import WorkspaceClient
@@ -140,38 +138,10 @@ if mode == "serving_endpoint":
     adjudication_results["failed"] = failed_count
 
 else:  # in_process mode
-    print("Using in-process adjudication (importing agent)")
-
-    # Set up environment for agent
-    os.environ["LAKEBASE_PROFILE"] = "fe-bar"
-
-    try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../agent/src"))
-        from agent import ClaimsAdjudicationAgent
-
-        agent = ClaimsAdjudicationAgent()
-        adjudicated_count = 0
-        failed_count = 0
-
-        for claim in claims:
-            try:
-                result = agent.adjudicate(claim, persist=True)
-                adjudicated_count += 1
-                if adjudicated_count % 100 == 0:
-                    print(f"Adjudicated {adjudicated_count}/{count}")
-            except Exception as e:
-                failed_count += 1
-                print(f"Failed to adjudicate {claim['claim_id']}: {e}")
-                if failed_count > 10:
-                    print("Stopping due to repeated failures")
-                    raise
-
-        adjudication_results["adjudicated"] = adjudicated_count
-        adjudication_results["failed"] = failed_count
-
-    except ImportError as e:
-        print(f"Cannot import agent in in-process mode: {e}")
-        raise
+    raise RuntimeError(
+        "in_process mode is not supported in the deployed demo bundle; "
+        "use mode=serving_endpoint"
+    )
 
 # COMMAND ----------
 # Summary
