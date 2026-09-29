@@ -3,7 +3,7 @@
 
 # COMMAND ----------
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 from databricks.sdk import WorkspaceClient
 
@@ -14,11 +14,9 @@ from generator_core import ClaimsGenerator
 catalog = dbutils.widgets.get("catalog")
 count = int(dbutils.widgets.get("count"))
 seed = int(dbutils.widgets.get("seed"))
-mode = dbutils.widgets.get("mode", "serving_endpoint")  # serving_endpoint or in_process
-endpoint = dbutils.widgets.get(
-    "endpoint", "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
-)
-postgres_database = dbutils.widgets.get("postgres_database", "databricks_postgres")
+mode = dbutils.widgets.get("mode")  # serving_endpoint or in_process
+endpoint = dbutils.widgets.get("endpoint")
+postgres_database = dbutils.widgets.get("postgres_database")
 
 if count < 100:
     raise ValueError("count must be >= 100")
@@ -106,9 +104,13 @@ if mode == "serving_endpoint":
         """Invoke the serving endpoint for a single claim."""
         import json
 
+        json_safe_claim = {
+            key: value.isoformat() if isinstance(value, (date, datetime)) else value
+            for key, value in claim.items()
+        }
         body = {
-            "input": [{"role": "user", "content": json.dumps(claim)}],
-            "custom_inputs": {"persist": persist, "claim": claim},
+            "input": [{"role": "user", "content": json.dumps(json_safe_claim)}],
+            "custom_inputs": {"persist": persist, "claim": json_safe_claim},
         }
 
         response = w.api_client.do(
@@ -139,8 +141,7 @@ if mode == "serving_endpoint":
 
 else:  # in_process mode
     raise RuntimeError(
-        "in_process mode is not supported in the deployed demo bundle; "
-        "use mode=serving_endpoint"
+        "in_process mode is not supported in the deployed demo bundle; use mode=serving_endpoint"
     )
 
 # COMMAND ----------
@@ -157,7 +158,7 @@ summary = {
     "timestamp": datetime.utcnow().isoformat(),
 }
 
-print(f"\nSummary: {json.dumps(summary, indent=2)}")
+print(f"\nSummary: {json.dumps(summary, indent=2, default=str)}")
 
 # Optional: check queue population
 with psycopg.connect(**conn_params) as conn:
@@ -170,6 +171,11 @@ with psycopg.connect(**conn_params) as conn:
             SELECT COUNT(*) FROM adjudications a
             JOIN claims c ON c.claim_id = a.claim_id
             WHERE c.data_provenance = %s AND a.decision_status = 'RECOMMENDED'
+              AND NOT EXISTS (
+                SELECT 1 FROM adjudications h
+                WHERE h.claim_id = a.claim_id
+                  AND h.decision_status IN ('FINAL', 'REVIEWED')
+              )
             """,
             (data_provenance,),
         )
@@ -177,4 +183,4 @@ with psycopg.connect(**conn_params) as conn:
         print(f"Adjuster queue (RECOMMENDED adjudications): {queue_count}")
         summary["queue_count"] = queue_count
 
-dbutils.notebook.exit(json.dumps(summary, indent=2))
+dbutils.notebook.exit(json.dumps(summary, indent=2, default=str))
