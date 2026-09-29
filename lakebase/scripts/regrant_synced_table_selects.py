@@ -14,6 +14,11 @@ Runs against the live Lakebase Postgres endpoint over psycopg as the invoking
 superuser (SDK OAuth credential, sslmode=require) — the same connection pattern as
 ``apply_finalization_columns.py``.
 
+Both the app SP and the serving SP are contractually required consumers, so by
+default both principals must be resolved or the script errors before touching the
+database — it never reports success for a principal it skipped. Pass the explicit
+``--allow-single-principal`` opt-out to grant only the principal(s) supplied.
+
 Usage:
     uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
         python lakebase/scripts/regrant_synced_table_selects.py --profile fe-bar
@@ -26,7 +31,6 @@ import json
 import os
 
 import psycopg
-from databricks.sdk import WorkspaceClient
 from psycopg import sql
 
 DEFAULT_ENDPOINT = "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
@@ -46,6 +50,10 @@ SERVING_TABLES = ["heats_coils", "mill_test_certs", "customer_heat_risk"]
 
 
 def _connect(profile: str, endpoint: str, database: str) -> psycopg.Connection:
+    # Imported here (not at module top) so the module — and thus its unit tests, which
+    # mock _connect — imports without the Databricks SDK installed.
+    from databricks.sdk import WorkspaceClient
+
     client = WorkspaceClient(profile=profile)
     details = client.postgres.get_endpoint(name=endpoint)
     credential = client.postgres.generate_database_credential(endpoint=endpoint)
@@ -76,6 +84,39 @@ def _regrant(cur: psycopg.Cursor, role: str, tables: list[str]) -> None:
         )
 
 
+def _resolve_consumers(app_principal, serving_principal, allow_single=False):
+    """Resolve the [(role, tables), ...] to grant, failing safe on a missing principal.
+
+    Both the app SP and the serving SP are contractually required consumers. If either
+    is empty/unset this raises ValueError NAMING the missing principal(s) and grants
+    nothing — the script must never silently skip a required consumer yet report
+    success. ``allow_single=True`` is the explicit opt-out: grant only whichever
+    principals are supplied (still erroring if none are).
+    """
+    candidates = [
+        ("app", app_principal, APP_TABLES),
+        ("serving", serving_principal, SERVING_TABLES),
+    ]
+    if not allow_single:
+        missing = [name for name, principal, _ in candidates if not principal]
+        if missing:
+            raise ValueError(
+                "Required principal(s) not set: "
+                + ", ".join(missing)
+                + ". Both the app and serving service principals are required consumers of "
+                "the reference.* synced tables; set --app-principal / --serving-principal "
+                "(or APP_SP_PRINCIPAL / SERVING_SP_PRINCIPAL), or pass "
+                "--allow-single-principal to deliberately grant only the ones supplied."
+            )
+    consumers = [(principal, tables) for _, principal, tables in candidates if principal]
+    if not consumers:
+        raise ValueError(
+            "No principals supplied; set --app-principal and/or --serving-principal "
+            "(or their APP_SP_PRINCIPAL / SERVING_SP_PRINCIPAL env vars)."
+        )
+    return consumers
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", default="fe-bar")
@@ -83,23 +124,28 @@ def main() -> None:
     parser.add_argument("--database", default=DEFAULT_DATABASE)
     parser.add_argument(
         "--app-principal",
-        default=os.environ.get("APP_PRINCIPAL", DEFAULT_APP_PRINCIPAL),
-        help="App service-principal id (Postgres role) for the cockpit reads; empty to skip",
+        default=os.environ.get("APP_SP_PRINCIPAL", DEFAULT_APP_PRINCIPAL),
+        help="App service-principal id (Postgres role) for the cockpit reads",
     )
     parser.add_argument(
         "--serving-principal",
-        default=os.environ.get("SERVING_PRINCIPAL", DEFAULT_SERVING_PRINCIPAL),
-        help="Serving service-principal id (Postgres role); empty to skip",
+        default=os.environ.get("SERVING_SP_PRINCIPAL", DEFAULT_SERVING_PRINCIPAL),
+        help="Serving service-principal id (Postgres role)",
+    )
+    parser.add_argument(
+        "--allow-single-principal",
+        action="store_true",
+        help=(
+            "Explicit opt-out of the both-principals requirement: grant only the "
+            "principal(s) supplied. Off by default — a missing app or serving SP is an "
+            "error, never a silent skip."
+        ),
     )
     args = parser.parse_args()
 
-    consumers = []
-    if args.app_principal:
-        consumers.append((args.app_principal, APP_TABLES))
-    if args.serving_principal:
-        consumers.append((args.serving_principal, SERVING_TABLES))
-    if not consumers:
-        raise SystemExit("No principals supplied; set --app-principal and/or --serving-principal")
+    consumers = _resolve_consumers(
+        args.app_principal, args.serving_principal, args.allow_single_principal
+    )
 
     applied = []
     with _connect(args.profile, args.endpoint, args.database) as conn, conn.cursor() as cur:
