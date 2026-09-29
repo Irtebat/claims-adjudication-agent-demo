@@ -175,12 +175,6 @@ def main():
                 f"Refresh requires exactly one existing CDF config; found {existing}"
             )
 
-        warehouses = cli_json("warehouses", "list")
-        warehouse = next(
-            item["id"]
-            for item in warehouses
-            if item["name"] == db["warehouse_name"] and item["enable_serverless_compute"]
-        )
         created = existing[0]
         table_response = cli_json("tables", "list", catalog, cdf_schema)
         tables = (
@@ -198,26 +192,13 @@ def main():
                 raise RuntimeError(f"Expected one CDF table for {source}, found {matches}")
             return matches[0]
 
-        # Dataset kinds cannot be changed in place. Remove only the six derived,
-        # reproducible Parquet-fed MVs that this workstream replaces.
-        for schema, table in (
-            ("bronze", "claims_history"),
-            ("bronze", "adjudications_history"),
-            ("silver", "claims_history"),
-            ("silver", "adjudications_history"),
-            ("gold", "claims_history"),
-            ("gold", "adjudications_history"),
-        ):
-            cli(
-                "experimental",
-                "aitools",
-                "tools",
-                "query",
-                f"DROP MATERIALIZED VIEW IF EXISTS `{catalog}`.`{schema}`.`{table}`",
-                "--warehouse",
-                warehouse,
-            )
-
+        # A normal triggered/incremental medallion run: feed the pipeline the current
+        # native-CDF table names and run refresh_medallion. Ordinary DML flows through
+        # CDF incrementally, so this neither reloads everything nor re-snapshots, and it
+        # issues no DDL. The *_history datasets are no longer materialized views
+        # (silver.*_history are STREAMING_TABLE, gold.*_history / *_current are VIEW), so
+        # the earlier migration that dropped them as MVs errored with
+        # DROP_COMMAND_TYPE_MISMATCH on the go-live run and has been removed.
         env["BUNDLE_VAR_cdf_claims_table"] = cdf_table("claims")
         env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table("adjudications")
         cli("bundle", "deploy", "--target", "prod")
