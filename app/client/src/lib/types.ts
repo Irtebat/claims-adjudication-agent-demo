@@ -191,12 +191,35 @@ export interface PriorClaim {
   approved_amount: Num;
 }
 
+/**
+ * The customer-heat-risk row (jsonb from `to_jsonb(r)` over reference.customer_heat_risk).
+ *
+ * `high_risk` and `risk_reason` are the gold/synced fraud columns added by the parallel
+ * fraud-tuning workstream (high_risk = risk_score >= 0.6 AND cluster_size >= 3). They flow
+ * through the server's `to_jsonb(r)` context select automatically, so they are typed
+ * OPTIONAL here and read defensively — a row predating those columns simply omits them,
+ * and the cockpit shows the fraud chip only when `high_risk` is strictly true. The index
+ * signature preserves the "render whatever columns exist" behavior of the context panel.
+ */
+export interface CustomerHeatRisk {
+  customer_id?: Str;
+  heat_no?: Str;
+  cluster_id?: Str;
+  cluster_size?: Num;
+  risk_score?: Num;
+  /** Gold/synced fraud flag: risk_score >= 0.6 AND cluster_size >= 3. May be absent. */
+  high_risk?: boolean | null;
+  /** Human-readable basis for the flag (e.g. "Fraud cluster: 4 claims…"). May be absent. */
+  risk_reason?: Str;
+  [key: string]: unknown;
+}
+
 /** Cockpit context: coil/heat, MTC, customer, and customer-heat risk (jsonb rows). */
 export interface CockpitContext {
   heats_coils: Record<string, unknown> | null;
   mill_test_cert: Record<string, unknown> | null;
   customer: Record<string, unknown> | null;
-  customer_heat_risk: Record<string, unknown> | null;
+  customer_heat_risk: CustomerHeatRisk | null;
 }
 
 /** The full cockpit detail payload (`GET /api/claims/:id`). */

@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@databricks/appkit-ui/react';
-import { ClipboardCheck, RotateCw, Search } from 'lucide-react';
+import { ClipboardCheck, CornerDownLeft, RotateCw, Search } from 'lucide-react';
 import { getQueue, ApiError } from '@/lib/api';
 import { age, ageHours, dispositionLabel, money, pct, shortDate, titleCase, toNum } from '@/lib/format';
 import type { QueueItem } from '@/lib/types';
@@ -294,18 +294,21 @@ export function WorkQueuePage() {
           }
         />
       ) : (
-        <DataGrid
-          rows={filtered}
-          columns={columns}
-          getRowId={(r) => r.claim_id}
-          onRowActivate={(r) => {
-            setOpenClaim(r.claim_id);
-            setOpenAdjId(r.adjudication_id);
-          }}
-          activeRowId={openClaim ?? undefined}
-          initialSort={{ key: 'age', dir: 'desc' }}
-          ariaLabel="Work queue"
-        />
+        <div className="space-y-2">
+          <QueueKeyHint count={filtered.length} />
+          <DataGrid
+            rows={filtered}
+            columns={columns}
+            getRowId={(r) => r.claim_id}
+            onRowActivate={(r) => {
+              setOpenClaim(r.claim_id);
+              setOpenAdjId(r.adjudication_id);
+            }}
+            activeRowId={openClaim ?? undefined}
+            initialSort={{ key: 'age', dir: 'desc' }}
+            ariaLabel="Work queue"
+          />
+        </div>
       )}
 
       <ClaimCockpit
@@ -353,4 +356,27 @@ function FilterSelect({
 
 function VerdictChipLabel({ value }: { value: string }) {
   return <span>{value === 'PEND_INVESTIGATE' ? 'Investigate' : titleCase(value)}</span>;
+}
+
+/** A quiet, command-oriented hint line — Linear-style keyboard affordances above the grid. */
+function QueueKeyHint({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-3 px-0.5 text-xs text-muted-foreground">
+      <span className="tabular-nums">
+        {count} {count === 1 ? 'claim' : 'claims'}
+      </span>
+      <span className="text-border">·</span>
+      <span className="hidden items-center gap-1 sm:inline-flex">
+        <Kbd>↑</Kbd>
+        <Kbd>↓</Kbd>
+        to navigate
+      </span>
+      <span className="hidden items-center gap-1 sm:inline-flex">
+        <Kbd>
+          <CornerDownLeft className="h-3 w-3" aria-hidden />
+        </Kbd>
+        to open
+      </span>
+    </div>
+  );
 }

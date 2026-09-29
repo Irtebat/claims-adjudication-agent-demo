@@ -237,7 +237,12 @@ export function ClaimCockpit({
   const isFinal = a?.decision_status === 'FINAL';
   const latestRecord: DecisionRecord | null =
     current && current.decision_records.length ? current.decision_records[current.decision_records.length - 1] : null;
-  const heatRisk = Boolean(current?.context.customer_heat_risk);
+  // Fraud gating: show the high-risk chip ONLY when the gold `high_risk` column is strictly
+  // true; its `risk_reason` string becomes the chip's hover tooltip. Both columns arrive via
+  // the customer_heat_risk context path and are read defensively (they may be absent).
+  const chr = current?.context.customer_heat_risk ?? null;
+  const highRisk = chr?.high_risk === true;
+  const riskReason = typeof chr?.risk_reason === 'string' ? chr.risk_reason : null;
   const showLoading = Boolean(claimId) && (loading || (!current && !error && !notFound));
 
   function handleFinalized(_result: FinalizeResult) {
@@ -250,21 +255,25 @@ export function ClaimCockpit({
     <Dialog open={Boolean(claimId)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton
-        className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0"
+        /* Near-full-screen: ~24px inset all round, up to a 1720px cap. The explicit
+           sm:max-w override is required — AppKit's DialogContent ships sm:max-w-lg, which
+           (as a separate responsive key) would otherwise cap the modal at 512px on desktop. */
+        className="flex h-[calc(100vh-3rem)] w-[calc(100vw-3rem)] max-w-[1720px] flex-col gap-0 overflow-hidden rounded-xl border-border p-0 sm:max-w-[1720px]"
       >
         <DialogHeader className="shrink-0 space-y-0 border-b border-border px-5 py-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pr-8">
-            <DialogTitle className="font-mono text-base">{claimId}</DialogTitle>
+            <DialogTitle className="font-mono text-base font-medium">{claimId}</DialogTitle>
             {a && (
               <>
-                <Badge variant="outline" className="font-normal">
+                <Badge variant="outline" className="rounded-[5px] border-border font-normal text-muted-foreground">
                   {a.claim_type ?? 'Claim'}
                 </Badge>
                 <DecisionStatusChip status={a.decision_status} />
                 <RiskFlags
                   duplicateOf={a.duplicate_of_claim_id}
                   fraudCluster={a.fraud_cluster_id}
-                  heatRisk={heatRisk}
+                  highRisk={highRisk}
+                  riskReason={riskReason}
                 />
               </>
             )}
