@@ -212,3 +212,133 @@ export function cockpitPrecedentSql(claimIds: string[]): Sql {
     params: [claimIds],
   };
 }
+
+// --- Source drill-through (read-only) ----------------------------------------
+
+/**
+ * How the URL :id identifies one row of a source table.
+ *  - `column`: a single scalar primary/natural key column (WHERE <column> = $1).
+ *  - `citation_key`: the clause tables have a COMPOSITE natural key and are cited by a
+ *    single `citation_key` string built as `concat_ws('/', <columns…>, section_ref)` by
+ *    the agent's retrieval (agent/src/retrieval.py) and persisted into
+ *    decision_records.cited_clause_ids. We resolve a clause by reconstructing that exact
+ *    expression and matching the bound citation_key — robust even if a key column itself
+ *    contains '/', and still fully parameterized.
+ */
+type SourceMatch = { kind: 'column'; column: string } | { kind: 'citation_key'; columns: string[] };
+
+export interface SourceSpec {
+  /** Schema-qualified Postgres table used in FROM (compile-time constant). */
+  table: string;
+  /** Fully-qualified name shown to the user as provenance (compile-time constant). */
+  display: string;
+  /** How the URL :id identifies the row. */
+  match: SourceMatch;
+  /** Additional equality filters, each sourced from a named query param (constants). */
+  extraKeys?: { param: string; column: string }[];
+}
+
+/**
+ * The hard-coded WHITELIST mapping each cockpit evidence source to its REAL Lakebase
+ * table, the fully-qualified name to surface as provenance, and how to identify one row.
+ *
+ * NOTHING here is derived from request input: the table, its schema, and every key/filter
+ * column are compile-time constants — only the *values* that identify the row are ever
+ * bound as query parameters ($1, $2, …). `sourceRowSql` returns null for any source not in
+ * this map, so the endpoint can never reach an arbitrary table or column. Read-only: every
+ * generated statement is a single-row SELECT.
+ *
+ * Reference tables (`reference.*`) are the Lakebase synced mirror of the gold UC tables, so
+ * their provenance is shown as the UC mirror-catalog name `fe_bar_operational.reference.*`
+ * (see lakebase/README.md); the native policy/precedent tables live in Postgres `public`.
+ */
+export const SOURCE_REGISTRY: Record<string, SourceSpec> = {
+  // Cited clauses — resolved by reconstructing the persisted citation_key. Column order
+  // MUST mirror agent/src/retrieval.py: spec = grade/region/spec_edition, warranty =
+  // product_line/region/version, each followed by section_ref.
+  spec_clauses: {
+    table: 'public.spec_clauses',
+    display: 'public.spec_clauses',
+    match: { kind: 'citation_key', columns: ['grade', 'region', 'spec_edition'] },
+  },
+  warranty_clauses: {
+    table: 'public.warranty_clauses',
+    display: 'public.warranty_clauses',
+    match: { kind: 'citation_key', columns: ['product_line', 'region', 'version'] },
+  },
+  // Similar prior claims — precedent corpus, PK claim_id.
+  prior_claims: {
+    table: 'public.prior_claims',
+    display: 'public.prior_claims',
+    match: { kind: 'column', column: 'claim_id' },
+  },
+  // Coil / heat / MTC / customer context — synced reference tables.
+  heats_coils: {
+    table: 'reference.heats_coils',
+    display: 'fe_bar_operational.reference.heats_coils',
+    match: { kind: 'column', column: 'coil_id' },
+  },
+  mill_test_certs: {
+    table: 'reference.mill_test_certs',
+    display: 'fe_bar_operational.reference.mill_test_certs',
+    match: { kind: 'column', column: 'cert_id' },
+  },
+  customers: {
+    table: 'reference.customers',
+    display: 'fe_bar_operational.reference.customers',
+    match: { kind: 'column', column: 'customer_id' },
+  },
+  // Customer–heat risk — composite key (customer_id, heat_no); heat_no arrives as a
+  // required query param and is bound, never interpolated.
+  customer_heat_risk: {
+    table: 'reference.customer_heat_risk',
+    display: 'fe_bar_operational.reference.customer_heat_risk',
+    match: { kind: 'column', column: 'customer_id' },
+    extraKeys: [{ param: 'heat_no', column: 'heat_no' }],
+  },
+};
+
+/** True iff `source` is a whitelisted drill-through source. */
+export function isSourceName(source: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SOURCE_REGISTRY, source);
+}
+
+export interface SourceRowRequest {
+  source: string;
+  id: string;
+  /** Values for the source's declared `extraKeys`, keyed by param name. */
+  extra?: Record<string, string>;
+}
+
+/**
+ * Build the single-row SELECT for a whitelisted source, or null when the source is not in
+ * the registry OR a required extra key value is missing (the route maps null to a 400 so an
+ * unknown/underspecified source never reaches the database). `SELECT *` returns the ENTIRE
+ * row (all columns) so the UI can show every field; the fully-qualified provenance name is
+ * `SOURCE_REGISTRY[source].display`. Every value is bound; only compile-time constants are
+ * interpolated into the SQL text.
+ */
+export function sourceRowSql(req: SourceRowRequest): Sql | null {
+  const spec = SOURCE_REGISTRY[req.source];
+  if (!spec) return null;
+  const params: unknown[] = [req.id];
+  let where: string;
+  if (spec.match.kind === 'column') {
+    where = `${spec.match.column} = $1`;
+  } else {
+    // Reconstruct concat_ws('/', <cols…>, section_ref) and match the bound citation_key.
+    const cols = [...spec.match.columns, 'section_ref'].join(', ');
+    where = `concat_ws('/', ${cols}) = $1`;
+  }
+  for (const ek of spec.extraKeys ?? []) {
+    const v = req.extra?.[ek.param];
+    if (v === undefined || v === '') return null;
+    params.push(v);
+    where += ` AND ${ek.column} = $${params.length}`;
+  }
+  // ORDER BY the key columns keeps the single-row pick deterministic in the (degenerate)
+  // case where a reconstructed citation_key is not unique; harmless for scalar PKs.
+  const order =
+    spec.match.kind === 'citation_key' ? ` ORDER BY ${[...spec.match.columns, 'section_ref'].join(', ')}` : '';
+  return { text: `SELECT * FROM ${spec.table} WHERE ${where}${order} LIMIT 1`, params };
+}

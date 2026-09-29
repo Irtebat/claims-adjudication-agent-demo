@@ -13,6 +13,8 @@ import type {
   HistoryItem,
   ListFilters,
   QueueItem,
+  SourceRowDetail,
+  SourceTarget,
   Whoami,
 } from './types';
 
@@ -79,6 +81,24 @@ export function getClaim(claimId: string, adjudicationId?: string | null, signal
 
 export function getBusinessDashboardConfig(signal?: AbortSignal): Promise<BusinessDashboardConfig> {
   return getJson<BusinessDashboardConfig>('/api/business/dashboard', signal);
+}
+
+/**
+ * Fetch the ENTIRE underlying row for one whitelisted evidence source (the cockpit's
+ * source drill-through). The id (scalar PK or composite citation_key) and any extra key
+ * values (e.g. heat_no) are URL-encoded; the server binds them and returns all columns plus
+ * the fully-qualified source table name. Read-only.
+ */
+export function getSourceRow(target: SourceTarget, signal?: AbortSignal): Promise<SourceRowDetail> {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(target.extra ?? {})) {
+    if (v !== undefined && v !== null && v !== '') p.set(k, String(v));
+  }
+  const qs = p.toString() ? `?${p.toString()}` : '';
+  return getJson<SourceRowDetail>(
+    `/api/source/${encodeURIComponent(target.source)}/${encodeURIComponent(target.id)}${qs}`,
+    signal
+  );
 }
 
 export async function finalizeClaim(claimId: string, body: FinalizeBody): Promise<FinalizeResult> {

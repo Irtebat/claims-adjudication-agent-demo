@@ -37,6 +37,9 @@ import {
   cockpitDecisionRecordsSql,
   cockpitContextSql,
   cockpitPrecedentSql,
+  sourceRowSql,
+  isSourceName,
+  SOURCE_REGISTRY,
   type ListFilters,
 } from './sql';
 
@@ -183,6 +186,48 @@ export function registerRoutes(appkit: CockpitAppKit): void {
       } catch (err) {
         console.error('[cockpit] failed:', (err as Error).message);
         res.status(500).json({ error: 'cockpit_failed' });
+      }
+    });
+
+    // (e) Source drill-through — fetch the ENTIRE underlying row (all columns) for one
+    // whitelisted cockpit evidence source, plus its fully-qualified provenance name. Guarded
+    // as `cockpit` (adjuster-only, same as the cockpit detail — see authz.ts). Read-only: a
+    // single parameterized SELECT built from the hard-coded SOURCE_REGISTRY (no arbitrary
+    // table/column access; only bound values come from the request).
+    app.get('/api/source/:source/:id', async (req: Request, res: Response) => {
+      try {
+        const source = String(req.params.source);
+        const id = String(req.params.id);
+        const spec = isSourceName(source) ? SOURCE_REGISTRY[source] : undefined;
+        if (!spec) {
+          res.status(400).json({ error: 'unknown_source' });
+          return;
+        }
+        // Pull and require each declared extra key from the query string (bound below).
+        const extra: Record<string, string> = {};
+        for (const ek of spec.extraKeys ?? []) {
+          const v = req.query[ek.param];
+          if (typeof v !== 'string' || v === '') {
+            res.status(400).json({ error: 'missing_key', key: ek.param });
+            return;
+          }
+          extra[ek.param] = v;
+        }
+        const q = sourceRowSql({ source, id, extra });
+        if (!q) {
+          // Defense in depth — should be unreachable after the checks above.
+          res.status(400).json({ error: 'unknown_source' });
+          return;
+        }
+        const { rows } = await lb.query(q.text, q.params);
+        if (rows.length === 0) {
+          res.status(404).json({ error: 'row_not_found' });
+          return;
+        }
+        res.json({ source, table: spec.display, row: rows[0] });
+      } catch (err) {
+        console.error('[source] failed:', (err as Error).message);
+        res.status(500).json({ error: 'source_failed' });
       }
     });
 

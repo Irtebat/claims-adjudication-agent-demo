@@ -104,6 +104,10 @@ export function actionForPath(method: string, path: string): Action | null {
   if (p === '/api/queue') return 'queue';
   if (/^\/api\/claims\/[^/]+\/finalize$/.test(p) && method === 'POST') return 'finalize';
   if (/^\/api\/claims\/[^/]+$/.test(p) && method === 'GET') return 'cockpit';
+  // Source drill-through (GET /api/source/:source/:id) — the cockpit's read-only "open the
+  // underlying row" surface. Same authorization as the cockpit detail itself: `cockpit`,
+  // adjuster-only. It exposes no surface a caller who can already open the cockpit lacks.
+  if (/^\/api\/source\/[^/]+\/[^/]+$/.test(p) && method === 'GET') return 'cockpit';
   if (p === '/api/history') return 'claims_history';
   // Genie surfaces are auto-mounted by the plugin under /api/genie/:alias/... —
   // guard them by alias so a Business User cannot reach the cockpit copilot and an

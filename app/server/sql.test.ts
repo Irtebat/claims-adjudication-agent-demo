@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { queueSql, cockpitAdjudicationSql, historySql } from './sql';
+import { queueSql, cockpitAdjudicationSql, historySql, sourceRowSql, isSourceName, SOURCE_REGISTRY } from './sql';
 
 /** Collapse whitespace so assertions about SQL structure ignore formatting. */
 function flat(text: string): string {
@@ -65,5 +65,89 @@ describe('historySql', () => {
     const t = flat(historySql().text);
     expect(t).toContain("a.decision_status = 'FINAL'");
     expect(t).not.toContain('NOT EXISTS');
+  });
+});
+
+describe('sourceRowSql — whitelisted, parameterized, read-only row drill-through', () => {
+  it('rejects any source that is not in the whitelist (no arbitrary table access)', () => {
+    expect(isSourceName('claims')).toBe(false);
+    expect(isSourceName('adjudications')).toBe(false);
+    expect(isSourceName('pg_authid')).toBe(false);
+    // A non-whitelisted source yields no SQL at all.
+    expect(sourceRowSql({ source: 'claims', id: 'CLM-1' })).toBeNull();
+    expect(sourceRowSql({ source: 'users; DROP TABLE claims', id: 'x' })).toBeNull();
+  });
+
+  it('whitelists exactly the six cockpit evidence sources', () => {
+    expect(Object.keys(SOURCE_REGISTRY).sort()).toEqual(
+      [
+        'customer_heat_risk',
+        'customers',
+        'heats_coils',
+        'mill_test_certs',
+        'prior_claims',
+        'spec_clauses',
+        'warranty_clauses',
+      ].sort()
+    );
+  });
+
+  it('binds a scalar-key source (prior_claims) and reads the whole row', () => {
+    const q = sourceRowSql({ source: 'prior_claims', id: 'CLM-42' });
+    expect(q).not.toBeNull();
+    const t = flat(q!.text);
+    expect(t).toBe('SELECT * FROM public.prior_claims WHERE claim_id = $1 LIMIT 1');
+    expect(q!.params).toEqual(['CLM-42']);
+  });
+
+  it('reads reference tables from the reference schema (coil / cert / customer)', () => {
+    expect(flat(sourceRowSql({ source: 'heats_coils', id: 'C-1' })!.text)).toBe(
+      'SELECT * FROM reference.heats_coils WHERE coil_id = $1 LIMIT 1'
+    );
+    expect(flat(sourceRowSql({ source: 'mill_test_certs', id: 'MTC-9' })!.text)).toBe(
+      'SELECT * FROM reference.mill_test_certs WHERE cert_id = $1 LIMIT 1'
+    );
+    expect(flat(sourceRowSql({ source: 'customers', id: 'CU-3' })!.text)).toBe(
+      'SELECT * FROM reference.customers WHERE customer_id = $1 LIMIT 1'
+    );
+  });
+
+  it('resolves a cited clause by reconstructing the persisted citation_key (concat_ws)', () => {
+    // spec: citation_key = grade/region/spec_edition/section_ref (agent/src/retrieval.py).
+    const spec = sourceRowSql({ source: 'spec_clauses', id: 'A653/NA/DEMO-1990/mechanical' })!;
+    const st = flat(spec.text);
+    expect(st).toContain('FROM public.spec_clauses');
+    expect(st).toContain("WHERE concat_ws('/', grade, region, spec_edition, section_ref) = $1");
+    expect(spec.params).toEqual(['A653/NA/DEMO-1990/mechanical']);
+    // warranty: citation_key = product_line/region/version/section_ref.
+    const war = sourceRowSql({ source: 'warranty_clauses', id: 'galvanized/NA/V2/exclusions' })!;
+    expect(flat(war.text)).toContain("WHERE concat_ws('/', product_line, region, version, section_ref) = $1");
+    expect(war.params).toEqual(['galvanized/NA/V2/exclusions']);
+  });
+
+  it('does NOT split the citation_key client/server side — the whole key is a single bound param', () => {
+    // A spec_edition containing a slash must round-trip intact (matched via concat_ws).
+    const q = sourceRowSql({ source: 'spec_clauses', id: 'G550/NA/A653/A653M-20/mechanical' })!;
+    expect(q.params).toEqual(['G550/NA/A653/A653M-20/mechanical']);
+    expect(q.params).toHaveLength(1);
+  });
+
+  it('binds the composite customer_heat_risk key (customer_id + heat_no)', () => {
+    const q = sourceRowSql({ source: 'customer_heat_risk', id: 'CU-3', extra: { heat_no: 'H-4821' } })!;
+    const t = flat(q.text);
+    expect(t).toBe('SELECT * FROM reference.customer_heat_risk WHERE customer_id = $1 AND heat_no = $2 LIMIT 1');
+    expect(q.params).toEqual(['CU-3', 'H-4821']);
+  });
+
+  it('returns null when a required composite key value is missing (route -> 400)', () => {
+    expect(sourceRowSql({ source: 'customer_heat_risk', id: 'CU-3' })).toBeNull();
+    expect(sourceRowSql({ source: 'customer_heat_risk', id: 'CU-3', extra: { heat_no: '' } })).toBeNull();
+  });
+
+  it('never interpolates request input — only $-placeholders carry values', () => {
+    const q = sourceRowSql({ source: 'prior_claims', id: "'; DROP TABLE claims; --" })!;
+    // The malicious id is a bound parameter, not part of the SQL text.
+    expect(q.text).not.toContain('DROP TABLE');
+    expect(q.params).toEqual(["'; DROP TABLE claims; --"]);
   });
 });

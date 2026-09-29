@@ -245,6 +245,43 @@ export type FinalizeResult =
   | { status: 'not_found'; adjudicationId: string }
   | { status: 'invalid'; adjudicationId: string; errors: string[] };
 
+// --- Source drill-through (read-only) ----------------------------------------
+
+/**
+ * The whitelisted underlying sources a cockpit evidence item can drill through to. Mirrors
+ * the server's SOURCE_REGISTRY (server/sql.ts) exactly — a source not in this union is not
+ * fetchable. Clause tables are identified by their persisted `citation_key`; the others by
+ * their primary key (customer_heat_risk additionally by heat_no).
+ */
+export type SourceKind =
+  | 'spec_clauses'
+  | 'warranty_clauses'
+  | 'prior_claims'
+  | 'heats_coils'
+  | 'mill_test_certs'
+  | 'customers'
+  | 'customer_heat_risk';
+
+/** A drill-through request: which source, which row, and how to label the detail panel. */
+export interface SourceTarget {
+  source: SourceKind;
+  /** The primary identifier (a scalar PK, or the composite citation_key for clauses). */
+  id: string;
+  /** Extra bound key values (e.g. `{ heat_no }` for customer_heat_risk). */
+  extra?: Record<string, string>;
+  /** Human-readable panel heading (e.g. "Warranty clause · coverage"). */
+  title: string;
+}
+
+/** The fetched row detail (`GET /api/source/:source/:id`) — the ENTIRE row + provenance. */
+export interface SourceRowDetail {
+  source: SourceKind;
+  /** Fully-qualified source table name shown as provenance (e.g. `public.spec_clauses`). */
+  table: string;
+  /** Every column of the underlying row, as returned by `SELECT *`. */
+  row: Record<string, unknown>;
+}
+
 /** Business dashboard wiring (`GET /api/business/dashboard`). */
 export interface BusinessDashboardConfig {
   genie_chat_alias: string;

@@ -19,11 +19,12 @@ import {
 import { CircleCheck, Clock, TriangleAlert, UserCheck } from 'lucide-react';
 import { getClaim, ApiError } from '@/lib/api';
 import { DASH, money, pct, shortDate, verdictLabel, dispositionLabel } from '@/lib/format';
-import type { ClaimDetail, DecisionRecord, FinalizeResult } from '@/lib/types';
+import type { ClaimDetail, DecisionRecord, FinalizeResult, SourceTarget } from '@/lib/types';
 import { DecisionStatusChip, RiskFlags, VerdictChip, DispositionChip } from '@/components/StatusChip';
 import { MetaStat } from '@/components/PageHeader';
 import { ErrorState, LoadingPanel } from '@/components/States';
 import { SupportingSources, Citations, ContextPanel, SimilarClaims } from './evidence';
+import { SourceDetailSheet } from './SourceDetailSheet';
 import { CopilotPanel } from './CopilotPanel';
 import { DecisionForm } from './DecisionForm';
 
@@ -203,6 +204,9 @@ export function ClaimCockpit({
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
+  // The evidence source the adjuster is drilling into (null = panel closed). Cleared when
+  // the open claim changes so a stale row can't linger across claims.
+  const [sourceTarget, setSourceTarget] = useState<SourceTarget | null>(null);
 
   useEffect(() => {
     if (!claimId) return;
@@ -212,6 +216,7 @@ export function ClaimCockpit({
       setLoading(true);
       setError(null);
       setNotFound(false);
+      setSourceTarget(null);
       try {
         const d = await getClaim(claimId, adjudicationId, ctrl.signal);
         if (live) setDetail(d);
@@ -302,43 +307,48 @@ export function ClaimCockpit({
         )}
 
         {current && a && !showLoading && !error && !notFound && (
-          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_420px]">
-            {/* Analysis (scrollable) */}
-            <div className="min-w-0 space-y-6 overflow-auto p-5">
-              <Section title="Agent recommendation">
-                <RecommendationHeader detail={current} />
-              </Section>
-              <Section title="Claim">
-                <ClaimFacts detail={current} />
-              </Section>
-              <Section title="Supporting sources">
-                <SupportingSources record={latestRecord} />
-              </Section>
-              <Section title="Citations">
-                <Citations record={latestRecord} />
-              </Section>
-              <Section title="Context">
-                <ContextPanel context={current.context} />
-              </Section>
-              <Section title="Similar prior claims">
-                <SimilarClaims claims={current.prior_claims} />
-              </Section>
-            </div>
-
-            {/* Decision + Copilot (fixed rail) */}
-            <div className="flex min-h-0 flex-col border-t border-border lg:border-l lg:border-t-0">
-              <div className="shrink-0 overflow-auto border-b border-border">
-                {isFinal ? (
-                  <FinalizedSummary detail={current} />
-                ) : (
-                  <div className="p-4">
-                    <DecisionForm adjudication={a} onFinalized={handleFinalized} />
-                  </div>
-                )}
+          <>
+            <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_420px]">
+              {/* Analysis (scrollable) */}
+              <div className="min-w-0 space-y-6 overflow-auto p-5">
+                <Section title="Agent recommendation">
+                  <RecommendationHeader detail={current} />
+                </Section>
+                <Section title="Claim">
+                  <ClaimFacts detail={current} />
+                </Section>
+                <Section title="Supporting sources">
+                  <SupportingSources record={latestRecord} />
+                </Section>
+                <Section title="Citations">
+                  <Citations record={latestRecord} claimType={a.claim_type} onOpenSource={setSourceTarget} />
+                </Section>
+                <Section title="Context">
+                  <ContextPanel context={current.context} onOpenSource={setSourceTarget} />
+                </Section>
+                <Section title="Similar prior claims">
+                  <SimilarClaims claims={current.prior_claims} onOpenSource={setSourceTarget} />
+                </Section>
               </div>
-              <CopilotPanel claimId={a.claim_id} record={latestRecord} priorClaims={current.prior_claims} />
+
+              {/* Decision + Copilot (fixed rail) */}
+              <div className="flex min-h-0 flex-col border-t border-border lg:border-l lg:border-t-0">
+                <div className="shrink-0 overflow-auto border-b border-border">
+                  {isFinal ? (
+                    <FinalizedSummary detail={current} />
+                  ) : (
+                    <div className="p-4">
+                      <DecisionForm adjudication={a} onFinalized={handleFinalized} />
+                    </div>
+                  )}
+                </div>
+                <CopilotPanel claimId={a.claim_id} record={latestRecord} priorClaims={current.prior_claims} />
+              </div>
             </div>
-          </div>
+            {/* Source drill-through — the full underlying row for whatever evidence item the
+              adjuster clicked, layered above the cockpit. Read-only. */}
+            <SourceDetailSheet target={sourceTarget} onClose={() => setSourceTarget(null)} />
+          </>
         )}
       </DialogContent>
     </Dialog>
