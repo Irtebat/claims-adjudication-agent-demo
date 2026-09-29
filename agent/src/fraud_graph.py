@@ -21,17 +21,17 @@ from collections import defaultdict
 # A cluster is treated as high-risk / fraud only when the customer-concentration
 # score is strong AND the heat component is more than a couple of claims. Raw
 # positive risk is far too common (a single repeat customer on a 2-claim heat) to
-# call "fraud"; requiring both a >=0.6 score and >=3 claims keeps the flag rare and
+# call "fraud"; requiring both a >=0.75 score and >=3 claims keeps the flag rare and
 # meaningful (PLAN §6.3). The app renders a chip/tooltip off ``high_risk`` +
 # ``risk_reason``; both are persisted here so the read side stays a pure lookup.
-HIGH_RISK_SCORE_THRESHOLD = 0.6
+HIGH_RISK_SCORE_THRESHOLD = 0.75
 HIGH_RISK_MIN_CLUSTER_SIZE = 3
 
 
 def is_high_risk(risk_score: float, cluster_size: int) -> bool:
     """The tuned fraud flag: strong customer concentration AND a non-trivial heat.
 
-    Inclusive on the score (``>= 0.6``) and the size (``>= 3``). Kept as a small pure
+    Inclusive on the score (``>= 0.75``) and the size (``>= 3``). Kept as a small pure
     predicate so the inclusive boundary can be unit-tested directly at values the
     discrete ``1.5 * (1 - customers/claims)`` score can't land on exactly.
     """
@@ -106,7 +106,7 @@ def score_clusters(claims: list[dict]) -> dict:
     ring reuses a small set of customer identities across the heat's coils.
 
     Each risk row also carries the app-facing fields ``cluster_size``,
-    ``n_customers``, a boolean ``high_risk`` (``risk_score >= 0.6`` AND
+    ``n_customers``, a boolean ``high_risk`` (``risk_score >= 0.75`` AND
     ``cluster_size >= 3``), and a one-sentence ``risk_reason`` (populated only when
     ``high_risk``). These persist to ``gold.customer_heat_risk`` and serve down.
     """
@@ -170,9 +170,7 @@ def score_clusters(claims: list[dict]) -> dict:
                 # A reason is only meaningful for a flagged cluster; benign rows carry
                 # None so the app shows a tooltip only where high_risk is true.
                 "risk_reason": (
-                    _risk_reason(n_claims, n_customers, heat, concentration)
-                    if high_risk
-                    else None
+                    _risk_reason(n_claims, n_customers, heat, concentration) if high_risk else None
                 ),
             }
     return {"clusters": cluster_stats, "risk_rows": list(risk_rows.values())}

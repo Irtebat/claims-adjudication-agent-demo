@@ -1,5 +1,7 @@
 """Heat-cluster risk: customer concentration surfaces a collusion ring, not normal heats."""
 
+import math
+
 import pytest
 
 from fraud_graph import (
@@ -81,31 +83,33 @@ def test_cluster_size_and_n_customers_counts():
 
 
 def test_is_high_risk_inclusive_threshold():
-    # Direct check of the tuned decision at the inclusive >= 0.6 score boundary, using
-    # values the discrete cluster score (1.5 * (1 - customers/claims)) can't land on
-    # exactly (0.599 / 0.601) so the boundary is pinned cleanly. Size held at the floor.
-    assert is_high_risk(0.60, HIGH_RISK_MIN_CLUSTER_SIZE) is True  # inclusive: at threshold
-    assert is_high_risk(0.601, HIGH_RISK_MIN_CLUSTER_SIZE) is True  # just above
-    assert is_high_risk(0.599, HIGH_RISK_MIN_CLUSTER_SIZE) is False  # just below
+    # Direct check of the tuned decision at the inclusive >= 0.75 score boundary.
+    # nextafter pins the immediately adjacent representable floats without relying on
+    # exact equality for a computed score. Size is held at the floor.
+    just_below = math.nextafter(HIGH_RISK_SCORE_THRESHOLD, -math.inf)
+    just_above = math.nextafter(HIGH_RISK_SCORE_THRESHOLD, math.inf)
+    assert is_high_risk(HIGH_RISK_SCORE_THRESHOLD, HIGH_RISK_MIN_CLUSTER_SIZE) is True
+    assert is_high_risk(just_above, HIGH_RISK_MIN_CLUSTER_SIZE) is True
+    assert is_high_risk(just_below, HIGH_RISK_MIN_CLUSTER_SIZE) is False
     # The size floor still gates even when the score qualifies.
-    assert is_high_risk(0.60, HIGH_RISK_MIN_CLUSTER_SIZE - 1) is False
+    assert is_high_risk(HIGH_RISK_SCORE_THRESHOLD, HIGH_RISK_MIN_CLUSTER_SIZE - 1) is False
     assert is_high_risk(1.0, HIGH_RISK_MIN_CLUSTER_SIZE - 1) is False
 
 
 def test_high_risk_score_boundary():
     # The cluster score is DISCRETE: risk = min(1.0, 1.5 * (1 - n_customers/n_claims)),
     # so only certain values occur and floats aren't exact — compare with pytest.approx.
-    # AT the inclusive boundary: 3 of 5 identities -> concentration 0.4 -> risk ~0.6,
-    # size 5 -> flagged.
-    at = score_clusters(_heat("H-AT", 5, 3))["risk_rows"]
+    # AT the inclusive boundary: 2 of 4 identities -> concentration 0.5 -> risk ~0.75,
+    # size 4 -> flagged.
+    at = score_clusters(_heat("H-AT", 4, 2))["risk_rows"]
     assert at
     assert all(r["risk_score"] == pytest.approx(HIGH_RISK_SCORE_THRESHOLD) for r in at)
     assert all(r["high_risk"] is True for r in at)
-    # Nearest practical value BELOW 0.6 the discrete formula allows at a small cluster:
-    # 5 of 8 identities -> concentration 0.375 -> risk ~0.5625, size 8 -> not flagged.
-    below = score_clusters(_heat("H-BELOW", 8, 5))["risk_rows"]
+    # A practical value BELOW 0.75 from the discrete formula: 4 of 7 identities ->
+    # concentration 3/7 -> risk ~0.6429, size 7 -> not flagged.
+    below = score_clusters(_heat("H-BELOW", 7, 4))["risk_rows"]
     assert below
-    assert all(r["risk_score"] == pytest.approx(0.5625) for r in below)
+    assert all(r["risk_score"] == pytest.approx(0.6429) for r in below)
     assert all(r["risk_score"] < HIGH_RISK_SCORE_THRESHOLD for r in below)
     assert all(r["high_risk"] is False for r in below)
 
