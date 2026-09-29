@@ -141,8 +141,7 @@ if mode == "serving_endpoint":
 
 else:  # in_process mode
     raise RuntimeError(
-        "in_process mode is not supported in the deployed demo bundle; "
-        "use mode=serving_endpoint"
+        "in_process mode is not supported in the deployed demo bundle; use mode=serving_endpoint"
     )
 
 # COMMAND ----------
@@ -172,6 +171,11 @@ with psycopg.connect(**conn_params) as conn:
             SELECT COUNT(*) FROM adjudications a
             JOIN claims c ON c.claim_id = a.claim_id
             WHERE c.data_provenance = %s AND a.decision_status = 'RECOMMENDED'
+              AND NOT EXISTS (
+                SELECT 1 FROM adjudications h
+                WHERE h.claim_id = a.claim_id
+                  AND h.decision_status IN ('FINAL', 'REVIEWED')
+              )
             """,
             (data_provenance,),
         )

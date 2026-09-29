@@ -74,12 +74,12 @@ class TestClaimsGeneration:
         assert len(claim_ids) == len(set(claim_ids))
 
     def test_claim_id_format(self):
-        """Claim IDs should follow CLM-NNNNNNN format."""
+        """Claim IDs should follow CLM-DEMO-NNNNNN format."""
         gen = ClaimsGenerator(count=100, seed=42)
         claims = gen.generate()
         for claim in claims:
-            assert claim["claim_id"].startswith("CLM-")
-            assert len(claim["claim_id"]) == 11  # "CLM-" + 7 digits
+            assert claim["claim_id"].startswith("CLM-DEMO-")
+            assert len(claim["claim_id"]) == 15  # "CLM-DEMO-" + 6 digits
 
 
 class TestSchemaValidation:

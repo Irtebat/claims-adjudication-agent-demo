@@ -143,7 +143,7 @@ class ClaimsGenerator:
             claimed_freight = Decimal(1800) if 65 <= slot < 80 else Decimal(0)
 
             claim = {
-                "claim_id": f"CLM-{i:07d}",
+                "claim_id": f"CLM-DEMO-{i:06d}",
                 "coil_id": f"COIL-{material_i:07d}",
                 "customer_id": customer_id,
                 "claim_type": (
