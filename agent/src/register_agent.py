@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from contextlib import contextmanager
 
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -50,6 +51,32 @@ PIP_REQUIREMENTS = [
     "pydantic>=2",
     "databricks-sdk>=0.81.0",
 ]
+_UV_AUTO_DETECT_ENV = "MLFLOW_UV_AUTO_DETECT"
+
+
+@contextmanager
+def _pip_requirements_environment():
+    """Prevent MLflow from replacing explicit requirements with a local uv project."""
+    previous = os.environ.get(_UV_AUTO_DETECT_ENV)
+    os.environ[_UV_AUTO_DETECT_ENV] = "false"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(_UV_AUTO_DETECT_ENV, None)
+        else:
+            os.environ[_UV_AUTO_DETECT_ENV] = previous
+
+
+def _log_agent_model(input_example: dict):
+    with _pip_requirements_environment():
+        return mlflow.pyfunc.log_model(
+            name="agent",
+            python_model=os.path.join(_HERE, "agent.py"),
+            code_paths=[os.path.join(_HERE, module) for module in CODE_MODULES],
+            input_example=input_example,
+            pip_requirements=PIP_REQUIREMENTS,
+        )
 
 
 def _coerce(value):
@@ -105,13 +132,7 @@ def run(profile: str, experiment: str, validate: bool = True, register: bool = T
         "custom_inputs": {"persist": False, "claim": claim},
     }
     with mlflow.start_run(run_name="claims-adjudication-agent") as run_ctx:
-        info = mlflow.pyfunc.log_model(
-            name="agent",
-            python_model=os.path.join(_HERE, "agent.py"),
-            code_paths=[os.path.join(_HERE, module) for module in CODE_MODULES],
-            input_example=input_example,
-            pip_requirements=PIP_REQUIREMENTS,
-        )
+        info = _log_agent_model(input_example)
         run_id = run_ctx.info.run_id
 
     result = {
