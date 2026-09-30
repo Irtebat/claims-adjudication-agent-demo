@@ -4,6 +4,8 @@
 
 The live app is the human review and analytics interface. Adjusters review queued recommendations, drill through cited policy, source records, risk, and precedent, then finalize decisions. Business users see claims history, governed analytics, and Genie. Multi-role callers can switch persona; the switch changes presentation, never authorization.
 
+Authentication deliberately splits by data plane. Operational Lakebase reads and finalization writes use the App-SP through the platform-injected pool. OBO (on-behalf-of-user) identity is used for SCIM role resolution and governed Genie and SQL warehouse surfaces. The OBO email is recorded as `decided_by`; the client persona never selects the authorization identity.
+
 ## Objects created
 
 - App `steel-claims-cockpit`.
@@ -13,6 +15,8 @@ The live app is the human review and analytics interface. Adjusters review queue
 ## Resources configured
 
 The bundle attaches SQL warehouse `38e458a09de4a055`, two Genie spaces, and the production Lakebase database. Server-side authorization derives a role set from Databricks groups. `GET /api/whoami` returns identity, all roles, and the default role.
+
+Role resolution is allowlist override → OBO group lookup → deny. SCIM failures deny access; the OBO token is never cached. Lakebase never falls back to a developer profile: App-SP ownership and grants govern operational access.
 
 | Endpoint | Access |
 | --- | --- |

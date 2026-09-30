@@ -4,13 +4,23 @@
 
 Build deterministic claim recommendations with cited policy and precedent, register the MLflow model, and deploy the governed serving endpoint.
 
+The MLflow 3 `ResponsesAgent` resolves each claim once to a frozen policy snapshot, runs deterministic authorities and the duplicate gate, gathers advisory context, and uses a LangGraph tool loop with the governed GPT-5.x reasoning model `system.ai.gpt-5-2`. Model calls route through the OpenAI-compatible Unity Gateway. Code-level invariant checks run before persistence; the language model cannot override eligibility or money.
+
 ## Objects created
 
 Jobs `fe-bar-fraud-graph`, `fe-bar-prior-claims-corpus`, and `fe-bar-deploy-claims-adjudication-agent`; registered model `fe-bar-ir.default.claims_adjudication_agent`; endpoint `agents_fe-bar-ir-default-claims_adjudication_agent`.
 
+Append-only decision records store the deterministic baseline, citations, recommendation, model version, and later human-final versions. `gold.customer_heat_risk` is served down as `reference.customer_heat_risk`; it is advisory only.
+
 ## Resources configured
 
 Money authorities remain solely in `src/authorities.py`. `gold.prior_claims_corpus` and synced `reference.prior_claims_corpus` are live at 4,999 rows. Endpoint v1 is still the legacy build that reads `public.prior_claims`; do not claim serving uses the new corpus until the next promoted model is deployed and smoked.
+
+There are no UC functions for the money math: conformance, coverage, and settlement run as pure Python in-process deterministic authorities. Deterministic resolution chooses the applicable spec and warranty before retrieval or reasoning.
+
+Clause retrieval is metadata-resolved, not semantic: resolution pre-filters to the applicable policy section, then BM25 only orders clauses within that section. Dense-vector plus BM25 hybrid retrieval with reciprocal-rank fusion (RRF) lives only in the prior-claims corpus. It is advisory; the duplicate gate is the only precedent-related money gate.
+
+In served mode, `src/workspace_client.py` authenticates Unity Gateway and workspace API calls as the dedicated application service principal. Local runs use the explicit profile.
 
 ## Data flow
 
@@ -19,9 +29,12 @@ flowchart LR
   C[Claim] --> T[Deterministic tools]
   P[Policy and reference] --> T
   R[Prior corpus] --> Q[Hybrid retrieval]
+  H[customer_heat_risk] --> A
   T --> A[ResponsesAgent]
   Q --> A --> M[MLflow model] --> E[Serving endpoint]
 ```
+
+The sequence is resolution → in-process authorities and duplicate gate → BM25 citations, RRF precedent, and heat risk → LangGraph reasoning → structured output → invariant enforcement. Invariants force duplicates non-payable, amount to equal settlement authority output, and verdict to agree with eligibility. One transaction writes the recommendation and canonical decision record idempotently.
 
 ## Deploy
 

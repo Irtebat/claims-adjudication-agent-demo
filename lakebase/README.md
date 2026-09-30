@@ -4,9 +4,13 @@
 
 Operate the Postgres system of record, policy tables, Unity Catalog serve-down, and native CDF serve-up.
 
+The operational write model uses `REPLICA IDENTITY FULL` so native Lakebase CDF can reconstruct changes. Policy and served reference data are read-side inputs, not transactional history.
+
 ## Objects created
 
 Project `fe-bar-operational-plane`, production branch, primary endpoint, database `databricks_postgres`, operational/policy tables, CDF config, and schema `reference`.
+
+Native objects include `claims`, `adjudications`, `outbox`, settlements and case tables, and immutable `adjudication_decision_records`. Those write-model tables use `REPLICA IDENTITY FULL`. `policy_intake.py` owns `spec_params`, `spec_clauses`, `warranty_terms`, and `warranty_clauses`.
 
 Desired and deployed synced-table inventory on 2026-10-01:
 
@@ -24,14 +28,21 @@ Desired and deployed synced-table inventory on 2026-10-01:
 
 Bundle job `fe-bar-lakebase-setup-and-seed`; native CDF to `fe-bar-ir.cdf`; ANN and BM25 corpus indexes. Before create/recreate, confirm the app and serving principal IDs and overrides `APP_SP_PRINCIPAL` / `SERVING_SP_PRINCIPAL`; creation waits up to one hour for `SYNCED_TABLE_ONLINE*` before indexes and grants run.
 
+Create runs `regrant_synced_table_selects.py` only after a new table reaches ONLINE. Routine re-sync preserves ownership, indexes, and grants, so it does not regrant. Recreate drops them; after ONLINE it rebuilds indexes and regrants SELECT.
+
 ## Data flow
 
 ```mermaid
 flowchart LR
   UC[UC silver and gold] -->|triggered sync| R[reference schema]
   O[public operational tables] -->|native CDF| C[UC cdf]
+  P[policy_source.json] -->|policy_intake| N[Native policy tables]
   C --> G[Gold] --> UC
 ```
+
+CDF is schema-scoped over `public`; there is no per-table include/exclude. Operational tables and decision records stream because they use `REPLICA IDENTITY FULL`. Policy tables are intentionally SKIPPED by CDF: they are reference/search data populated by `policy_intake`, not write-model history, and clause tables contain `tsvector` values CDF cannot serialize. Synced `reference.*` tables are outside `public`. A UI skipped/error state for native policy tables is expected; do not add replica identity merely to silence it.
+
+The app alone writes the `outbox` row in the same transaction that finalizes an adjudication and appends a human decision-record version. Agent recommendations write no outbox row.
 
 ## Deploy
 

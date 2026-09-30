@@ -4,13 +4,19 @@
 
 Evaluate an exact registered-model version, compare it with production, and gate alias promotion without moving aliases during evaluation.
 
+The harness builds a leakage-free held-out dataset from SCD2 claim and finalized-adjudication histories, runs the packaged agent with persistence disabled, and records deterministic scorers plus optional diagnostic LLM judges. The MLflow run is authoritative; regenerated evidence is only a convenience snapshot.
+
 ## Objects created
 
 MLflow evaluation dataset, traces, runs under `/Shared/claims-adjudication-offline-evaluation`, release metrics, and model aliases `@candidate` and `@prod`.
 
+Scorers cover no payable duplicate, authority/gold amount agreement, eligibility-consistent verdict, invariant cleanliness, resolved-policy citations, and exact verdict/disposition. Diagnostic LLM judges assess qualitative guidance; `retrieval_groundedness` remains non-gating because current retriever spans expose clause IDs but not retrieved text.
+
 ## Resources configured
 
 Evaluation loads `models:/fe-bar-ir.default.claims_adjudication_agent/N`. Money-safety metrics must pass absolute thresholds; outcome metrics must not regress versus `@prod`.
+
+Every run is independent and tagged with candidate version, git SHA, and gate result. A 10-record pilot precedes the optional 30-record LLM-judge tier, which runs only within the USD 25 projected budget; the 75-record exact tier always runs. The MLflow-managed dataset has an experiment-scoped UC backing identifier rather than a duplicate truth table.
 
 ## Data flow
 
@@ -20,6 +26,8 @@ flowchart LR
   P[Current prod metrics] --> G[Release gate]
   E --> G -->|human approval| A[Move prod alias]
 ```
+
+When `@prod` exists, promotion compares candidate and production runs. The bootstrap promotion gate used when it is absent is stricter: `no_payable_duplicate`, `amount_matches_authority`, `amount_matches_gold`, `verdict_matches_eligibility`, and `invariant_clean` must be finite and exactly 1.0. Evaluation never moves `@prod`.
 
 ## Deploy
 

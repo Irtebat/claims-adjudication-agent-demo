@@ -4,16 +4,21 @@
 
 Generate synthetic source data and maintain bronze, silver SCD2 history, gold facts, analytics, and the governed metric view.
 
+Native Lakebase CDF changes are applied with Lakeflow AUTO CDC into SCD2 histories. Unity Catalog governance separates raw and curated access and applies column masks to sensitive identifiers and money.
+
 ## Objects created
 
 - Pipeline `steel-claims`.
 - Jobs `steel-claims-{validate-generator,generate-raw,refresh-medallion,deploy-metric-views}`.
 - Bronze materialized views; silver reference and history streaming tables; gold current/history views, decision records, facts, KPIs, and `quality_claims_metrics`.
 - Bootstrap-safe `decision_records_for_fact`, typed empty until decision-record CDF exists.
+- `silver.claims_history` and `silver.adjudications_history`: AUTO CDC SCD Type 2 timelines; gold current views select rows whose `__END_AT` is null.
 
 ## Resources configured
 
 Serverless triggered pipeline in catalog `fe-bar-ir`, schema `silver`; SQL warehouse `38e458a09de4a055`. Native-CDF table names are resolved dynamically by `run.py refresh`.
+
+`governance.sql` manages account groups, curated SELECT grants, and UC column masks. Adjusters and workspace admins see raw customer identifiers and money; other readers receive hashed identifiers and null amounts. Bronze has the same masks but no reader grant.
 
 ## Data flow
 
@@ -22,6 +27,8 @@ flowchart LR
   F[Raw parquet] --> B[Bronze MV] --> S[Silver reference]
   C[Lakebase CDF] --> H[Silver SCD2] --> G[Gold facts and views] --> M[Metric view]
 ```
+
+Reference data flows raw → bronze → silver. Operational changes flow Lakebase CDF → landing → AUTO CDC SCD2 histories → gold current/history views. Governance and column masks apply at Unity Catalog objects rather than in application code.
 
 ## Deploy
 
