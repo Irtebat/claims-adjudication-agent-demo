@@ -21,6 +21,7 @@ SPEC.loader.exec_module(regrant)
 APP_SP = "d5309ee7-a8ea-499f-99d4-4ccbd8369d93"
 SERVING_SP = "47643eb1-dbd5-40a6-a51d-5da6b8e2da7a"
 
+
 # Expected statements per principal, rendered as psycopg emits them (identifiers
 # double-quoted). Derived directly from APP_TABLES / SERVING_TABLES so the test tracks
 # the documented table sets and catches any over- or under-grant.
@@ -94,10 +95,20 @@ def test_regrant_only_select_and_usage_never_write_or_ownership():
     cur = FakeCursor()
     regrant._regrant(cur, "role-x", ["alpha"])
     joined = " ".join(cur.statements)
-    for forbidden in ("INSERT", "UPDATE", "DELETE", "OWNER", "ALL PRIVILEGES", "GRANT ALL"):
+    for forbidden in (
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "OWNER",
+        "ALL PRIVILEGES",
+        "GRANT ALL",
+    ):
         assert forbidden not in joined
     # Only USAGE (schema) and SELECT (tables) are ever emitted.
-    assert all(("GRANT USAGE ON SCHEMA" in s) or ("GRANT SELECT ON" in s) for s in cur.statements)
+    assert all(
+        ("GRANT USAGE ON SCHEMA" in s) or ("GRANT SELECT ON" in s)
+        for s in cur.statements
+    )
 
 
 # --- main(): both principals, exact end-to-end mapping ----------------------------
@@ -110,8 +121,14 @@ def test_main_grants_both_principals_with_exact_table_mapping(monkeypatch):
         SERVING_SP, regrant.SERVING_TABLES
     )
     # customer_heat_risk (the table that 500'd the cockpit) is covered for both SPs.
-    assert f'GRANT SELECT ON "reference"."customer_heat_risk" TO "{APP_SP}"' in cur.statements
-    assert f'GRANT SELECT ON "reference"."customer_heat_risk" TO "{SERVING_SP}"' in cur.statements
+    assert (
+        f'GRANT SELECT ON "reference"."customer_heat_risk" TO "{APP_SP}"'
+        in cur.statements
+    )
+    assert (
+        f'GRANT SELECT ON "reference"."customer_heat_risk" TO "{SERVING_SP}"'
+        in cur.statements
+    )
 
 
 def test_main_is_idempotent_across_repeat_invocations(monkeypatch):
@@ -173,15 +190,12 @@ def test_db_error_propagates_and_no_success(monkeypatch, capsys):
     assert "regranted" not in capsys.readouterr().out
 
 
-# --- shell wiring: create_synced_tables.sh runs the re-grant after the creates ----
+# --- consumer table lists cover the synced precedent corpus -----------------------
 
 
-def test_create_script_invokes_regrant_after_create_pass():
-    create_sh = (SCRIPTS / "create_synced_tables.sh").read_text()
-    assert "regrant_synced_table_selects.py" in create_sh
-    # It runs AFTER the last synced-table create so the recreated tables exist first.
-    assert create_sh.index("create_sync customer_heat_risk") < create_sh.index(
-        "regrant_synced_table_selects.py"
-    )
-    # Both required principals are wired through from the shell.
-    assert "--app-principal" in create_sh and "--serving-principal" in create_sh
+def test_both_consumers_read_the_synced_precedent_corpus():
+    # The app cockpit and the served agent both read reference.prior_claims_corpus, so a
+    # create/recreate must grant it to both. (Create/resync/recreate wiring is tested in
+    # test_synced_tables.py.)
+    assert "prior_claims_corpus" in regrant.APP_TABLES
+    assert "prior_claims_corpus" in regrant.SERVING_TABLES

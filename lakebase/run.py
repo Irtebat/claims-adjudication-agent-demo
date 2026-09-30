@@ -41,6 +41,20 @@ def cdf_configs(database):
     )
 
 
+def synced_tables(*args):
+    command(
+        "uv",
+        "run",
+        "--with",
+        "psycopg[binary]==3.2.10",
+        "--with",
+        "databricks-sdk>=0.81.0",
+        "python",
+        "scripts/synced_tables.py",
+        *args,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -50,8 +64,16 @@ def main():
             "policy-intake",
             "create-cdf",
             "synced-tables",
+            "resync-synced-tables",
+            "recreate-synced-table",
         ],
     )
+    parser.add_argument(
+        "--tables",
+        nargs="+",
+        help="resync-synced-tables: tables to re-sync (default: the routine set)",
+    )
+    parser.add_argument("--table", help="recreate-synced-table: the table to recreate")
     args = parser.parse_args()
 
     if args.action == "setup-and-seed":
@@ -89,7 +111,16 @@ def main():
             "fe-bar",
         )
     elif args.action == "synced-tables":
-        command("./scripts/create_synced_tables.sh")
+        # Create path: creates missing tables; re-grants only if it created any.
+        synced_tables("create")
+    elif args.action == "resync-synced-tables":
+        # Routine path: incremental triggered sync of EXISTING tables; never re-grants.
+        synced_tables("resync", *(["--tables", *args.tables] if args.tables else []))
+    elif args.action == "recreate-synced-table":
+        # Schema-change path only: delete + create + indexes + re-grant.
+        if not args.table:
+            parser.error("recreate-synced-table requires --table")
+        synced_tables("recreate", "--table", args.table)
     else:
         db = pipeline_databricks_config()
         catalog, schema, database = (

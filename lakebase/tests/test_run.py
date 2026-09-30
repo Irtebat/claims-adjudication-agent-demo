@@ -47,3 +47,42 @@ def test_plain_bundle_passthroughs_are_not_wrapped(monkeypatch, action):
         lakebase_run.main()
 
     assert calls == []
+
+
+def _capture_commands(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        lakebase_run, "command", lambda *parts, **kwargs: calls.append(parts)
+    )
+    return calls
+
+
+@pytest.mark.parametrize(
+    "argv, expected_tail",
+    [
+        (["synced-tables"], ("create",)),
+        (["resync-synced-tables"], ("resync",)),
+        (
+            ["resync-synced-tables", "--tables", "prior_claims_corpus"],
+            ("resync", "--tables", "prior_claims_corpus"),
+        ),
+        (
+            ["recreate-synced-table", "--table", "prior_claims_corpus"],
+            ("recreate", "--table", "prior_claims_corpus"),
+        ),
+    ],
+)
+def test_synced_table_actions_route_to_the_right_path(monkeypatch, argv, expected_tail):
+    calls = _capture_commands(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["run.py", *argv])
+    lakebase_run.main()
+    (call,) = calls
+    assert "scripts/synced_tables.py" in call
+    assert call[call.index("scripts/synced_tables.py") + 1 :] == expected_tail
+
+
+def test_recreate_requires_a_table(monkeypatch):
+    _capture_commands(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["run.py", "recreate-synced-table"])
+    with pytest.raises(SystemExit):
+        lakebase_run.main()

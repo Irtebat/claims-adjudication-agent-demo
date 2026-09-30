@@ -16,12 +16,19 @@ def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
     assert "full_refresh" not in medallion["pipeline_task"]
 
     seed_source = (Path(__file__).parents[2] / "lakebase" / "src" / "setup_and_seed.py").read_text()
-    prior_delete = seed_source.index('"DELETE FROM prior_claims WHERE data_provenance = %s"')
+    adjudication_delete = seed_source.index(
+        '"DELETE FROM adjudications WHERE data_provenance = %s"'
+    )
     adjudication_load = seed_source.index('upsert_sql("adjudications"')
-    prior_load = seed_source.index("INSERT INTO prior_claims")
-
-    assert prior_delete < adjudication_load < prior_load
-    assert "WHERE a.decision_status = 'FINAL'" in seed_source
+    assert adjudication_delete < adjudication_load
+    # The precedent corpus is lakehouse-built and synced down; the seed no longer
+    # creates, deletes, or loads a native prior_claims table.
+    assert "prior_claims" not in seed_source.replace("prior_claims_corpus", "")
+    # Finalization columns are part of the day-1 adjudications schema.
+    create_adjudications = seed_source[
+        seed_source.index("CREATE TABLE IF NOT EXISTS adjudications") :
+    ].split(");")[0]
+    assert "decided_by text, override_reason text" in create_adjudications
     assert "/bronze/raw_landing/claims_history" in seed_source
     assert "/bronze/raw_landing/adjudications_history" in seed_source
     assert ".gold.claims_history" not in seed_source
