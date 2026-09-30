@@ -30,15 +30,15 @@ databricks bundle deploy -t prod --profile fe-bar
 
 ## Run
 
-Working directory: `demo/`. CLI 1.17 job parameters use `--params`:
+Working directory: repository root. The composer runs `demo_backlog` once and then the routine refresh:
 
 ```bash
-databricks bundle run demo_backlog -t prod --profile fe-bar --params count=1000,seed=123,mode=serving_endpoint
-cd ..
 uv run --with pyyaml python scripts/refresh.py demo
 ```
 
-Connect with `databricks psql --project fe-bar-operational-plane --profile fe-bar`. Cleanup is destructive and Lakebase-only; use fully qualified names and a transaction:
+The job default is 500 claims. If invoking the bundle job directly for a custom count, CLI 1.17 uses `--params`; follow that one job run with `scripts/refresh.py routine`, not `scripts/refresh.py demo`.
+
+Connect with `databricks psql --project fe-bar-operational-plane --profile fe-bar -- -d databricks_postgres`. Cleanup is destructive and Lakebase-only; use fully qualified names and a transaction:
 
 ```sql
 BEGIN;

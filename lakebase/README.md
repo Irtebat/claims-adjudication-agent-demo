@@ -55,17 +55,35 @@ databricks bundle deploy -t prod --profile fe-bar
 
 ## Run
 
-Working directory: repository root. First-time only:
+Working directory: repository root.
+
+### First-time only
 
 ```bash
 uv run --with pyyaml python lakebase/run.py setup-and-seed
 uv run --with pyyaml python lakebase/run.py create-cdf
-uv run --with pyyaml python lakebase/run.py policy-intake
 uv run --with pyyaml python lakebase/run.py synced-tables
+```
+
+`setup-and-seed` already runs policy intake.
+
+### Policy re-run only
+
+After editing `lakebase/src/policy_source.json`, re-run only the idempotent intake:
+
+```bash
+uv run --with pyyaml python lakebase/run.py policy-intake
+```
+
+### Schema change only
+
+Warning: this command drops and recreates the synced Postgres table, including its indexes and grants. Use it only for an incompatible source schema change, never during bootstrap or routine refresh:
+
+```bash
 uv run --with pyyaml python lakebase/run.py recreate-synced-table --table prior_claims_corpus
 ```
 
-Routine refresh uses `resync-synced-tables`; recreate is only for incompatible schema changes. Both creation and recreation poll until ONLINE; failure or timeout stops before post-create grants.
+Routine refresh uses `resync-synced-tables`. Both creation and recreation poll until ONLINE; failure or timeout stops before post-create grants.
 
 ## Verify
 

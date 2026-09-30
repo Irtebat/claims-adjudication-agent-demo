@@ -75,9 +75,16 @@ databricks jobs list --profile fe-bar -o json
 
 Expected before deployment: all six required key names exist; values are never returned. Expected after deployment: five `fe-bar-services-*` jobs exist and the four processing schedules are `UNPAUSED`.
 
-To pause or resume a deployed schedule, use the Jobs UI: Workflows → Jobs & Pipelines → select the job → Schedule & Triggers → toggle the schedule. CLI 1.17 `jobs update JOB_ID --json ...` is a partial-update API, but changing `schedule` requires carrying forward the job's complete cron and timezone; the UI toggle avoids accidentally replacing those fields.
+These jobs use `trigger.periodic`, not a cron `schedule`. CLI 1.17 accepts the partial update through `jobs update JOB_ID --json`; retain the complete hourly periodic trigger while changing its pause state:
 
-Development checks from `services/`: `uv run pytest -q && uv run --with ruff ruff check . && uv run --with ruff ruff format --check .`.
+```bash
+databricks jobs update JOB_ID --profile fe-bar --json '{"new_settings":{"trigger":{"pause_status":"PAUSED","periodic":{"interval":1,"unit":"HOURS"}}}}'
+databricks jobs update JOB_ID --profile fe-bar --json '{"new_settings":{"trigger":{"pause_status":"UNPAUSED","periodic":{"interval":1,"unit":"HOURS"}}}}'
+```
+
+The Jobs UI toggle is equivalent. The next `databricks bundle deploy -t prod --profile fe-bar` reapplies the bundle definitions and resets all four triggers to `UNPAUSED`.
+
+Development checks from the repository root: `uv run --with pytest pytest services/tests -q && uv run --with ruff ruff check services`.
 
 ## Status
 

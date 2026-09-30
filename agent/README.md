@@ -75,7 +75,7 @@ databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_age
 
 Expected now: endpoint `READY`, served entity version `1`, and both aliases resolve to READY version 1. After promotion, expected served version must equal the promoted `@prod` version and the smoke must prove corpus retrieval.
 
-Development checks from `agent/`: `uv run ruff check src tests && uv run ruff format --check src tests && uv run pytest -q`.
+Development checks from the repository root: `uv run --project eval pytest agent/tests -q && uv run --with ruff ruff check agent`.
 
 ## Status
 
