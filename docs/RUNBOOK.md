@@ -152,7 +152,11 @@ first.
 
 The precedent corpus used to be the native Lakebase table `public.prior_claims`. It is
 now `gold.prior_claims_corpus`, served down as `reference.prior_claims_corpus`. The
-agent code and the app read the new table. The live serving endpoint keeps reading
+agent code and the app read the new table. On an existing workspace, do this once
+before the first routine refresh (the routine re-sync expects the synced table to
+exist): deploy the agent bundle, `bundle run prior_claims_corpus`, then
+`lakebase/run.py synced-tables`, which creates only the missing corpus table, builds
+its indexes, and grants SELECT to the app and serving principals. The live serving endpoint keeps reading
 `public.prior_claims` until the next `register -> evaluate -> promote -> deploy` cycle
 packages the new `retrieval.py`. After that cycle, drop the legacy table:
 `DROP TABLE public.prior_claims;` (fresh setups no longer create it).
