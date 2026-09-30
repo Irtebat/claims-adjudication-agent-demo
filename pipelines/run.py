@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent
+DECISION_RECORDS = "adjudication_decision_records"
 
 # A service-principal application id, group name, or user email — deliberately excludes
 # backticks, quotes, semicolons and whitespace/newlines so a principal can never break
@@ -156,6 +157,24 @@ def main():
         result = cli_json("postgres", "list-cdf-configs", database, allow_failure=True)
         return {"enabled": result is not None, "cdf_configs": result}
 
+    def cdf_tables(cdf_schema):
+        response = cli_json("tables", "list", catalog, cdf_schema)
+        return response if isinstance(response, list) else response.get("tables", [])
+
+    def cdf_table(tables, source, required=True):
+        """Resolve the (possibly hash-suffixed) native-CDF landing table for ``source``."""
+        prefix = f"lb_{source}_history"
+        matches = [
+            row.get("full_name") or f"{catalog}.{db['cdf_schema']}.{row['name']}"
+            for row in tables
+            if row.get("name", "").startswith(prefix)
+        ]
+        if not matches and not required:
+            return None
+        if len(matches) != 1:
+            raise RuntimeError(f"Expected one CDF table for {source}, found {matches}")
+        return matches[0]
+
     if args.action == "preview-status":
         status = preview_status()
         print(json.dumps(status, sort_keys=True))
@@ -177,31 +196,20 @@ def main():
             )
 
         created = existing[0]
-        table_response = cli_json("tables", "list", catalog, cdf_schema)
-        tables = (
-            table_response if isinstance(table_response, list) else table_response.get("tables", [])
-        )
-
-        def cdf_table(source):
-            prefix = f"lb_{source}_history"
-            matches = [
-                row.get("full_name") or f"{catalog}.{cdf_schema}.{row['name']}"
-                for row in tables
-                if row.get("name", "").startswith(prefix)
-            ]
-            if len(matches) != 1:
-                raise RuntimeError(f"Expected one CDF table for {source}, found {matches}")
-            return matches[0]
-
+        tables = cdf_tables(cdf_schema)
         # A normal triggered/incremental medallion run: feed the pipeline the current
-        # native-CDF table names and run refresh_medallion. Ordinary DML flows through
-        # CDF incrementally, so this neither reloads everything nor re-snapshots, and it
-        # issues no DDL. The *_history datasets are no longer materialized views
-        # (silver.*_history are STREAMING_TABLE, gold.*_history / *_current are VIEW), so
-        # the earlier migration that dropped them as MVs errored with
-        # DROP_COMMAND_TYPE_MISMATCH on the go-live run and has been removed.
-        env["BUNDLE_VAR_cdf_claims_table"] = cdf_table("claims")
-        env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table("adjudications")
+        # native-CDF table names for EVERY CDF-fed dataset and run refresh_medallion.
+        # Ordinary DML flows through CDF incrementally, so this neither reloads
+        # everything nor re-snapshots, and it issues no DDL. The decision-record table
+        # is passed too (earlier this path passed only claims/adjudications and left
+        # the decision-record flow on the bundle-default name); it is optional only
+        # until the first decision record materializes its CDF landing table, and the
+        # pipeline skips that flow while it is absent.
+        env["BUNDLE_VAR_cdf_claims_table"] = cdf_table(tables, "claims")
+        env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table(tables, "adjudications")
+        decision_records = cdf_table(tables, DECISION_RECORDS, required=False)
+        if decision_records:
+            env["BUNDLE_VAR_cdf_decision_records_table"] = decision_records
         cli("bundle", "deploy", "--target", "prod")
         cli("bundle", "run", "refresh_medallion", "--target", "prod")
         print(
@@ -210,6 +218,7 @@ def main():
                     "cdf_config": created,
                     "claims_table": env["BUNDLE_VAR_cdf_claims_table"],
                     "adjudications_table": env["BUNDLE_VAR_cdf_adjudications_table"],
+                    "decision_records_table": decision_records,
                 },
                 sort_keys=True,
             )
@@ -226,7 +235,7 @@ def main():
             raise RuntimeError("No existing Lakebase CDF config; run the base flow first.")
         cdf_schema = db["cdf_schema"]
         cdf_config_name = status["cdf_configs"][0]["name"]
-        source = "adjudication_decision_records"
+        source = DECISION_RECORDS
         statuses = None
         for _ in range(40):
             statuses = cli_json("postgres", "list-cdf-statuses", cdf_config_name)
@@ -253,25 +262,10 @@ def main():
                 "Confirm the lakebase migration created it with REPLICA IDENTITY FULL."
             )
 
-        table_response = cli_json("tables", "list", catalog, cdf_schema)
-        tables = (
-            table_response if isinstance(table_response, list) else table_response.get("tables", [])
-        )
-
-        def cdf_table(src):
-            prefix = f"lb_{src}_history"
-            matches = [
-                row.get("full_name") or f"{catalog}.{cdf_schema}.{row['name']}"
-                for row in tables
-                if row.get("name", "").startswith(prefix)
-            ]
-            if len(matches) != 1:
-                raise RuntimeError(f"Expected one CDF table for {src}, found {matches}")
-            return matches[0]
-
-        env["BUNDLE_VAR_cdf_claims_table"] = cdf_table("claims")
-        env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table("adjudications")
-        env["BUNDLE_VAR_cdf_decision_records_table"] = cdf_table(source)
+        tables = cdf_tables(cdf_schema)
+        env["BUNDLE_VAR_cdf_claims_table"] = cdf_table(tables, "claims")
+        env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table(tables, "adjudications")
+        env["BUNDLE_VAR_cdf_decision_records_table"] = cdf_table(tables, source)
         cli("bundle", "deploy", "--target", "prod")
         cli("bundle", "run", "refresh_medallion", "--target", "prod")
         print(

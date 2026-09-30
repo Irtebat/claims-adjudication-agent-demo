@@ -64,16 +64,35 @@ def test_bootstrap_main_issues_exact_commands_in_order(monkeypatch):
     bootstrap.main()
 
     wrapper = ("uv", "run", "--with", "pyyaml", "python")
+    target = ("--target", "prod", "--profile", "fe-bar")
+    root = {"cwd": REPO, "check": True}
+    agent = {"cwd": REPO / "agent", "check": True}
     assert calls == [
-        (
-            ("databricks", "bundle", "deploy", "--target", "prod", "--profile", "fe-bar"),
-            {"cwd": REPO / "pipelines", "check": True},
-        ),
-        ((*wrapper, "pipelines/run.py", "generate"), {"cwd": REPO, "check": True}),
-        ((*wrapper, "lakebase/run.py", "setup-and-seed"), {"cwd": REPO, "check": True}),
-        ((*wrapper, "lakebase/run.py", "create-cdf"), {"cwd": REPO, "check": True}),
-        ((*wrapper, "pipelines/run.py", "refresh"), {"cwd": REPO, "check": True}),
+        (("databricks", "bundle", "deploy", *target), {"cwd": REPO / "pipelines", "check": True}),
+        ((*wrapper, "pipelines/run.py", "generate"), root),
+        ((*wrapper, "lakebase/run.py", "setup-and-seed"), root),
+        ((*wrapper, "lakebase/run.py", "create-cdf"), root),
+        (("databricks", "bundle", "deploy", *target), agent),
+        # First fraud_graph precedes the first medallion run: it publishes the empty
+        # typed gold.customer_heat_risk the gold fact joins on a fresh workspace.
+        (("databricks", "bundle", "run", "fraud_graph", *target), agent),
+        ((*wrapper, "pipelines/run.py", "refresh"), root),
+        (("databricks", "bundle", "run", "fraud_graph", *target), agent),
+        (("databricks", "bundle", "run", "prior_claims_corpus", *target), agent),
+        ((*wrapper, "pipelines/run.py", "refresh"), root),
     ]
+
+
+def test_fraud_graph_bootstraps_an_empty_risk_table_before_first_medallion():
+    job = (REPO / "agent" / "src" / "fraud_graph_job.py").read_text()
+    guard = job.index('if not _table_exists("gold", "claims_current"):')
+    # The empty, typed table is published and the job exits BEFORE any claims read.
+    assert guard < job.index('spark.table(f"`{catalog}`.gold.claims_current")')
+    branch = job[guard : job.index("heat_map = ")]
+    assert "spark.createDataFrame([], schema)" in branch
+    assert "dbutils.notebook.exit" in branch
+    # It never overwrites an existing risk table on that path.
+    assert 'if not _table_exists("gold", "customer_heat_risk"):' in branch
 
 
 def test_bootstrap_main_stops_at_first_failing_step(monkeypatch):
