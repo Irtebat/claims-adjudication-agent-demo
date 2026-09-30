@@ -127,7 +127,9 @@ app's own service principal, whose id is needed to grant Lakebase. Order:
    distinct from the serving SP `claims-adjudication-serving`):
    - `CONNECT` on `databricks_postgres`; `USAGE` on `public` + `reference`.
    - `SELECT` on `public.claims`, `adjudications`, `adjudication_decision_records`,
-     `prior_claims`, and `reference.*`.
+     and `reference.*` (including the synced precedent corpus
+     `reference.prior_claims_corpus`; `lakebase/run.py synced-tables` grants the
+     `reference.*` SELECTs when it creates or recreates a synced table).
    - `SELECT, UPDATE` on `public.adjudications` (finalize UPDATE).
    - `INSERT` on `public.adjudication_decision_records` (new record_version).
    - **`INSERT` on `public.outbox`** ← REQUIRED for finalize; not in the serving SP's

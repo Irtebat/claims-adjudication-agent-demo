@@ -96,7 +96,7 @@ describe('sourceRowSql — whitelisted, parameterized, read-only row drill-throu
     const q = sourceRowSql({ source: 'prior_claims', id: 'CLM-42' });
     expect(q).not.toBeNull();
     const t = flat(q!.text);
-    expect(t).toBe('SELECT * FROM public.prior_claims WHERE claim_id = $1 LIMIT 1');
+    expect(t).toBe('SELECT * FROM reference.prior_claims_corpus WHERE claim_id = $1 LIMIT 1');
     expect(q!.params).toEqual(['CLM-42']);
   });
 
