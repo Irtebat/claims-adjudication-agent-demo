@@ -23,10 +23,6 @@ toggle in the resource yml for a live-demo loop.
 
 import json
 import os
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config
 import consumer_core

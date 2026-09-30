@@ -18,10 +18,6 @@ CONTINUOUS MODE toggle in the resource yml for a live-demo long-running consumer
 """
 
 import os
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config
 import serving
