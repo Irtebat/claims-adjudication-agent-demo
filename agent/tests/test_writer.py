@@ -85,7 +85,7 @@ def _record(verdict="APPROVE", disposition="CREDIT", approved=5000.0, dup=False)
         "authorities_source_sha256": "src",
         "agent_model_name": "m",
         "agent_model_version": "1",
-        "reasoning_endpoint": "databricks-gpt-5-2",
+        "reasoning_endpoint": "system.ai.gpt-5-4",
         "prompt_version": "p",
         "schema_version": "s",
         "mlflow_trace_id": "t",

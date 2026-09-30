@@ -4,7 +4,7 @@
 
 Build deterministic claim recommendations with cited policy and precedent, register the MLflow model, and deploy the governed serving endpoint.
 
-The MLflow 3 `ResponsesAgent` resolves each claim once to a frozen policy snapshot, runs deterministic authorities and the duplicate gate, gathers advisory context, and uses a LangGraph tool loop with the governed GPT-5.x reasoning model `system.ai.gpt-5-2`. Model calls route through the OpenAI-compatible Unity Gateway. Code-level invariant checks run before persistence; the language model cannot override eligibility or money.
+The MLflow 3 `ResponsesAgent` resolves each claim once to a frozen policy snapshot, runs deterministic authorities and the duplicate gate, gathers advisory context, and uses a LangGraph tool loop with the governed GPT-5.x reasoning model `system.ai.gpt-5-4`. Model calls route through the OpenAI-compatible Unity Gateway. Code-level invariant checks run before persistence; the language model cannot override eligibility or money.
 
 ## Objects created
 
@@ -75,4 +75,4 @@ Expected now: endpoint `READY`, served entity version `1`, and both aliases reso
 
 ## Status
 
-2026-10-01: repo head builds and reads the live synced corpus. Deployed endpoint v1 is READY but still reads legacy `public.prior_claims`; promotion and endpoint smoke are pending.
+2026-10-01: repo head uses governed reasoning model `system.ai.gpt-5-4` and reads the live synced corpus. Deployed endpoint v1 is READY but still reads legacy `public.prior_claims`; registration, evaluation, promotion, deployment, and endpoint smoke are pending.
