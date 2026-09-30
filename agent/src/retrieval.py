@@ -16,6 +16,14 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from prior_claims_indexes import (
+    PRIOR_CLAIMS_BM25_INDEX,
+    PRIOR_CLAIMS_EMBEDDING_EXPR,
+    PRIOR_CLAIMS_TABLE,
+    PRIOR_CLAIMS_TEXT_SEARCH_CONFIG,
+    PRIOR_CLAIMS_TSVECTOR_EXPR,
+)
+
 RRF_K = 60
 
 _SPEC_FILTERS = {"grade": "grade", "spec_edition": "spec_edition", "region": "region"}
@@ -92,20 +100,10 @@ def retrieve_policy_clauses(
     return kw_rows[:final_n]
 
 
-# The precedent corpus is built in Unity Catalog (gold.prior_claims_corpus) and served
-# down as the Triggered synced table reference.prior_claims_corpus. Synced tables
-# cannot carry vector/tsvector columns, so the embedding is a pgvector text literal and
-# the lakebase_ann / lakebase_bm25 indexes are EXPRESSION indexes. These constants are
-# the single source of those expressions: lakebase/scripts/synced_tables.py builds the
-# index DDL from them, and each arm below ORDERs BY exactly the same text, so the
-# planner can use the index.
-PRIOR_CLAIMS_TABLE = "reference.prior_claims_corpus"
-PRIOR_CLAIMS_TEXT_SEARCH_CONFIG = "english"
-PRIOR_CLAIMS_EMBEDDING_EXPR = "embedding::vector(1024)"
-PRIOR_CLAIMS_TSVECTOR_EXPR = f"to_tsvector('{PRIOR_CLAIMS_TEXT_SEARCH_CONFIG}', defect_narrative)"
-PRIOR_CLAIMS_ANN_INDEX = "prior_claims_corpus_lb_ann"
-PRIOR_CLAIMS_BM25_INDEX = "prior_claims_corpus_lb_bm25"
-
+# Table, text-search config, indexed expressions, and index names for the precedent
+# corpus come from prior_claims_indexes (shared, import-free), which
+# lakebase/scripts/synced_tables.py also uses to build the index DDL. Each arm below
+# ORDERs BY exactly those expressions, so the planner can use the expression indexes.
 _DENSE_DISTANCE = f"{PRIOR_CLAIMS_EMBEDDING_EXPR} <=> %(qvec)s::vector"
 _BM25_SCORE = (
     f"{PRIOR_CLAIMS_TSVECTOR_EXPR} <@> "

@@ -95,28 +95,35 @@ ROUTINE_RESYNC = ("customer_heat_risk", "prior_claims_corpus")
 
 # Postgres objects built ON a synced table (indexes are allowed on synced tables).
 # Synced tables cannot carry vector/tsvector columns, so the corpus indexes are
-# expression indexes. The expressions come from agent/src/retrieval.py — the single
-# source the retrieval arms ORDER BY — so the index and the query cannot drift apart.
-def _load_retrieval():
-    path = SCRIPTS.parents[1] / "agent" / "src" / "retrieval.py"
-    spec = importlib.util.spec_from_file_location("agent_retrieval_constants", path)
+# expression indexes. The expressions and names come from agent/src/prior_claims_indexes.py
+# — import-free string constants that agent/src/retrieval.py also ORDERs BY — loaded by
+# file path so this script needs none of the agent's dependencies.
+PRIOR_CLAIMS_INDEXES_PATH = (
+    SCRIPTS.parents[1] / "agent" / "src" / "prior_claims_indexes.py"
+)
+
+
+def _load_prior_claims_indexes():
+    spec = importlib.util.spec_from_file_location(
+        "prior_claims_indexes", PRIOR_CLAIMS_INDEXES_PATH
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-_retrieval = _load_retrieval()
+_indexes = _load_prior_claims_indexes()
 POST_CREATE_SQL = {
     "prior_claims_corpus": [
         (
-            f"CREATE INDEX IF NOT EXISTS {_retrieval.PRIOR_CLAIMS_ANN_INDEX} "
-            f"ON {_retrieval.PRIOR_CLAIMS_TABLE} "
-            f"USING lakebase_ann (({_retrieval.PRIOR_CLAIMS_EMBEDDING_EXPR}) vector_cosine_ops)"
+            f"CREATE INDEX IF NOT EXISTS {_indexes.PRIOR_CLAIMS_ANN_INDEX} "
+            f"ON {_indexes.PRIOR_CLAIMS_TABLE} "
+            f"USING lakebase_ann (({_indexes.PRIOR_CLAIMS_EMBEDDING_EXPR}) vector_cosine_ops)"
         ),
         (
-            f"CREATE INDEX IF NOT EXISTS {_retrieval.PRIOR_CLAIMS_BM25_INDEX} "
-            f"ON {_retrieval.PRIOR_CLAIMS_TABLE} "
-            f"USING lakebase_bm25 (({_retrieval.PRIOR_CLAIMS_TSVECTOR_EXPR}) tsvector_bm25_ops)"
+            f"CREATE INDEX IF NOT EXISTS {_indexes.PRIOR_CLAIMS_BM25_INDEX} "
+            f"ON {_indexes.PRIOR_CLAIMS_TABLE} "
+            f"USING lakebase_bm25 (({_indexes.PRIOR_CLAIMS_TSVECTOR_EXPR}) tsvector_bm25_ops)"
         ),
     ],
 }

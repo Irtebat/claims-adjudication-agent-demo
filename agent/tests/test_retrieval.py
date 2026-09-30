@@ -184,7 +184,7 @@ def _run_similar(filters=None):
 
 
 def test_each_arm_orders_by_exactly_the_indexed_expression():
-    import retrieval
+    import prior_claims_indexes as shared
 
     st = _synced_tables()
     ann_ddl, bm25_ddl = st.POST_CREATE_SQL["prior_claims_corpus"]
@@ -195,18 +195,78 @@ def test_each_arm_orders_by_exactly_the_indexed_expression():
     dense_expr, dense_op = _order_by_operand(arms["dense"])
     fts_expr, fts_op = _order_by_operand(arms["fts"])
     # Character-identical to the expression inside each index definition.
-    assert dense_op == "<=>" and dense_expr == retrieval.PRIOR_CLAIMS_EMBEDDING_EXPR
+    assert dense_op == "<=>" and dense_expr == shared.PRIOR_CLAIMS_EMBEDDING_EXPR
     assert f"(({dense_expr}) vector_cosine_ops)" in ann_ddl
     assert "USING lakebase_ann" in ann_ddl
-    assert fts_op == "<@>" and fts_expr == retrieval.PRIOR_CLAIMS_TSVECTOR_EXPR
+    assert fts_op == "<@>" and fts_expr == shared.PRIOR_CLAIMS_TSVECTOR_EXPR
     assert f"(({fts_expr}) tsvector_bm25_ops)" in bm25_ddl
     assert "USING lakebase_bm25" in bm25_ddl
     # The BM25 query uses the same text-search config as the indexed tsvector.
-    config = retrieval.PRIOR_CLAIMS_TEXT_SEARCH_CONFIG
+    config = shared.PRIOR_CLAIMS_TEXT_SEARCH_CONFIG
     assert f"to_tsvector('{config}', defect_narrative)" == fts_expr
     assert f"to_bm25query(to_tsvector('{config}', %(text)s)" in arms["fts"]
-    assert f"'reference.{retrieval.PRIOR_CLAIMS_BM25_INDEX}'::regclass" in arms["fts"]
-    assert retrieval.PRIOR_CLAIMS_BM25_INDEX in bm25_ddl
+    assert f"'reference.{shared.PRIOR_CLAIMS_BM25_INDEX}'::regclass" in arms["fts"]
+    assert shared.PRIOR_CLAIMS_BM25_INDEX in bm25_ddl
+
+
+def test_synced_tables_builds_its_ddl_from_the_shared_constants_file():
+    import prior_claims_indexes as shared
+
+    st = _synced_tables()
+    assert st.PRIOR_CLAIMS_INDEXES_PATH.resolve() == Path(shared.__file__).resolve()
+    for name in (
+        "PRIOR_CLAIMS_TABLE",
+        "PRIOR_CLAIMS_EMBEDDING_EXPR",
+        "PRIOR_CLAIMS_TSVECTOR_EXPR",
+        "PRIOR_CLAIMS_ANN_INDEX",
+        "PRIOR_CLAIMS_BM25_INDEX",
+    ):
+        assert getattr(st._indexes, name) == getattr(shared, name)
+    # retrieval re-exports the very same objects, not copies.
+    import retrieval
+
+    assert retrieval.PRIOR_CLAIMS_EMBEDDING_EXPR is shared.PRIOR_CLAIMS_EMBEDDING_EXPR
+    assert f"'{shared.PRIOR_CLAIMS_TEXT_SEARCH_CONFIG}'" in shared.PRIOR_CLAIMS_TSVECTOR_EXPR
+
+
+def test_shared_constants_module_has_no_imports_and_only_string_constants():
+    import ast
+
+    import prior_claims_indexes as shared
+
+    tree = ast.parse(Path(shared.__file__).read_text())
+    body = tree.body[1:] if isinstance(tree.body[0], ast.Expr) else tree.body  # docstring
+    assert not any(isinstance(n, (ast.Import, ast.ImportFrom)) for n in ast.walk(tree))
+    for node in body:
+        assert isinstance(node, ast.Assign), ast.dump(node)
+        assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+
+
+def test_shared_constants_load_in_a_bare_interpreter_from_the_lakebase_dir():
+    # -I -S: isolated mode, no site-packages (so no agent deps), no user paths; run
+    # from lakebase/ exactly as lakebase/run.py runs synced_tables.py.
+    import subprocess
+    import sys
+
+    import prior_claims_indexes as shared
+
+    repo = Path(__file__).resolve().parents[2]
+    code = (
+        "import importlib.util, json, sys\n"
+        f"spec = importlib.util.spec_from_file_location('m', {str(Path(shared.__file__))!r})\n"
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+        "print(json.dumps({k: v for k, v in vars(m).items() if k.startswith('PRIOR_')}))\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", code],
+        cwd=repo / "lakebase",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    import json
+
+    assert json.loads(out)["PRIOR_CLAIMS_EMBEDDING_EXPR"] == shared.PRIOR_CLAIMS_EMBEDDING_EXPR
 
 
 def test_arms_query_the_table_directly_with_no_shared_cte():

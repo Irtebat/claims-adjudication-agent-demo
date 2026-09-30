@@ -5,6 +5,7 @@ Branch `refresh-commands-and-prior-claims`, off `main` 888ea2d.
 | File | What it shows |
 | --- | --- |
 | `gates.txt` | Money-math gate (`agent/src/authorities.py` empty diff), `bundle validate --strict` for every touched bundle, unit tests, ruff, mypy, compileall |
+| `live-cutover.json` | Operator live run: corpus job run, synced table ONLINE with 4999 rows, expression-index definitions, EXPLAIN index use, re-sync update IDs, regrant |
 
 ## What was verified
 
@@ -65,30 +66,42 @@ Branch `refresh-commands-and-prior-claims`, off `main` 888ea2d.
   the indexed expression; tests assert character identity with the index DDL (built
   from shared constants in `agent/src/retrieval.py`) and the absence of any CTE.
 
-## Live run: not performed (blocked)
+## Live cutover (operator run)
 
-The first live step, deploying the agent bundle so the new `prior_claims_corpus` job
-exists, was denied by the auto-mode safety classifier:
+Recorded in `live-cutover.json`. The operator ran these steps against the `fe-bar`
+profile and reported the results; this agent ran no workspace commands for them.
 
-```bash
-cd agent && databricks bundle deploy -t prod --profile fe-bar
-```
-
-Because every later live step depends on that job, nothing was run live: no job run
-IDs, no synced table created, no re-sync. To run the proof yourself:
-
-```bash
-cd agent && databricks bundle deploy -t prod --profile fe-bar
-databricks bundle run prior_claims_corpus -t prod --profile fe-bar
-cd .. && uv run --with pyyaml python lakebase/run.py synced-tables          # creates reference.prior_claims_corpus + indexes, grants SELECT
-uv run --with pyyaml python lakebase/run.py resync-synced-tables            # triggered re-sync of customer_heat_risk + prior_claims_corpus
-```
-
-`synced-tables` and `resync-synced-tables` issue Lakebase writes (`CREATE INDEX`,
-`GRANT SELECT`, `VACUUM (ANALYZE)`). One thing the first live run must confirm that
-tests cannot: that `lakebase_ann` and `lakebase_bm25` accept the expression indexes
-(`(embedding::vector(1024))`, `(to_tsvector('english', defect_narrative))`). If
-either is rejected, the corpus needs a different storage shape for the embedding.
+- **Corpus job.** Run `776035986368373` of `fe-bar-prior-claims-corpus` finished
+  TERMINATED / SUCCESS. The earlier run `124128428225115` failed with
+  `[NOT_SUPPORTED_WITH_SERVERLESS] PERSIST TABLE`; commit `2846243` removed the
+  caching.
+- **Synced table.** `reference.prior_claims_corpus` is ONLINE
+  (`SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE`) with 4999 rows, one per FINAL
+  adjudication. That matches the 4999 FINAL rows in `gold.adjudications_current`
+  noted above.
+- **Expression indexes are accepted.** This was the open question from the offline
+  work. Postgres reports:
+  - `prior_claims_corpus_lb_ann USING lakebase_ann (((embedding)::vector(1024)) vector_cosine_ops)`
+  - `prior_claims_corpus_lb_bm25 USING lakebase_bm25 (to_tsvector('english'::regconfig, defect_narrative))`
+- **Both arms use their index.** `EXPLAIN` shows the dense arm as an Index Scan on
+  the partition embedding index, ordered by `(embedding)::vector(1024) <=> ...`. The
+  FTS arm is an Index Scan on the partition `to_tsvector` index, ordered by
+  `<@> bm25query`. The hybrid query returned 20 arm rows, each with `verdict` and
+  `approved_amount`.
+- **Re-sync.** `lakebase/run.py resync-synced-tables` completed both sync pipeline
+  updates: `customer_heat_risk` update `65439518-951c-4c73-b264-f49b489266c6` and
+  `prior_claims_corpus` update `546e096e-f823-4814-b2ff-62eab923ce6c`. It reported
+  `regranted: false`, as designed.
+- **Create-path bug, now fixed.** `lakebase/run.py synced-tables` ran `CREATE INDEX`
+  before the initial sync had created the Postgres table. It failed with
+  `UndefinedTable: relation "reference.prior_claims_corpus" does not exist`, and the
+  regrant step never ran. Commit `54dba43` makes create and recreate wait for
+  `SYNCED_TABLE_ONLINE*` first.
+- **Manual regrant.** Because of that bug, the regrant was applied by hand. It gave
+  `SELECT` on `reference.prior_claims_corpus` to the app SP
+  `d5309ee7-a8ea-499f-99d4-4ccbd8369d93` and the serving SP
+  `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`. With the fix, a future create or recreate
+  runs this regrant itself.
 
 ## Not changed live
 

@@ -296,3 +296,24 @@ def test_recreate_failed_initial_sync_never_regrants():
     # Only the pre-create DROP ran; no index DDL, no regrant.
     assert statements == ["DROP TABLE IF EXISTS reference.prior_claims_corpus"]
     assert not cli.regranted()
+
+
+def test_script_loads_in_a_bare_interpreter_from_the_lakebase_dir():
+    # Isolated, no site-packages: the index constants must come from the import-free
+    # agent/src/prior_claims_indexes.py alone, with no agent dependency on the path.
+    code = (
+        "import importlib.util, sys\n"
+        f"spec = importlib.util.spec_from_file_location('st', {str(MODULE_PATH)!r})\n"
+        "m = importlib.util.module_from_spec(spec); sys.modules['st'] = m\n"
+        "spec.loader.exec_module(m)\n"
+        "print(m.POST_CREATE_SQL['prior_claims_corpus'][0])\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", code],
+        cwd=MODULE_PATH.parents[1],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert out == st.POST_CREATE_SQL["prior_claims_corpus"][0]
+    assert "USING lakebase_ann ((embedding::vector(1024)) vector_cosine_ops)" in out
