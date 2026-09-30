@@ -1,0 +1,34 @@
+# Gates — refresh-and-prior-claims  (generated 2026-09-30T18:36:48Z, HEAD 62dad92, base main 888ea2d)
+
+## GATE: git diff main -- agent/src/authorities.py (MUST be empty)
+exit=0 lines=0
+
+## databricks bundle validate --strict (read-only)
+pipelines (-t prod): Validation OK!
+lakebase (-t prod): Validation OK!
+agent (-t prod): Validation OK!
+services (-t prod): Validation OK!
+demo (-t prod): Validation OK!
+app (-t default): Validation OK!
+
+## unit tests
+pipelines: uv run --with pytest --with pyyaml pytest -q pipelines/tests -> 34 passed in 0.09s
+lakebase: (cd lakebase) uv run --with pytest --with pyyaml --with psycopg[binary]==3.2.10 pytest -q tests -> 31 passed in 0.27s
+agent: uv run --project eval pytest agent/tests -q -> 98 passed, 3 skipped, 1 warning in 7.10s
+services: uv run --with pytest pytest services/tests -q -> 34 passed in 0.04s
+app: (cd app) npx vitest run server/ ->       Tests  84 passed (84)
+app: (cd app) npx tsc -p tsconfig.server.json --noEmit -> exit 0
+
+## ruff
+pipelines: check=clean format=clean
+scripts: check=clean format=clean
+agent: check=clean format=clean
+lakebase: check=clean format=clean
+services: check=clean format=clean
+
+## mypy (pipelines documented check)
+Found 2 errors in 1 file (checked 3 source files)
+(the 2 var-annotated errors at render_governance are pre-existing on main, unchanged here)
+
+## compileall
+ok
