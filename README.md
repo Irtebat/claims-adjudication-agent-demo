@@ -60,7 +60,9 @@ Every layer uses the **same two execution mechanisms — and only these two**:
 
 Each layer README below states this rule and lists the exact commands for that
 layer. `scripts/bootstrap.py` composes the end-to-end path from these mechanisms
-directly (see `scripts/README.md`).
+directly, and `scripts/refresh.py routine|demo` composes the refreshes (see
+`scripts/README.md`). `docs/RUNBOOK.md` lists what exists, how each piece is
+triggered, and the run orders.
 
 ## Environment
 

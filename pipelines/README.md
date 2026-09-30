@@ -118,7 +118,7 @@ databricks bundle summary           --target prod --profile fe-bar
 uv run --with pyyaml python pipelines/run.py generate         # bundle run generate_raw + inject warranty schedule
 uv run --with pyyaml python pipelines/run.py check-generator  # bundle run validate_generator + inject warranty schedule
 uv run --with pyyaml python pipelines/run.py preview-status   # probe Lakebase CDF preview enablement
-uv run --with pyyaml python pipelines/run.py refresh          # resolve dynamic CDF table names -> deploy + run refresh_medallion
+uv run --with pyyaml python pipelines/run.py refresh          # resolve ALL dynamic CDF table names -> deploy + run refresh_medallion
 uv run --with pyyaml python pipelines/run.py decision-records # wait for CDF STREAMING, resolve tables -> deploy + run
 uv run --with pyyaml python pipelines/run.py govern           # create account groups + render/execute governance.sql
 uv run --with pyyaml python pipelines/run.py evidence         # capture SQL evidence snapshots
@@ -132,7 +132,10 @@ Why each `run.py` action is not a plain `bundle run`:
   hardcoded in the bundle (which defaults the schedule to `[]`).
 - **`refresh` / `decision-records`** discover the hash-suffixed native-CDF landing
   table names at runtime and pass them as `BUNDLE_VAR_cdf_*`; the pipeline and
-  `refresh_medallion` cannot resolve those names themselves. `decision-records` also
+  `refresh_medallion` cannot resolve those names themselves. `refresh` passes every
+  CDF-fed source — claims, adjudications, and decision records — so a routine run
+  lands new decision records too; the decision-record name is optional only until its
+  CDF landing table first materializes (the pipeline skips that flow while absent). `decision-records` also
   polls until the decision-record table reaches `CDF_STATE_STREAMING`.
 - **`preview-status`** reads the feature-gated CDF preview endpoint (a guard, not a
   bundle resource). **`govern`** creates account groups and renders `governance.sql`
@@ -147,7 +150,12 @@ supplies those values.
 
 `scripts/bootstrap.py` composes the guarded end-to-end path: it issues the plain
 pipelines `databricks bundle deploy` directly, then `run.py generate`, the Lakebase
-seed and CDF creation (via `lakebase/run.py`), and finally `run.py refresh`. The
+seed and CDF creation (via `lakebase/run.py`), an agent `fraud_graph` run that
+publishes an empty typed `gold.customer_heat_risk` (the gold fact joins it and it
+cannot be scored before the first medallion run), `run.py refresh`, a scoring
+`fraud_graph` run, the `prior_claims_corpus` build, and a final `run.py refresh`.
+Routine and demo refreshes are `scripts/refresh.py routine|demo`; see
+`docs/RUNBOOK.md` for every run order and for full refresh vs routine refresh. The
 CDF-exists guard is checked in the Lakebase steps, after the pipelines deploy and
 `generate` have already run. If a CDF config exists, `setup-and-seed` refuses before
 the Lakebase deploy or any seed, and the bootstrap stops, because replacing the

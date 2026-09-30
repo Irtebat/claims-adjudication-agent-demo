@@ -3,6 +3,12 @@
 Live against the `fe-bar` profile. Adds the human-finalization metadata columns and
 re-materializes the medallion cleanly through native Lakebase CDF.
 
+> Superseded (refresh-and-prior-claims): the one-off migration script referenced below
+> was deleted after it had been applied here. It only ran the additive `ADD COLUMN IF
+> NOT EXISTS` statements; the columns are now part of the day-1 `CREATE TABLE` DDL in
+> `lakebase/src/setup_and_seed.py`. See `docs/RUNBOOK.md` for the schema-change run
+> order.
+
 ## Schema change (committed code)
 
 `lakebase/src/setup_and_seed.py` (idempotent, `ADD COLUMN IF NOT EXISTS`):

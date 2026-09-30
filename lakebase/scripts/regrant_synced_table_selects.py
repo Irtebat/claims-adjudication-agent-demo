@@ -1,18 +1,20 @@
 """Re-grant SELECT on the reference.* synced tables to their documented consumers.
 
-Recreating a Lakebase synced table (delete + recreate, e.g. via
-``scripts/create_synced_tables.sh``) makes the new table owned by the recreating
-role and DROPS every prior grant. On the go-live run the app service principal lost
+Creating or recreating a Lakebase synced table (``scripts/synced_tables.py create`` /
+``recreate``) makes the table owned by the creating role with no consumer grants — a
+recreate DROPS every prior grant. On the go-live run the app service principal lost
 SELECT on ``reference.customer_heat_risk`` and the cockpit 500'd until a manual
 ``GRANT SELECT`` was restored. This script re-applies those grants idempotently so a
-re-sync is reproducible without a manual step. It grants ONLY SELECT (plus the
+create/recreate is reproducible without a manual step. A routine triggered re-sync
+(``synced_tables.py resync``) keeps the existing table and its grants and does NOT
+call this script. It grants ONLY SELECT (plus the
 prerequisite schema USAGE) — never ownership or write — mirroring
 ``docs/evidence/app-deploy/grants.sql`` (app SP) and
 ``docs/evidence/serving-endpoint/README.md`` (serving SP).
 
 Runs against the live Lakebase Postgres endpoint over psycopg as the invoking
 superuser (SDK OAuth credential, sslmode=require) — the same connection pattern as
-``apply_finalization_columns.py``.
+``synced_tables.py``.
 
 Both the app SP and the serving SP are contractually required consumers, so by
 default both principals must be resolved or the script errors before touching the
@@ -33,7 +35,9 @@ import os
 import psycopg
 from psycopg import sql
 
-DEFAULT_ENDPOINT = "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
+DEFAULT_ENDPOINT = (
+    "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
+)
 DEFAULT_DATABASE = "databricks_postgres"
 REFERENCE_SCHEMA = "reference"
 
@@ -45,8 +49,21 @@ DEFAULT_APP_PRINCIPAL = "d5309ee7-a8ea-499f-99d4-4ccbd8369d93"
 DEFAULT_SERVING_PRINCIPAL = "47643eb1-dbd5-40a6-a51d-5da6b8e2da7a"
 
 # reference.* synced tables each consumer reads, per the two evidence docs above.
-APP_TABLES = ["heats_coils", "mill_test_certs", "customers", "customer_heat_risk"]
-SERVING_TABLES = ["heats_coils", "mill_test_certs", "customer_heat_risk"]
+# prior_claims_corpus is the precedent corpus the agent's find_similar_prior_claims and
+# the app cockpit read (it replaced the native public.prior_claims table).
+APP_TABLES = [
+    "heats_coils",
+    "mill_test_certs",
+    "customers",
+    "customer_heat_risk",
+    "prior_claims_corpus",
+]
+SERVING_TABLES = [
+    "heats_coils",
+    "mill_test_certs",
+    "customer_heat_risk",
+    "prior_claims_corpus",
+]
 
 
 def _connect(profile: str, endpoint: str, database: str) -> psycopg.Connection:
@@ -108,7 +125,9 @@ def _resolve_consumers(app_principal, serving_principal, allow_single=False):
                 "(or APP_SP_PRINCIPAL / SERVING_SP_PRINCIPAL), or pass "
                 "--allow-single-principal to deliberately grant only the ones supplied."
             )
-    consumers = [(principal, tables) for _, principal, tables in candidates if principal]
+    consumers = [
+        (principal, tables) for _, principal, tables in candidates if principal
+    ]
     if not consumers:
         raise ValueError(
             "No principals supplied; set --app-principal and/or --serving-principal "
@@ -148,7 +167,10 @@ def main() -> None:
     )
 
     applied = []
-    with _connect(args.profile, args.endpoint, args.database) as conn, conn.cursor() as cur:
+    with (
+        _connect(args.profile, args.endpoint, args.database) as conn,
+        conn.cursor() as cur,
+    ):
         for role, tables in consumers:
             _regrant(cur, role, tables)
             applied.append({"principal": role, "tables": tables})

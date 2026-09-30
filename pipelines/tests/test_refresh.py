@@ -117,3 +117,67 @@ def test_collapsed_passthrough_actions_are_removed(monkeypatch, action):
     with pytest.raises(SystemExit) as exc:
         run.main()
     assert exc.value.code == 2
+
+
+_CDF_TABLES_WITH_DECISION_RECORDS = json.dumps(
+    json.loads(_CDF_TABLES)
+    + [
+        {
+            "name": "lb_adjudication_decision_records_history_ghi",
+            "full_name": "fe-bar-ir.cdf.lb_adjudication_decision_records_history_ghi",
+        },
+        # Other CDF landing tables in the schema must not be mistaken for a source.
+        {
+            "name": "lb_claims_pending_history",
+            "full_name": "fe-bar-ir.cdf.lb_claims_pending_history",
+        },
+    ]
+)
+
+
+def _run_refresh_capturing_env(monkeypatch, tables_json):
+    envs = []
+
+    def fake_run(cmd, cwd=None, env=None, text=None, capture_output=None, check=False, **kw):
+        parts = cmd[1:-2]
+        if "list-cdf-configs" in parts:
+            stdout = _ONE_CDF_CONFIG
+        elif "tables" in parts and "list" in parts:
+            stdout = tables_json
+        else:
+            stdout = ""
+            envs.append((parts, dict(env)))
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(run.subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", ["run.py", "refresh"])
+    monkeypatch.delenv("BUNDLE_VAR_cdf_decision_records_table", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        run.main()
+    assert exc.value.code == 0
+    return envs
+
+
+def test_refresh_passes_all_cdf_tables_including_decision_records(monkeypatch):
+    envs = _run_refresh_capturing_env(monkeypatch, _CDF_TABLES_WITH_DECISION_RECORDS)
+    for parts, env in envs:  # both the deploy and the refresh_medallion run
+        assert env["BUNDLE_VAR_cdf_claims_table"] == "fe-bar-ir.cdf.lb_claims_history_abc"
+        assert (
+            env["BUNDLE_VAR_cdf_adjudications_table"]
+            == "fe-bar-ir.cdf.lb_adjudications_history_def"
+        )
+        assert (
+            env["BUNDLE_VAR_cdf_decision_records_table"]
+            == "fe-bar-ir.cdf.lb_adjudication_decision_records_history_ghi"
+        )
+    assert [p[:3] for p, _ in envs] == [
+        ["bundle", "deploy", "--target"],
+        ["bundle", "run", "refresh_medallion"],
+    ]
+
+
+def test_refresh_tolerates_decision_records_not_yet_materialized(monkeypatch):
+    # Before the first decision record the CDF landing table does not exist; refresh
+    # still runs and leaves the bundle default (the pipeline skips that flow).
+    envs = _run_refresh_capturing_env(monkeypatch, _CDF_TABLES)
+    assert envs and all("BUNDLE_VAR_cdf_decision_records_table" not in env for _, env in envs)

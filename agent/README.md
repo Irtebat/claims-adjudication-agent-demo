@@ -92,11 +92,21 @@ Two distinct retrieval paths, and only one of them is a semantic/vector search:
   argument is unused on this path. Retrieval only finds and cites the clauses of the
   already-resolved policy; it never decides which policy applies or moves money.
 - **Genuine dense-vector + BM25 hybrid (RRF) retrieval lives only in the
-  `prior_claims` precedent index.** `find_similar_prior_claims` runs a dense arm
-  (`embedding <=>` cosine distance) and a BM25 arm (`narrative_tsv <@>
-  to_bm25query(...)`), fused by reciprocal-rank fusion. It is advisory
-  precedent / copy-paste-fraud signal only — the deterministic duplicate gate, not
-  this search, is what can deny money.
+  prior-claims precedent corpus.** The corpus is built in the lakehouse by the
+  `prior_claims_corpus` job (`src/prior_claims_corpus_job.py` ->
+  `gold.prior_claims_corpus`: current claims x latest FINAL adjudication x coil master,
+  governed GTE embeddings, change-only MERGE with Delta CDF) and served down to
+  Lakebase as the Triggered synced table `reference.prior_claims_corpus`, where
+  `lakebase_ann` and `lakebase_bm25` indexes are built on it. Synced tables cannot
+  carry `vector`/`tsvector`, so the embedding is a pgvector text literal and the
+  indexes cover `embedding::vector(1024)` and `to_tsvector('english',
+  defect_narrative)`. `find_similar_prior_claims` runs a dense arm (cosine `<=>`) and
+  a BM25 arm (`<@> to_bm25query(...)`) over those expressions, fused by
+  reciprocal-rank fusion, and returns `verdict` and `approved_amount` per precedent.
+  It is advisory precedent / copy-paste-fraud signal only — the deterministic
+  duplicate gate, not this search, is what can deny money. The live serving endpoint
+  reads the new table only after the next `register -> evaluate -> promote -> deploy`
+  cycle packages this `retrieval.py`.
 
 ## Registration
 
@@ -125,8 +135,11 @@ legitimate direct-`uv run python` exception**:
   automation, and `evaluate.py` additionally enforces the explicit `fe-bar` profile
   as a money-safety guard.
 - **Everything that runs on Databricks compute uses DABs.** `fraud_graph` (builds
-  `gold.customer_heat_risk`) and `deploy_claims_agent` (creates/updates the serving
-  endpoint) are `databricks bundle run` jobs.
+  `gold.customer_heat_risk`), `prior_claims_corpus` (builds
+  `gold.prior_claims_corpus`), and `deploy_claims_agent` (creates/updates the serving
+  endpoint) are `databricks bundle run` jobs. The routine refresh
+  (`scripts/refresh.py routine`, see `docs/RUNBOOK.md`) runs `fraud_graph` and
+  `prior_claims_corpus` in order and then re-syncs their Lakebase synced tables.
 
 ## Release and deployment
 
@@ -213,7 +226,8 @@ Lakebase, governed retrieval embedding, governed reasoning, and the atomic write
 | `src/authorities.py` | Pure `compute_conformance` (incl. gauge + width), `compute_coverage`, `compute_settlement` — the single source of the money math, exercised by the offline tests and called in-process. |
 | `src/authorities_runtime.py` | Runtime adapter: fetches params (`public.spec_params` / `warranty_terms`) and coil MTC (`reference.heats_coils` / `mill_test_certs`) over the Lakebase psycopg (5432) path with parameterized queries, then calls the pure authorities in-process. No warehouse on the decision path. |
 | `src/duplicate.py` | `check_duplicate_claim` — deterministic record linkage (block by coil + date window, match on defect/amount/tonnage + `pg_trgm` narrative). A gate that can deny money. |
-| `src/retrieval.py` | Metadata-filtered BM25 clause citation, plus dense + BM25 reciprocal-rank fusion over the separate `prior_claims` precedent index. Runs at app/agent runtime (psycopg + gateway). |
+| `src/retrieval.py` | Metadata-filtered BM25 clause citation, plus dense + BM25 reciprocal-rank fusion over the synced `reference.prior_claims_corpus` precedent corpus. Runs at app/agent runtime (psycopg + gateway). |
+| `src/prior_claims_corpus.py` + `src/prior_claims_corpus_job.py` | Lakehouse build of `gold.prior_claims_corpus` (FINAL adjudications, governed embeddings reused when narrative + provenance are unchanged, change-only MERGE). Served down as `reference.prior_claims_corpus`. |
 | `src/heat_risk.py` | `get_customer_heat_risk(customer_id, heat_no)` — reads the synced-down `reference.customer_heat_risk` graph score. Advisory only; never changes an amount or verdict. |
 | `src/agent_tools.py` | Resolve-once decision core + the in-process tool callables (authorities, duplicate, clause/precedent retrieval, risk) and the deterministic baseline recommendation. Pure (no LangGraph/MLflow), unit-tested with a fake connection. |
 | `src/decision_record.py` | The money-critical spine: the Pydantic recommendation schema + JSON-Schema, the deterministic outcome, `enforce_invariants` (the LLM never overrides an authority), and the canonical decision-record payload builder. |
@@ -257,8 +271,13 @@ always with an explicit profile:
 ```bash
 uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
   python lakebase/src/policy_intake.py --profile fe-bar       # idempotent; owns the 4 tables
-databricks bundle run fraud_graph -t prod --profile fe-bar    # gold.customer_heat_risk
+databricks bundle run fraud_graph -t prod --profile fe-bar          # gold.customer_heat_risk
+databricks bundle run prior_claims_corpus -t prod --profile fe-bar  # gold.prior_claims_corpus
 ```
+
+On a fresh workspace `fraud_graph` runs once before the first medallion refresh: with
+no `gold.claims_current` yet it publishes an empty, typed `gold.customer_heat_risk`
+so the gold fact can build, then exits (see `docs/RUNBOOK.md`).
 
 ## Development checks
 

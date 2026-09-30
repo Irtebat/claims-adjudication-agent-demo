@@ -48,21 +48,19 @@ CREATE TABLE IF NOT EXISTS adjudications (
   override_flag boolean, decision_status text, rationale text,
   cited_clause_ids text[], finalized_at timestamp,
   duplicate_of_claim_id text, fraud_cluster_id text,
+  -- Human-finalization metadata. Populated only by the App's finalize transaction;
+  -- NULL on an agent recommendation. Part of the day-1 schema so a fresh setup never
+  -- needs a post-CDF column migration (which would force a CDF re-snapshot).
+  decided_by text, override_reason text,
   data_provenance text NOT NULL,
   baseline_loaded_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE IF NOT EXISTS prior_claims (
-  claim_id text PRIMARY KEY, coil_id text NOT NULL, grade text NOT NULL,
-  coating_class text NOT NULL, defect_code text NOT NULL, defect_narrative text NOT NULL,
-  claim_date date NOT NULL, verdict text NOT NULL, approved_amount numeric(18,2),
-  embedding vector(1024), narrative_tsv tsvector NOT NULL,
-  data_provenance text NOT NULL
 );
 ALTER TABLE adjudications
   ADD COLUMN IF NOT EXISTS duplicate_of_claim_id text,
   ADD COLUMN IF NOT EXISTS fraud_cluster_id text;
-ALTER TABLE prior_claims
-  ADD COLUMN IF NOT EXISTS data_provenance text;
+-- The prior-claims precedent corpus is NOT a native table: it is built in Unity
+-- Catalog (agent prior_claims_corpus job -> gold.prior_claims_corpus) and served down
+-- as the Triggered synced table reference.prior_claims_corpus.
 ALTER TABLE claims
   DROP COLUMN IF EXISTS heat_no, DROP COLUMN IF EXISTS grade,
   DROP COLUMN IF EXISTS spec_edition,
@@ -73,10 +71,6 @@ ALTER TABLE claims
   DROP COLUMN IF EXISTS ground_truth_label, DROP COLUMN IF EXISTS fraud_cluster_id,
   DROP COLUMN IF EXISTS duplicate_of_claim_id, DROP COLUMN IF EXISTS coating_supplier_id,
   DROP COLUMN IF EXISTS claimed_amount;
-CREATE INDEX IF NOT EXISTS prior_claims_lb_ann ON prior_claims
-  USING lakebase_ann (embedding vector_cosine_ops);
-CREATE INDEX IF NOT EXISTS prior_claims_lb_bm25 ON prior_claims
-  USING lakebase_bm25 (narrative_tsv tsvector_bm25_ops);
 CREATE TABLE IF NOT EXISTS outbox (
   event_id text PRIMARY KEY, aggregate_id text NOT NULL, event_type text NOT NULL,
   payload jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
@@ -115,12 +109,7 @@ ALTER TABLE adjudications
   ADD COLUMN IF NOT EXISTS precedent jsonb,
   ADD COLUMN IF NOT EXISTS idempotency_key text,
   ADD COLUMN IF NOT EXISTS decision_record_version integer,
-  ADD COLUMN IF NOT EXISTS recommended_at timestamptz DEFAULT now(),
-  -- Human-finalization metadata (Wave 7). Populated only by the App's finalize
-  -- transaction; NULL on an agent recommendation. Captured by native Lakebase CDF,
-  -- so adding them triggers a one-time re-snapshot that propagates to silver/gold.
-  ADD COLUMN IF NOT EXISTS decided_by text,
-  ADD COLUMN IF NOT EXISTS override_reason text;
+  ADD COLUMN IF NOT EXISTS recommended_at timestamptz DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS adjudication_decision_records (
   adjudication_id text NOT NULL, claim_id text NOT NULL,
@@ -144,13 +133,9 @@ CREATE TABLE IF NOT EXISTS adjudication_decision_records (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (adjudication_id, record_version)
 );
--- Idempotent evolution for tables created before the human-finalization columns
--- existed. Each new record_version written by the App's finalize transaction carries
--- the human-final decision + decided_by + override_reason while PRESERVING the
+-- Each new record_version written by the App's finalize transaction carries the
+-- human-final decision + decided_by + override_reason while PRESERVING the
 -- deterministic baseline (deterministic_verdict/disposition/settlement) of v1.
-ALTER TABLE adjudication_decision_records
-  ADD COLUMN IF NOT EXISTS decided_by text,
-  ADD COLUMN IF NOT EXISTS override_reason text;
 ALTER TABLE adjudication_decision_records REPLICA IDENTITY FULL;
 REVOKE UPDATE, DELETE, TRUNCATE ON adjudication_decision_records FROM PUBLIC;
 """
@@ -234,19 +219,6 @@ with psycopg.connect(
             "DELETE FROM adjudications WHERE data_provenance = %s",
             ("synthetic_wave_2_baseline",),
         )
-        # Backfill provenance for corpus rows created before the column existed,
-        # then apply the same fixture-scoped replacement contract.
-        cursor.execute(
-            """
-            UPDATE prior_claims p SET data_provenance = c.data_provenance
-            FROM claims c
-            WHERE p.claim_id = c.claim_id AND p.data_provenance IS NULL
-            """
-        )
-        cursor.execute(
-            "DELETE FROM prior_claims WHERE data_provenance = %s",
-            ("synthetic_wave_2_baseline",),
-        )
         cursor.execute(
             "DELETE FROM claims WHERE data_provenance = %s",
             ("synthetic_wave_2_baseline",),
@@ -258,25 +230,6 @@ with psycopg.connect(
         cursor.executemany(
             upsert_sql("adjudications", ADJUDICATION_COLUMNS, "adjudication_id"),
             rows(adjudications_source, ADJUDICATION_COLUMNS),
-        )
-        cursor.execute(
-            """
-            INSERT INTO prior_claims
-              (claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
-               claim_date, verdict, approved_amount, narrative_tsv, data_provenance)
-            SELECT c.claim_id, c.coil_id, h.grade, h.coating_class, c.defect_code,
-                   c.defect_narrative, c.claim_date, a.verdict, a.approved_amount,
-                   to_tsvector('english', c.defect_narrative), c.data_provenance
-            FROM claims c JOIN adjudications a USING (claim_id)
-            JOIN reference.heats_coils h USING (coil_id)
-            WHERE a.decision_status = 'FINAL'
-            ON CONFLICT (claim_id) DO UPDATE SET
-              defect_narrative=EXCLUDED.defect_narrative,
-              narrative_tsv=EXCLUDED.narrative_tsv,
-              verdict=EXCLUDED.verdict,
-              approved_amount=EXCLUDED.approved_amount,
-              data_provenance=EXCLUDED.data_provenance
-            """
         )
         cursor.execute("SELECT count(*) FROM claims")
         claim_count = cursor.fetchone()[0]

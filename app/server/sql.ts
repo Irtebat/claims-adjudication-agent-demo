@@ -202,12 +202,16 @@ export function cockpitContextSql(coilId: string, customerId: string): Sql {
   };
 }
 
-/** Cockpit precedent: prior_claims rows referenced by the decision record. */
+/**
+ * Cockpit precedent: prior-claims corpus rows referenced by the decision record. The
+ * corpus is built in UC (gold.prior_claims_corpus) and served down as the synced table
+ * reference.prior_claims_corpus; the embedding column is deliberately not selected.
+ */
 export function cockpitPrecedentSql(claimIds: string[]): Sql {
   return {
     text: `SELECT claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
                   claim_date, verdict, approved_amount
-             FROM public.prior_claims
+             FROM reference.prior_claims_corpus
             WHERE claim_id = ANY($1::text[])`,
     params: [claimIds],
   };
@@ -250,7 +254,7 @@ export interface SourceSpec {
  *
  * Reference tables (`reference.*`) are the Lakebase synced mirror of the gold UC tables, so
  * their provenance is shown as the UC mirror-catalog name `fe_bar_operational.reference.*`
- * (see lakebase/README.md); the native policy/precedent tables live in Postgres `public`.
+ * (see lakebase/README.md); the native policy tables live in Postgres `public`.
  */
 export const SOURCE_REGISTRY: Record<string, SourceSpec> = {
   // Cited clauses — resolved by reconstructing the persisted citation_key. Column order
@@ -266,10 +270,10 @@ export const SOURCE_REGISTRY: Record<string, SourceSpec> = {
     display: 'public.warranty_clauses',
     match: { kind: 'citation_key', columns: ['product_line', 'region', 'version'] },
   },
-  // Similar prior claims — precedent corpus, PK claim_id.
+  // Similar prior claims — precedent corpus (UC-built, synced down), PK claim_id.
   prior_claims: {
-    table: 'public.prior_claims',
-    display: 'public.prior_claims',
+    table: 'reference.prior_claims_corpus',
+    display: 'fe_bar_operational.reference.prior_claims_corpus',
     match: { kind: 'column', column: 'claim_id' },
   },
   // Coil / heat / MTC / customer context — synced reference tables.
