@@ -17,24 +17,17 @@ evidence — it is overwritten on each run and is not canonical. See
 
 ## Execution model
 
-Two mechanisms only (see the repo-root README), and evaluation sits on the boundary
-between them — the `claims_adjudication_eval` bundle job is **kept and used**, not
-orphaned:
+Two mechanisms only (see the repo-root README). Evaluation uses **direct
+`uv run python src/evaluate.py` only**; there is no eval bundle job. It is the
+middle step of the human-gated `register -> evaluate -> promote` MLflow lifecycle,
+the one legitimate direct-python exception: an operator runs it, reads the gate, and
+decides promotion.
 
-- **Interactive dev / operator run → direct `uv run python src/evaluate.py`.** This
-  is the middle step of the human-gated `register → evaluate → promote` MLflow
-  lifecycle (the one legitimate direct-python exception): an operator runs it, reads
-  the gate, and decides promotion. It is the verified path and is what CI-style
-  reproduction should currently use.
-- **DABs bundle → `databricks bundle run claims_adjudication_eval`** runs the *same*
-  `evaluate.py` from the declared, parameterized job (dataset / candidate / judge /
-  tier / experiment as job parameters). Use it for a repeatable, parameter-pinned
-  re-run of an evaluation. It is deliberately **unscheduled**: `evaluate.py` enforces
-  the explicit `fe-bar` CLI profile as a money-safety guard (`--profile fe-bar`,
-  hardcoded in the job), and a serverless runtime carries no local CLI profile, so
-  today this is an **attended** `bundle run` in an environment where the `fe-bar`
-  profile resolves — not an unattended serverless/CI job. Making it unattended-CI
-  would require lifting that profile guard, which is intentionally not done here.
+A DABs job is deliberately not provided. `evaluate.py` enforces the explicit local
+`fe-bar` CLI profile as a money-safety guard, and a serverless job runtime carries no
+local CLI profile, so a bundle job running `evaluate.py` could not pass that guard.
+The guard is intentionally kept; evaluation therefore runs locally where the `fe-bar`
+profile resolves.
 
 ## Ordered register → evaluate → promote lifecycle
 
@@ -149,24 +142,3 @@ content or PII.
   currently reconstructs `oracle_clause_ids` from a hardcoded section vocabulary
   instead of the agent citation-key builder. It aligns today and is fragile if
   that key format changes.
-- The unscheduled DAB job is an attended/local reproducibility template: it
-  hardcodes `--profile fe-bar`, and `evaluate.py` enforces that CLI profile.
-  Serverless job runtimes do not carry local CLI profiles, so the verified path
-  is the local `uv run python src/evaluate.py --profile fe-bar` command above.
-
-## Manual DAB job
-
-The `claims_adjudication_eval` job (the DABs mechanism described under **Execution
-model**) is intentionally unscheduled and parameterized by dataset version,
-candidate version, judge endpoint, scorer tier, and experiment. It passes
-`--candidate-version` (not `--model-uri`), so `evaluate.py` derives the pinned
-`models:/<name>/<candidate_version>` URI and the run provably scores that exact
-version. Because `evaluate.py` enforces the `fe-bar` profile, run it attended where
-that profile resolves; it is not an unattended serverless/CI job today.
-
-```bash
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy            -t prod --profile fe-bar
-databricks bundle run claims_adjudication_eval -t prod --profile fe-bar \
-  -- --candidate-version 3
-```

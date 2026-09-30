@@ -33,3 +33,17 @@ def test_setup_and_seed_refuses_before_mutation_when_cdf_exists(monkeypatch):
             "json",
         )
     ]
+
+
+@pytest.mark.parametrize("action", ["validate", "deploy"])
+def test_plain_bundle_passthroughs_are_not_wrapped(monkeypatch, action):
+    calls = []
+    monkeypatch.setattr(
+        lakebase_run, "databricks", lambda *parts, **kwargs: calls.append(parts)
+    )
+    monkeypatch.setattr(sys, "argv", ["run.py", action])
+
+    with pytest.raises(SystemExit):
+        lakebase_run.main()
+
+    assert calls == []

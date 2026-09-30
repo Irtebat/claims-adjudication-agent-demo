@@ -30,10 +30,14 @@ uv run --with pyyaml python scripts/bootstrap.py
 ```
 
 Order (enforced by `bootstrap.py`): pipelines `bundle deploy` → `generate` →
-Lakebase `setup-and-seed` → `create-cdf` → pipelines `refresh`. If a CDF config
-already exists, the Lakebase steps refuse before any deploy or seed, because
+Lakebase `setup-and-seed` → `create-cdf` → pipelines `refresh`. The CDF-exists
+guard lives in the Lakebase steps, so it is checked only after the pipelines
+`bundle deploy` and `generate` steps have already run. If a CDF config already
+exists, `setup-and-seed` refuses before the Lakebase bundle deploy and before any
+seed, and the bootstrap stops there (no `create-cdf` or `refresh`), because
 replacing the fixture would emit artificial deletes/inserts and create spurious SCD2
-versions. Do not run the bootstrap against live data.
+versions. The earlier pipelines deploy and `generate` are not rolled back. Do not run
+the bootstrap against live data.
 
 ## Checks
 

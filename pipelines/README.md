@@ -147,10 +147,11 @@ supplies those values.
 
 `scripts/bootstrap.py` composes the guarded end-to-end path: it issues the plain
 pipelines `databricks bundle deploy` directly, then `run.py generate`, the Lakebase
-seed and CDF creation (via `lakebase/run.py`), and finally `run.py refresh`. If a
-CDF config exists, the Lakebase steps refuse before deployment or seeding because
-replacing the fixture would emit artificial deletes/inserts and create spurious SCD2
-versions.
+seed and CDF creation (via `lakebase/run.py`), and finally `run.py refresh`. The
+CDF-exists guard is checked in the Lakebase steps, after the pipelines deploy and
+`generate` have already run. If a CDF config exists, `setup-and-seed` refuses before
+the Lakebase deploy or any seed, and the bootstrap stops, because replacing the
+fixture would emit artificial deletes/inserts and create spurious SCD2 versions.
 
 `decision-records` is the additive path for the append-only agent decision record.
 The table is created by `lakebase/src/setup_and_seed.py` (with

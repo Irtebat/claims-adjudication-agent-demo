@@ -86,7 +86,8 @@ Two distinct retrieval paths, and only one of them is a semantic/vector search:
   `(product_line, coating_class, region)` plus the effective window at the coil's
   ship date. `retrieve_policy_clauses` (`src/retrieval.py`) then pre-filters clauses
   to that resolved parent on exactly those metadata columns and uses **BM25 only**
-  (`clause_tsv <@> to_bm25query(...)` over the `lakebase_bm25` index) to *order*
+  (`clause_tsv <@> to_bm25query(...)` over the `spec_clauses_lb_bm25` /
+  `warranty_clauses_lb_bm25` indexes, both using the `lakebase_bm25` method) to *order*
   clauses within it. No embedding is computed for clause citation — the `embed_fn`
   argument is unused on this path. Retrieval only finds and cites the clauses of the
   already-resolved policy; it never decides which policy applies or moves money.
