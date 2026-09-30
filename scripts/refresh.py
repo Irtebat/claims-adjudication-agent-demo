@@ -39,8 +39,11 @@ def bundle(*parts):
     return ("databricks", "bundle", *parts, "--target", "prod", *PROFILE)
 
 
-def routine_steps():
-    medallion = ((*WRAPPER, "pipelines/run.py", "refresh"), ROOT)
+def routine_steps(allow_missing_decision_records=False):
+    extra = (
+        ("--allow-missing-decision-records",) if allow_missing_decision_records else ()
+    )
+    medallion = ((*WRAPPER, "pipelines/run.py", "refresh", *extra), ROOT)
     return [
         medallion,
         (bundle("deploy"), ROOT / "agent"),
@@ -51,11 +54,11 @@ def routine_steps():
     ]
 
 
-def demo_steps():
+def demo_steps(allow_missing_decision_records=False):
     return [
         (bundle("deploy"), ROOT / "demo"),
         (bundle("run", "demo_backlog"), ROOT / "demo"),
-        *routine_steps(),
+        *routine_steps(allow_missing_decision_records),
     ]
 
 
@@ -66,8 +69,14 @@ def run(parts, cwd):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Routine or demo refresh")
     parser.add_argument("mode", choices=["routine", "demo"])
+    parser.add_argument(
+        "--allow-missing-decision-records",
+        action="store_true",
+        help="Forwarded to pipelines/run.py refresh; only before the first decision record",
+    )
     args = parser.parse_args(argv)
-    for parts, cwd in routine_steps() if args.mode == "routine" else demo_steps():
+    steps = routine_steps if args.mode == "routine" else demo_steps
+    for parts, cwd in steps(args.allow_missing_decision_records):
         print("+", " ".join(parts), flush=True)
         run(parts, cwd)
 

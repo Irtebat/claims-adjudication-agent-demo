@@ -74,6 +74,15 @@ def main():
         ],
     )
     parser.add_argument("--config", type=Path, default=ROOT / "settings.yaml")
+    parser.add_argument(
+        "--allow-missing-decision-records",
+        action="store_true",
+        help=(
+            "refresh: proceed when the decision-record CDF landing table does not exist "
+            "yet (a fresh workspace before its first decision record). Without this flag "
+            "a missing table is an error."
+        ),
+    )
     parser.add_argument("--claim-count", type=int)
     parser.add_argument(
         "--metadata-only",
@@ -202,14 +211,29 @@ def main():
         # Ordinary DML flows through CDF incrementally, so this neither reloads
         # everything nor re-snapshots, and it issues no DDL. The decision-record table
         # is passed too (earlier this path passed only claims/adjudications and left
-        # the decision-record flow on the bundle-default name); it is optional only
-        # until the first decision record materializes its CDF landing table, and the
-        # pipeline skips that flow while it is absent.
+        # the decision-record flow on the bundle-default name). A missing
+        # decision-record table is an error unless the operator explicitly allows it
+        # (--allow-missing-decision-records, used by scripts/bootstrap.py): that is only
+        # legitimate before the first decision record materializes the CDF landing
+        # table, and the pipeline then publishes an empty decision_records_for_fact.
         env["BUNDLE_VAR_cdf_claims_table"] = cdf_table(tables, "claims")
         env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table(tables, "adjudications")
         decision_records = cdf_table(tables, DECISION_RECORDS, required=False)
         if decision_records:
             env["BUNDLE_VAR_cdf_decision_records_table"] = decision_records
+        elif not args.allow_missing_decision_records:
+            raise RuntimeError(
+                f"No CDF landing table lb_{DECISION_RECORDS}_history* in "
+                f"{catalog}.{cdf_schema}. If no decision record has been written yet "
+                "(fresh workspace), rerun with --allow-missing-decision-records; "
+                "otherwise check the Lakebase CDF status for adjudication_decision_records."
+            )
+        else:
+            print(
+                f"WARNING: {DECISION_RECORDS} CDF table not found; proceeding without it "
+                "(--allow-missing-decision-records)",
+                flush=True,
+            )
         cli("bundle", "deploy", "--target", "prod")
         cli("bundle", "run", "refresh_medallion", "--target", "prod")
         print(

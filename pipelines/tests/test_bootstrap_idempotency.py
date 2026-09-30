@@ -76,10 +76,10 @@ def test_bootstrap_main_issues_exact_commands_in_order(monkeypatch):
         # First fraud_graph precedes the first medallion run: it publishes the empty
         # typed gold.customer_heat_risk the gold fact joins on a fresh workspace.
         (("databricks", "bundle", "run", "fraud_graph", *target), agent),
-        ((*wrapper, "pipelines/run.py", "refresh"), root),
+        ((*wrapper, "pipelines/run.py", "refresh", "--allow-missing-decision-records"), root),
         (("databricks", "bundle", "run", "fraud_graph", *target), agent),
         (("databricks", "bundle", "run", "prior_claims_corpus", *target), agent),
-        ((*wrapper, "pipelines/run.py", "refresh"), root),
+        ((*wrapper, "pipelines/run.py", "refresh", "--allow-missing-decision-records"), root),
     ]
 
 

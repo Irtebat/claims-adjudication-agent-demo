@@ -14,6 +14,13 @@ same brace technique used for ``cited_clause_ids`` in the CDF history work.
 The flow is defined only when its CDF source table exists, so the medallion
 pipeline stays valid whether or not the decision-record table has been created and
 picked up by the schema-scoped native CDF config yet.
+
+The gold fact does not read the streaming table directly. It reads the temporary view
+``decision_records_for_fact``, which is ALWAYS defined: it projects the gold table
+when the CDF source exists, and is an empty frame with the identical typed schema when
+it does not (a fresh workspace before its first decision record). The first medallion
+run therefore succeeds with NULL agent columns instead of failing on a missing table,
+and no rows are invented.
 """
 
 from pyspark import pipelines as dp
@@ -59,6 +66,33 @@ _STRUCT_SCHEMAS = {
     "precedent": "array<struct<claim_id:string,verdict:string,approved_amount:double,rrf_score:double>>",
     "invariant_violations": "array<string>",
 }
+# The decision-record columns the gold fact reads, with fixed types. Both branches of
+# decision_records_for_fact project exactly this schema, so the fact's plan and output
+# types are the same before and after the first decision record exists.
+FACT_VIEW = "decision_records_for_fact"
+FACT_COLUMNS = {
+    "adjudication_id": "string",
+    "record_version": "int",
+    "created_at": "timestamp",
+    "idempotency_key": "string",
+    "flags": _STRUCT_SCHEMAS["flags"],
+    "over_claim_flag": "boolean",
+    "duplicate_flag": "boolean",
+    "conformance": _STRUCT_SCHEMAS["conformance"],
+    "coverage": _STRUCT_SCHEMAS["coverage"],
+    "recommended_verdict": "string",
+    "recommended_disposition": "string",
+    "approved_amount": "decimal(38,18)",
+    "agent_model_name": "string",
+    "agent_model_version": "string",
+    "prompt_version": "string",
+    "schema_version": "string",
+    "cited_clause_ids": "array<string>",
+    "citations": _STRUCT_SCHEMAS["citations"],
+    "authorities_source_sha256": "string",
+    "mlflow_trace_id": "string",
+}
+FACT_SCHEMA = ", ".join(f"{name} {dtype}" for name, dtype in FACT_COLUMNS.items())
 # Bulk param/blob JSONB columns parsed to queryable VARIANT.
 _VARIANT_COLUMNS = [
     "claim_input",
@@ -126,3 +160,15 @@ if _exists:
         ],
         stored_as_scd_type=1,
     )
+
+
+@dp.temporary_view(name=FACT_VIEW)
+def decision_records_for_fact():
+    # Always defined, so the gold fact can LEFT JOIN it on every run.
+    if _exists:
+        records = spark.read.table(f"`{catalog}`.gold.adjudication_decision_records")
+        return records.select(
+            *[F.col(name).cast(dtype).alias(name) for name, dtype in FACT_COLUMNS.items()]
+        )
+    # No CDF source yet (fresh workspace): an empty frame, not placeholder rows.
+    return spark.createDataFrame([], FACT_SCHEMA)

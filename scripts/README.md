@@ -37,7 +37,9 @@ Lakebase `setup-and-seed` -> `create-cdf` -> agent `bundle deploy` -> `fraud_gra
 (publishes an empty typed `gold.customer_heat_risk`, because no
 `gold.claims_current` exists yet) -> `pipelines/run.py refresh` -> `fraud_graph`
 (real scores) -> `prior_claims_corpus` -> `pipelines/run.py refresh` (gold fact picks
-up the risk scores). Synced tables are created afterwards with
+up the risk scores). Both refreshes pass `--allow-missing-decision-records`: no
+decision record exists during a bootstrap, and the pipeline's
+`decision_records_for_fact` view is empty and typed until one does. Synced tables are created afterwards with
 `lakebase/run.py synced-tables`, once the app and serving service principals exist
 (the create path re-grants to them).
 
@@ -60,7 +62,9 @@ uv run --with pyyaml python scripts/refresh.py demo
 `bundle deploy` -> `fraud_graph` -> `prior_claims_corpus` ->
 `lakebase/run.py resync-synced-tables` (`customer_heat_risk`, `prior_claims_corpus`)
 -> `pipelines/run.py refresh` (so gold picks up the new risk scores). No full
-refresh, no reseed, no synced-table recreate, no re-grant.
+refresh, no reseed, no synced-table recreate, no re-grant. The refresh fails if the
+decision-record CDF table is missing; pass `--allow-missing-decision-records` only on
+a workspace where no decision record has been written yet.
 
 `demo`: demo `bundle deploy` -> `demo_backlog` (new synthetic claims + RECOMMENDED
 adjudications) -> the routine steps.

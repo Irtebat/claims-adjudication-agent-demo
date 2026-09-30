@@ -134,8 +134,11 @@ Why each `run.py` action is not a plain `bundle run`:
   table names at runtime and pass them as `BUNDLE_VAR_cdf_*`; the pipeline and
   `refresh_medallion` cannot resolve those names themselves. `refresh` passes every
   CDF-fed source — claims, adjudications, and decision records — so a routine run
-  lands new decision records too; the decision-record name is optional only until its
-  CDF landing table first materializes (the pipeline skips that flow while absent). `decision-records` also
+  lands new decision records too. A missing decision-record table is an error unless
+  `--allow-missing-decision-records` is passed (only before the first decision record;
+  `scripts/bootstrap.py` passes it). The gold fact reads the always-defined pipeline
+  view `decision_records_for_fact`, which is empty and typed while that table is
+  absent, so the first medallion run on a fresh workspace succeeds. `decision-records` also
   polls until the decision-record table reaches `CDF_STATE_STREAMING`.
 - **`preview-status`** reads the feature-gated CDF preview endpoint (a guard, not a
   bundle resource). **`govern`** creates account groups and renders `governance.sql`
@@ -229,6 +232,9 @@ uv run --with ruff ruff check pipelines
 uv run --with ruff ruff format --check pipelines
 uv run --with mypy --with types-PyYAML mypy --config-file pipelines/pyproject.toml pipelines/run.py pipelines/evidence.py pipelines/src/checks.py
 python3 -m compileall -q pipelines
+# Unit tests; pyspark (+ a local Java runtime) runs the decision-record bootstrap test,
+# which is skipped without it.
+uv run --with pytest --with pyyaml --with pyspark==4.0.1 pytest -q pipelines/tests
 ```
 
 Spark expressions are analyzed and executed by the serverless generator and
