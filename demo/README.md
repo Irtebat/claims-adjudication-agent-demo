@@ -37,6 +37,12 @@ Per 100 claims:
 
 This ensures the demo backlog maintains the same realistic claim distribution as the main synthetic baseline.
 
+## Demo refresh
+
+To load a backlog and bring every downstream layer up to date in one command, run
+`uv run --with pyyaml python scripts/refresh.py demo` from the repository root: it
+deploys and runs this job, then the routine refresh (see `docs/RUNBOOK.md`).
+
 ## Deployment
 
 Deploy to Databricks:

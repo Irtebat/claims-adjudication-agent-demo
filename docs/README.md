@@ -10,14 +10,19 @@ maintained incrementally in the lakehouse via native Change Data Feed (CDF); and
 the agent is registered and deployed as a governed serving endpoint with an
 offline evaluation gate over its traces.
 
+**Operating the system:** see [`RUNBOOK.md`](RUNBOOK.md) for every pipeline, job,
+app, dashboard, and synced table with its trigger, and for the run orders (fresh
+bootstrap, routine refresh, demo refresh, schema change, event backbone) and when a
+full refresh is required.
+
 ## Architecture
 
 ```mermaid
 flowchart TB
   subgraph OLTP["Operational plane — Lakebase Postgres"]
     claims[("public.claims / adjudications")]
-    policy[("policy tables + prior_claims")]
-    ref[("reference.* (synced from UC)")]
+    policy[("policy tables")]
+    ref[("reference.* (synced from UC,<br/>incl. prior_claims_corpus)")]
   end
   subgraph LH["Lakehouse — Unity Catalog: fe-bar-ir"]
     refsrc["bronze / silver reference"]
@@ -57,8 +62,8 @@ flowchart TB
 Intentional deviations from the initial plan, kept here so the repository reads accurately:
 
 - **Deterministic authorities run in-process, not as UC Python functions.** The money math lives in a single source (`agent/src/authorities.py`), exercised by tests and imported directly by the agent runtime. UC function registration was removed to eliminate deployed-vs-tested drift and to keep the adjudication path off a SQL warehouse (sub-millisecond, no cold start).
-- **Serve-down set is six reference tables, not seven.** `spec_standards` and `coating_warranty_terms` were dropped from serve-down — policy data now lives in native Lakebase tables (`spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`) that the agent reads directly — and `customer_heat_risk` was added for the agent's advisory heat-risk tool.
-- **`prior_claims` is a native Lakebase table.** Correct for the seeded demo (embed-once backfill). The production pattern is a lakehouse-built precedent corpus served down to Lakebase, adopted once continuous CDF-driven refresh is wired.
+- **Serve-down set: six reference tables plus the precedent corpus.** `spec_standards` and `coating_warranty_terms` were dropped from serve-down — policy data now lives in native Lakebase tables (`spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`) that the agent reads directly — and `customer_heat_risk` was added for the agent's advisory heat-risk tool.
+- **The prior-claims precedent corpus is lakehouse-built and served down.** The agent `prior_claims_corpus` job builds `gold.prior_claims_corpus` from gold current claims and FINAL adjudications (governed GTE embeddings, change-only MERGE with Delta CDF); it is served down as the Triggered synced table `reference.prior_claims_corpus` with `lakebase_ann` / `lakebase_bm25` indexes, and refreshed by `scripts/refresh.py routine`. It replaced the native `public.prior_claims` table and its embed-once backfill.
 - **`claims_pending` removed.** The retry-queue placeholder had no consumer; it is retired with the event-backbone (services) work.
 
 ## Evidence
@@ -80,3 +85,4 @@ README indexing its files and what they demonstrate.
 | `gold-analytics/` | Gold KPI fact layer + governed metric view |
 | `serving-endpoint/` | Governed agent deployment + live end-to-end smoke test |
 | `genie-dashboards/` | AI/BI dashboard + Genie space over gold KPIs |
+| `refresh-and-prior-claims/` | Lakehouse-built prior-claims corpus, synced-table re-sync, routine/demo refresh composer, bootstrap ordering |
