@@ -67,3 +67,20 @@ Verified against `agent/src/retrieval.py` + `agent/src/agent_tools.py`:
   out-of-scope churn.
 
 See `gates.txt` for raw command outputs.
+
+## Follow-up corrections (post-merge cross-review)
+
+Applied on branch `execution-consistency-fixes` after this change merged:
+
+- The eval bundle job described above was **removed** (`eval/databricks.yml`
+  deleted). It hardcoded `--profile fe-bar` while `evaluate.py` enforces a local CLI
+  profile, so it could not run on serverless. Evaluation is direct `uv run` only;
+  the profile guard is unchanged.
+- `lakebase/run.py` no longer exposes the `validate`/`deploy` passthroughs; run
+  `databricks bundle validate|deploy` directly.
+- The bootstrap test now imports `scripts/bootstrap.py` and asserts the exact
+  commands, cwd, and ordering against a mocked `subprocess.run`.
+- READMEs now state that the CDF-exists guard runs after the pipelines deploy and
+  `generate` steps, not before any deploy.
+- The retrieval note names the actual clause indexes (`spec_clauses_lb_bm25`,
+  `warranty_clauses_lb_bm25`).

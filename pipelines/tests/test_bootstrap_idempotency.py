@@ -1,6 +1,10 @@
+import importlib.util
 from pathlib import Path
 
+import pytest
 import yaml
+
+REPO = Path(__file__).parents[2]
 
 
 def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
@@ -23,20 +27,6 @@ def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
     assert ".gold.claims_history" not in seed_source
     assert ".gold.adjudications_history" not in seed_source
 
-    composer = (Path(__file__).parents[2] / "scripts" / "bootstrap.py").read_text()
-    # The plain pipelines deploy is issued as a direct DABs command, not shelled
-    # through a collapsed `pipelines/run.py deploy` shim. Compare whitespace-insensitively
-    # so ruff's one-arg-per-line formatting does not break the assertion.
-    compact = "".join(composer.split())
-    assert '"databricks","bundle","deploy"' in compact
-    assert '"pipelines/run.py","deploy"' not in compact
-    deploy = composer.index('"databricks"')
-    generate = composer.index('"pipelines/run.py", "generate"')
-    seed = composer.index('"lakebase/run.py", "setup-and-seed"')
-    create_cdf = composer.index('"lakebase/run.py", "create-cdf"')
-    refresh = composer.index('"pipelines/run.py", "refresh"')
-    assert deploy < generate < seed < create_cdf < refresh
-
     runner = (Path(__file__).parents[1] / "run.py").read_text()
     # refresh is a normal incremental medallion run. The stale DROP MATERIALIZED VIEW
     # migration — which errored with DROP_COMMAND_TYPE_MISMATCH once the *_history
@@ -47,6 +37,52 @@ def test_bootstrap_orders_seed_before_cdf_and_never_full_refreshes_scd2():
 
     lakebase_runner = (Path(__file__).parents[2] / "lakebase" / "run.py").read_text()
     assert 'states == {"STREAMING"}' in lakebase_runner
+
+
+def _load_bootstrap():
+    spec = importlib.util.spec_from_file_location("bootstrap", REPO / "scripts" / "bootstrap.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_bootstrap_main_issues_exact_commands_in_order(monkeypatch):
+    bootstrap = _load_bootstrap()
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((tuple(args), kwargs))
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
+    bootstrap.main()
+
+    wrapper = ("uv", "run", "--with", "pyyaml", "python")
+    assert calls == [
+        (
+            ("databricks", "bundle", "deploy", "--target", "prod", "--profile", "fe-bar"),
+            {"cwd": REPO / "pipelines", "check": True},
+        ),
+        ((*wrapper, "pipelines/run.py", "generate"), {"cwd": REPO, "check": True}),
+        ((*wrapper, "lakebase/run.py", "setup-and-seed"), {"cwd": REPO, "check": True}),
+        ((*wrapper, "lakebase/run.py", "create-cdf"), {"cwd": REPO, "check": True}),
+        ((*wrapper, "pipelines/run.py", "refresh"), {"cwd": REPO, "check": True}),
+    ]
+
+
+def test_bootstrap_main_stops_at_first_failing_step(monkeypatch):
+    bootstrap = _load_bootstrap()
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(tuple(args))
+        if args[-1] == "setup-and-seed":
+            raise bootstrap.subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
+    with pytest.raises(bootstrap.subprocess.CalledProcessError):
+        bootstrap.main()
+
+    assert [call[-1] for call in calls] == ["fe-bar", "generate", "setup-and-seed"]
 
 
 def test_history_uses_native_cdf_auto_cdc_scd2():

@@ -46,8 +46,6 @@ def main():
     parser.add_argument(
         "action",
         choices=[
-            "validate",
-            "deploy",
             "setup-and-seed",
             "policy-intake",
             "create-cdf",
@@ -56,11 +54,7 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.action == "validate":
-        databricks("bundle", "validate", "--strict", "-t", "prod")
-    elif args.action == "deploy":
-        databricks("bundle", "deploy", "-t", "prod")
-    elif args.action == "setup-and-seed":
+    if args.action == "setup-and-seed":
         database = pipeline_databricks_config()["lakebase_database"]
         if cdf_configs(database):
             raise RuntimeError(
