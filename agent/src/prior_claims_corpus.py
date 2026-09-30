@@ -21,6 +21,8 @@ import hashlib
 from gateway_embed import EMBEDDING_DIM, PROVENANCE
 
 CORPUS_TABLE = "prior_claims_corpus"
+# Per-run candidate snapshot (job-internal, never synced); replaces Spark caching.
+STAGING_TABLE = "prior_claims_corpus_staging"
 
 
 def narrative_sha256(narrative: str) -> str:

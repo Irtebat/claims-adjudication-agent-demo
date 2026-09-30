@@ -59,3 +59,24 @@ def test_job_reuse_predicate_matches_the_pure_rule():
     assert 'F.col("decision_status") == "FINAL"' in job
     assert "WHEN NOT MATCHED BY SOURCE THEN DELETE" in job
     assert "delta.enableChangeDataFeed = true" in job
+
+
+def test_job_and_its_imports_never_cache_or_persist():
+    # Serverless rejects PERSIST TABLE ([NOT_SUPPORTED_WITH_SERVERLESS]); the job must
+    # not cache in any form, directly or in a module it imports.
+    import re
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src"
+    job = (src / "prior_claims_corpus_job.py").read_text()
+    local_imports = set(re.findall(r"^from (\w+) import", job, re.M)) & {
+        p.stem for p in src.glob("*.py")
+    }
+    assert {"gateway_embed", "prior_claims_corpus"} <= local_imports
+    pattern = re.compile(r"\.cache\(|\.persist\(|\bCACHE\s+(LAZY\s+)?TABLE\b|\bcacheTable\(", re.I)
+    for name in ["prior_claims_corpus_job", *sorted(local_imports)]:
+        code = (src / f"{name}.py").read_text()
+        assert not pattern.search(code), f"{name}.py caches/persists"
+    # The replacement: one staged Delta snapshot read by both the plan and the MERGE.
+    assert "saveAsTable(staging)" in job and "candidates = spark.table(staging)" in job
+    assert job.index("saveAsTable(staging)") < job.index("to_embed = [")
