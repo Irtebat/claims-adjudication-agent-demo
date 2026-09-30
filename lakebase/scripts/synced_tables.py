@@ -29,6 +29,7 @@ Usage (``lakebase/run.py`` wraps these with ``--profile fe-bar``):
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
@@ -87,20 +88,31 @@ BY_NAME = {table.name: table for table in TABLES}
 # Tables the routine refresh rebuilds in UC and therefore re-syncs.
 ROUTINE_RESYNC = ("customer_heat_risk", "prior_claims_corpus")
 
+
 # Postgres objects built ON a synced table (indexes are allowed on synced tables).
-# Synced tables cannot carry vector/tsvector columns, so the indexes cover the same
-# immutable expressions agent/src/retrieval.py queries.
+# Synced tables cannot carry vector/tsvector columns, so the corpus indexes are
+# expression indexes. The expressions come from agent/src/retrieval.py — the single
+# source the retrieval arms ORDER BY — so the index and the query cannot drift apart.
+def _load_retrieval():
+    path = SCRIPTS.parents[1] / "agent" / "src" / "retrieval.py"
+    spec = importlib.util.spec_from_file_location("agent_retrieval_constants", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_retrieval = _load_retrieval()
 POST_CREATE_SQL = {
     "prior_claims_corpus": [
         (
-            "CREATE INDEX IF NOT EXISTS prior_claims_corpus_lb_ann "
-            "ON reference.prior_claims_corpus "
-            "USING lakebase_ann ((embedding::vector(1024)) vector_cosine_ops)"
+            f"CREATE INDEX IF NOT EXISTS {_retrieval.PRIOR_CLAIMS_ANN_INDEX} "
+            f"ON {_retrieval.PRIOR_CLAIMS_TABLE} "
+            f"USING lakebase_ann (({_retrieval.PRIOR_CLAIMS_EMBEDDING_EXPR}) vector_cosine_ops)"
         ),
         (
-            "CREATE INDEX IF NOT EXISTS prior_claims_corpus_lb_bm25 "
-            "ON reference.prior_claims_corpus "
-            "USING lakebase_bm25 ((to_tsvector('english', defect_narrative)) tsvector_bm25_ops)"
+            f"CREATE INDEX IF NOT EXISTS {_retrieval.PRIOR_CLAIMS_BM25_INDEX} "
+            f"ON {_retrieval.PRIOR_CLAIMS_TABLE} "
+            f"USING lakebase_bm25 (({_retrieval.PRIOR_CLAIMS_TSVECTOR_EXPR}) tsvector_bm25_ops)"
         ),
     ],
 }

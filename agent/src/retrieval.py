@@ -94,47 +94,49 @@ def retrieve_policy_clauses(
 
 # The precedent corpus is built in Unity Catalog (gold.prior_claims_corpus) and served
 # down as the Triggered synced table reference.prior_claims_corpus. Synced tables
-# cannot carry vector/tsvector columns, so the embedding is a pgvector text literal
-# and both arms query the SAME immutable expressions the lakebase_ann / lakebase_bm25
-# indexes are built on (lakebase/scripts/synced_tables.py).
+# cannot carry vector/tsvector columns, so the embedding is a pgvector text literal and
+# the lakebase_ann / lakebase_bm25 indexes are EXPRESSION indexes. These constants are
+# the single source of those expressions: lakebase/scripts/synced_tables.py builds the
+# index DDL from them, and each arm below ORDERs BY exactly the same text, so the
+# planner can use the index.
 PRIOR_CLAIMS_TABLE = "reference.prior_claims_corpus"
-PRIOR_CLAIMS_BM25_INDEX = "reference.prior_claims_corpus_lb_bm25"
+PRIOR_CLAIMS_TEXT_SEARCH_CONFIG = "english"
+PRIOR_CLAIMS_EMBEDDING_EXPR = "embedding::vector(1024)"
+PRIOR_CLAIMS_TSVECTOR_EXPR = f"to_tsvector('{PRIOR_CLAIMS_TEXT_SEARCH_CONFIG}', defect_narrative)"
+PRIOR_CLAIMS_ANN_INDEX = "prior_claims_corpus_lb_ann"
+PRIOR_CLAIMS_BM25_INDEX = "prior_claims_corpus_lb_bm25"
 
-# Both <=> cosine distance and <@> BM25 return smaller scores for better matches,
-# so candidate selection and row-number rank assignment intentionally use ASC.
-SIMILAR_CLAIMS_SQL = (
-    """
-WITH filtered AS (
-  SELECT claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
-         embedding::vector(1024) AS embedding,
-         to_tsvector('english', defect_narrative) AS narrative_tsv,
-         claim_date, verdict, approved_amount
-  FROM """
-    + PRIOR_CLAIMS_TABLE
-    + """
-  WHERE coil_id <> %(coil_id)s {filters}
-),
-dense AS (
-  SELECT claim_id, verdict, approved_amount, embedding <=> %(qvec)s::vector AS s
-  FROM filtered WHERE embedding IS NOT NULL ORDER BY s ASC LIMIT %(k)s
-),
-fts AS (
-  SELECT claim_id, verdict, approved_amount,
-         narrative_tsv <@> to_bm25query(to_tsvector('english', %(text)s),
-                    '"""
-    + PRIOR_CLAIMS_BM25_INDEX
-    + """'::regclass) AS s
-  FROM filtered WHERE narrative_tsv IS NOT NULL ORDER BY s ASC LIMIT %(k)s
+_DENSE_DISTANCE = f"{PRIOR_CLAIMS_EMBEDDING_EXPR} <=> %(qvec)s::vector"
+_BM25_SCORE = (
+    f"{PRIOR_CLAIMS_TSVECTOR_EXPR} <@> "
+    f"to_bm25query(to_tsvector('{PRIOR_CLAIMS_TEXT_SEARCH_CONFIG}', %(text)s), "
+    f"'reference.{PRIOR_CLAIMS_BM25_INDEX}'::regclass)"
 )
-SELECT claim_id, verdict, approved_amount, arm, rnk FROM (
-  SELECT claim_id, verdict, approved_amount, 'dense' arm,
-         row_number() OVER (ORDER BY s ASC) rnk FROM dense
-  UNION ALL
-  SELECT claim_id, verdict, approved_amount, 'fts' arm,
-         row_number() OVER (ORDER BY s ASC) rnk FROM fts
-) ranked
+
+# Each arm reads the table directly with the metadata filter inlined and ORDERs BY
+# the indexed expression, so its ordered index scan is not blocked by a materialized
+# shared CTE. Both <=> cosine distance and <@> BM25 return smaller scores for better
+# matches, so ordering and rank assignment intentionally use ASC ({filters} is filled
+# with the same bound-parameter predicates in both arms).
+DENSE_ARM_SQL = f"""SELECT claim_id, verdict, approved_amount, {_DENSE_DISTANCE} AS s
+  FROM {PRIOR_CLAIMS_TABLE}
+  WHERE embedding IS NOT NULL AND coil_id <> %(coil_id)s {{filters}}
+  ORDER BY {_DENSE_DISTANCE} ASC
+  LIMIT %(k)s"""
+FTS_ARM_SQL = f"""SELECT claim_id, verdict, approved_amount, {_BM25_SCORE} AS s
+  FROM {PRIOR_CLAIMS_TABLE}
+  WHERE coil_id <> %(coil_id)s {{filters}}
+  ORDER BY {_BM25_SCORE} ASC
+  LIMIT %(k)s"""
+SIMILAR_CLAIMS_SQL = f"""
+SELECT claim_id, verdict, approved_amount, 'dense' AS arm,
+       row_number() OVER (ORDER BY s ASC, claim_id) AS rnk
+FROM ({DENSE_ARM_SQL}) dense
+UNION ALL
+SELECT claim_id, verdict, approved_amount, 'fts' AS arm,
+       row_number() OVER (ORDER BY s ASC, claim_id) AS rnk
+FROM ({FTS_ARM_SQL}) fts
 """
-)
 
 
 def find_similar_prior_claims(
