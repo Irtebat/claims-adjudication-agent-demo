@@ -92,13 +92,26 @@ def retrieve_policy_clauses(
     return kw_rows[:final_n]
 
 
+# The precedent corpus is built in Unity Catalog (gold.prior_claims_corpus) and served
+# down as the Triggered synced table reference.prior_claims_corpus. Synced tables
+# cannot carry vector/tsvector columns, so the embedding is a pgvector text literal
+# and both arms query the SAME immutable expressions the lakebase_ann / lakebase_bm25
+# indexes are built on (lakebase/scripts/synced_tables.py).
+PRIOR_CLAIMS_TABLE = "reference.prior_claims_corpus"
+PRIOR_CLAIMS_BM25_INDEX = "reference.prior_claims_corpus_lb_bm25"
+
 # Both <=> cosine distance and <@> BM25 return smaller scores for better matches,
 # so candidate selection and row-number rank assignment intentionally use ASC.
-SIMILAR_CLAIMS_SQL = """
+SIMILAR_CLAIMS_SQL = (
+    """
 WITH filtered AS (
   SELECT claim_id, coil_id, grade, coating_class, defect_code, defect_narrative,
-         embedding, narrative_tsv, claim_date, verdict, approved_amount
-  FROM prior_claims
+         embedding::vector(1024) AS embedding,
+         to_tsvector('english', defect_narrative) AS narrative_tsv,
+         claim_date, verdict, approved_amount
+  FROM """
+    + PRIOR_CLAIMS_TABLE
+    + """
   WHERE coil_id <> %(coil_id)s {filters}
 ),
 dense AS (
@@ -108,7 +121,9 @@ dense AS (
 fts AS (
   SELECT claim_id, verdict, approved_amount,
          narrative_tsv <@> to_bm25query(to_tsvector('english', %(text)s),
-                    'prior_claims_lb_bm25'::regclass) AS s
+                    '"""
+    + PRIOR_CLAIMS_BM25_INDEX
+    + """'::regclass) AS s
   FROM filtered WHERE narrative_tsv IS NOT NULL ORDER BY s ASC LIMIT %(k)s
 )
 SELECT claim_id, verdict, approved_amount, arm, rnk FROM (
@@ -119,6 +134,7 @@ SELECT claim_id, verdict, approved_amount, arm, rnk FROM (
          row_number() OVER (ORDER BY s ASC) rnk FROM fts
 ) ranked
 """
+)
 
 
 def find_similar_prior_claims(

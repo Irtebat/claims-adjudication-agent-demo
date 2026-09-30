@@ -138,3 +138,20 @@ def test_find_similar_prior_claims_rrf_over_arms():
     _, params = cursor.calls[0]
     assert params["coil_id"] == "COIL-1"
     assert params["grade"] == "ASTM A653 CS Type B"
+
+
+def test_similar_prior_claims_reads_the_synced_corpus_with_indexed_expressions():
+    cols = ["claim_id", "verdict", "approved_amount", "arm", "rnk"]
+    cursor = _MultiCursor([{"rows": [("CLM-A", "APPROVE", 10.0, "dense", 1)], "columns": cols}])
+    find_similar_prior_claims(
+        _FakeConn(cursor), lambda texts: [[0.1] * 1024], text="edge", coil_id="COIL-1"
+    )
+    sql, params = cursor.calls[0]
+    # Served-down corpus, never the retired native public.prior_claims table.
+    assert "FROM reference.prior_claims_corpus" in sql
+    assert "public.prior_claims" not in sql
+    # Both arms use the exact expressions the lakebase_ann / lakebase_bm25 indexes cover.
+    assert "embedding::vector(1024) AS embedding" in sql
+    assert "to_tsvector('english', defect_narrative) AS narrative_tsv" in sql
+    assert "'reference.prior_claims_corpus_lb_bm25'::regclass" in sql
+    assert params["qvec"].startswith("[") and params["coil_id"] == "COIL-1"

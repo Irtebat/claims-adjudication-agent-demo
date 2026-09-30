@@ -23,6 +23,62 @@ catalog = dbutils.widgets.get("catalog")
 if not catalog or "`" in catalog or "/" in catalog:
     raise ValueError("Invalid catalog")
 
+RISK_TABLE = f"`{catalog}`.gold.customer_heat_risk"
+schema = T.StructType(
+    [
+        T.StructField("customer_id", T.StringType()),
+        T.StructField("heat_no", T.StringType()),
+        T.StructField("cluster_id", T.StringType()),
+        T.StructField("cluster_size", T.IntegerType()),
+        T.StructField("n_customers", T.IntegerType()),
+        T.StructField("distinct_customers_in_cluster", T.IntegerType()),
+        T.StructField("distinct_heats_in_cluster", T.IntegerType()),
+        T.StructField("repeat_customers", T.BooleanType()),
+        T.StructField("risk_score", T.DoubleType()),
+        # high_risk (risk_score >= 0.75 AND cluster_size >= 3) and its one-sentence
+        # reason are what the App chip/tooltip render; served down to Lakebase.
+        T.StructField("high_risk", T.BooleanType()),
+        T.StructField("risk_reason", T.StringType()),
+    ]
+)
+
+
+def _table_exists(schema_name, table_name):
+    return (
+        spark.sql(
+            f"SELECT count(*) AS c FROM `{catalog}`.information_schema.tables "
+            f"WHERE table_schema = '{schema_name}' AND table_name = '{table_name}'"
+        ).first()["c"]
+        > 0
+    )
+
+
+def _write_risk(frame):
+    frame.write.mode("overwrite").option("overwriteSchema", "true").option(
+        "delta.enableChangeDataFeed", "true"
+    ).saveAsTable(RISK_TABLE)
+    # Delta CDF is required for the Triggered synced table that serves this risk down
+    # to Lakebase reference.customer_heat_risk; keep it set so re-runs preserve it.
+    spark.sql(f"ALTER TABLE {RISK_TABLE} SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+
+
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.gold")
+# Fresh-workspace bootstrap: gold.gold_claim_adjudication_fact joins this table, but
+# the claims it scores only exist after the first medallion run. Before that first run
+# (no gold.claims_current yet) publish the EMPTY, correctly-typed risk table and stop,
+# so the first medallion run succeeds with NULL risk columns; the next fraud-graph run
+# scores for real. This path is unreachable once the medallion has run.
+if not _table_exists("gold", "claims_current"):
+    if not _table_exists("gold", "customer_heat_risk"):
+        _write_risk(
+            spark.createDataFrame([], schema).withColumn(
+                "computed_at", F.lit(None).cast("timestamp")
+            )
+        )
+    summary = {"catalog": catalog, "bootstrap_empty_risk_table": True, "risk_rows": 0}
+    print(summary)
+    dbutils.notebook.exit(str(summary))
+
 heat_map = spark.table(f"`{catalog}`.silver.heats_coils").select("coil_id", "heat_no").distinct()
 ambiguous_coils = (
     heat_map.groupBy("coil_id")
@@ -41,37 +97,11 @@ claims = (
 rows = [r.asDict() for r in claims.collect()]
 result = score_clusters(rows)
 
-schema = T.StructType(
-    [
-        T.StructField("customer_id", T.StringType()),
-        T.StructField("heat_no", T.StringType()),
-        T.StructField("cluster_id", T.StringType()),
-        T.StructField("cluster_size", T.IntegerType()),
-        T.StructField("n_customers", T.IntegerType()),
-        T.StructField("distinct_customers_in_cluster", T.IntegerType()),
-        T.StructField("distinct_heats_in_cluster", T.IntegerType()),
-        T.StructField("repeat_customers", T.BooleanType()),
-        T.StructField("risk_score", T.DoubleType()),
-        # high_risk (risk_score >= 0.75 AND cluster_size >= 3) and its one-sentence
-        # reason are what the App chip/tooltip render; served down to Lakebase.
-        T.StructField("high_risk", T.BooleanType()),
-        T.StructField("risk_reason", T.StringType()),
-    ]
-)
 computed_at = dt.datetime.now(dt.timezone.utc)
 frame = spark.createDataFrame(result["risk_rows"], schema).withColumn(
     "computed_at", F.lit(computed_at.isoformat()).cast("timestamp")
 )
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.gold")
-frame.write.mode("overwrite").option("overwriteSchema", "true").option(
-    "delta.enableChangeDataFeed", "true"
-).saveAsTable(f"`{catalog}`.gold.customer_heat_risk")
-# Delta CDF is required for the Triggered synced table that serves this risk down to
-# Lakebase reference.customer_heat_risk; keep it set so re-runs preserve it.
-spark.sql(
-    f"ALTER TABLE `{catalog}`.gold.customer_heat_risk "
-    "SET TBLPROPERTIES (delta.enableChangeDataFeed = true)"
-)
+_write_risk(frame)
 
 summary = {
     "catalog": catalog,
