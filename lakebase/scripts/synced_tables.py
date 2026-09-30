@@ -3,9 +3,13 @@
 Three distinct paths, because they have different side effects on Postgres grants:
 
 * ``create`` — creates every synced table that does not exist yet (``databricks
-  postgres create-synced-table``, Triggered mode) and skips the ones that do. A newly
-  created table has no consumer grants, so when (and only when) something was created
-  this builds the post-create indexes and runs ``regrant_synced_table_selects.py``.
+  postgres create-synced-table``, Triggered mode) and skips the ones that do. The
+  Postgres table only exists once the initial sync completes, so it then polls
+  ``get-synced-table`` until ``status.detailed_state`` is ``SYNCED_TABLE_ONLINE*``
+  (bounded; a FAILED state or a timeout raises). A newly created table has no consumer
+  grants, so when (and only when) something was created — and only after it is
+  ONLINE — this builds the post-create indexes and runs
+  ``regrant_synced_table_selects.py``.
 * ``resync`` — the routine path. A Triggered synced table is refreshed by running an
   update of its managed sync pipeline (``status.pipeline_id`` from
   ``get-synced-table``), which is what the Catalog "Sync now" button and the Jobs
@@ -122,6 +126,10 @@ POST_SYNC_SQL = {
     + ["VACUUM (ANALYZE) reference.prior_claims_corpus"],
 }
 
+ONLINE_PREFIX = "SYNCED_TABLE_ONLINE"
+# Initial-sync wait bound: ONLINE_ATTEMPTS polls, ONLINE_INTERVAL seconds apart (1 hour).
+ONLINE_ATTEMPTS = 240
+ONLINE_INTERVAL = 15.0
 TERMINAL_OK = {"COMPLETED"}
 TERMINAL_FAILED = {"FAILED", "CANCELED"}
 
@@ -247,6 +255,37 @@ def wait_for_update(
     raise RuntimeError(f"Sync pipeline {pipeline_id} update {update_id} did not finish")
 
 
+def wait_for_online(
+    table: SyncedTable,
+    runner: Runner = subprocess.run,
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int | None = None,
+    interval: float | None = None,
+) -> str:
+    """Poll until the synced table is ONLINE, i.e. its Postgres table exists and is loaded.
+
+    Raises on any FAILED detailed state and on timeout, so nothing downstream (index
+    DDL, re-grant) ever runs against a table that is not there.
+    """
+    attempts = ONLINE_ATTEMPTS if attempts is None else attempts
+    interval = ONLINE_INTERVAL if interval is None else interval
+    state = ""
+    for _ in range(attempts):
+        synced = databricks(
+            "postgres", "get-synced-table", table.resource, runner=runner
+        )
+        state = str((synced.get("status") or {}).get("detailed_state", "")).upper()
+        if state.startswith(ONLINE_PREFIX):
+            return state
+        if "FAILED" in state:
+            raise RuntimeError(f"{table.synced_name} initial sync failed: {state}")
+        sleep(interval)
+    raise RuntimeError(
+        f"{table.synced_name} did not reach {ONLINE_PREFIX} within "
+        f"{attempts * interval:.0f}s (last state: {state or 'unknown'})"
+    )
+
+
 def resync_one(
     table: SyncedTable,
     runner: Runner = subprocess.run,
@@ -269,7 +308,9 @@ def resync_one(
 
 
 def create(
-    runner: Runner = subprocess.run, pg: Callable[[list[str]], None] = pg_execute
+    runner: Runner = subprocess.run,
+    pg: Callable[[list[str]], None] = pg_execute,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict:
     created = []
     for table in TABLES:
@@ -278,6 +319,10 @@ def create(
             continue
         create_one(table, runner=runner)
         created.append(table.name)
+    # The Postgres table appears only when the initial sync completes: wait for every
+    # created table to be ONLINE before any index DDL or re-grant touches it.
+    for name in created:
+        wait_for_online(BY_NAME[name], runner=runner, sleep=sleep)
     for name in created:
         if name in POST_CREATE_SQL:
             pg(POST_CREATE_SQL[name])
@@ -307,6 +352,7 @@ def recreate(
     name: str,
     runner: Runner = subprocess.run,
     pg: Callable[[list[str]], None] = pg_execute,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict:
     table = BY_NAME[name]
     if exists(table, runner=runner):
@@ -314,6 +360,7 @@ def recreate(
     # delete-synced-table leaves the Postgres table behind; drop it so create can rebuild.
     pg([f"DROP TABLE IF EXISTS {POSTGRES_SCHEMA}.{table.name}"])
     create_one(table, runner=runner)
+    wait_for_online(table, runner=runner, sleep=sleep)
     if name in POST_CREATE_SQL:
         pg(POST_CREATE_SQL[name])
     # The recreated table is owned by a different role and has lost every grant.

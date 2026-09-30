@@ -24,10 +24,16 @@ SPEC.loader.exec_module(st)
 class FakeCli:
     """Records every argv; answers get-synced-table / start-update / get-update."""
 
-    def __init__(self, existing=(), update_states=("RUNNING", "COMPLETED")):
+    ONLINE = "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE"
+
+    def __init__(
+        self, existing=(), update_states=("RUNNING", "COMPLETED"), online_states=None
+    ):
         self.calls = []
         self.existing = set(existing)
         self.update_states = list(update_states)
+        # Per-table detailed_state sequence reported by get-synced-table (last one sticks).
+        self.online_states = {k: list(v) for k, v in (online_states or {}).items()}
 
     def __call__(self, cmd, **kwargs):
         self.calls.append(cmd)
@@ -38,7 +44,11 @@ class FakeCli:
         if parts[:2] == ["postgres", "get-synced-table"]:
             name = parts[2].split(".")[-1]
             if name in self.existing:
-                out = json.dumps({"status": {"pipeline_id": f"pipe-{name}"}})
+                seq = self.online_states.get(name) or [self.ONLINE]
+                state = seq.pop(0) if len(seq) > 1 else seq[0]
+                out = json.dumps(
+                    {"status": {"pipeline_id": f"pipe-{name}", "detailed_state": state}}
+                )
             else:
                 code = 1
         elif parts[:2] == ["postgres", "create-synced-table"]:
@@ -124,7 +134,7 @@ def test_resync_fails_loudly_when_the_sync_update_fails():
 def test_create_skips_existing_and_does_not_regrant_when_nothing_created():
     cli = FakeCli(existing=[t.name for t in st.TABLES])
     statements, pg = _pg_recorder()
-    result = st.create(runner=cli, pg=pg)
+    result = st.create(runner=cli, pg=pg, sleep=lambda seconds: None)
     assert result == {"created": [], "regranted": False}
     assert not cli.regranted() and statements == []
 
@@ -133,7 +143,7 @@ def test_create_new_corpus_builds_indexes_then_regrants():
     existing = [t.name for t in st.TABLES if t.name != "prior_claims_corpus"]
     cli = FakeCli(existing=existing)
     statements, pg = _pg_recorder()
-    result = st.create(runner=cli, pg=pg)
+    result = st.create(runner=cli, pg=pg, sleep=lambda seconds: None)
     assert result == {"created": ["prior_claims_corpus"], "regranted": True}
     subs = cli.subcommands()
     assert subs.index("postgres create-synced-table") < subs.index("REGRANT")
@@ -150,6 +160,7 @@ def test_recreate_deletes_drops_creates_indexes_and_regrants_in_order():
     events = []
     st.recreate(
         "prior_claims_corpus",
+        sleep=lambda seconds: None,
         runner=lambda cmd, **kw: (
             events.append("REGRANT" if cmd[0] == "uv" else " ".join(cmd[1:3])),
             cli(cmd, **kw),
@@ -161,6 +172,7 @@ def test_recreate_deletes_drops_creates_indexes_and_regrants_in_order():
         "postgres delete-synced-table",
         "PG:DROP TABLE IF EXISTS reference.prior_claims_corpus",
         "postgres create-synced-table",
+        "postgres get-synced-table",  # waits for ONLINE before any index DDL
         "PG:CREATE INDEX IF NOT EXISTS prior_claims_corpus_lb_ann",
         "REGRANT",
     ]
@@ -180,3 +192,107 @@ def test_every_cli_call_carries_the_explicit_profile():
     )
     for cmd in cli.calls:
         assert cmd[cmd.index("--profile") + 1] == "fe-bar"
+
+
+def _record_events(cli, events):
+    def runner(cmd, **kwargs):
+        result = cli(cmd, **kwargs)
+        if cmd[0] == "uv":
+            events.append("REGRANT")
+        elif cmd[1:3] == ["postgres", "get-synced-table"] and not result.returncode:
+            events.append(
+                "STATE:" + json.loads(result.stdout)["status"]["detailed_state"]
+            )
+        else:
+            events.append(" ".join(cmd[1:3]))
+        return result
+
+    return runner
+
+
+def test_create_waits_for_online_before_index_ddl_and_regrant():
+    existing = [t.name for t in st.TABLES if t.name != "prior_claims_corpus"]
+    cli = FakeCli(
+        existing=existing,
+        online_states={
+            "prior_claims_corpus": [
+                "SYNCED_TABLE_PROVISIONING",
+                "SYNCED_TABLE_PROVISIONING_INITIAL_SNAPSHOT",
+                "SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE",
+            ]
+        },
+    )
+    events, sleeps = [], []
+    result = st.create(
+        runner=_record_events(cli, events),
+        pg=lambda stmts: events.append("PG:" + stmts[0].split(" ON ")[0]),
+        sleep=sleeps.append,
+    )
+    assert result == {"created": ["prior_claims_corpus"], "regranted": True}
+    after_create = events[events.index("postgres create-synced-table") + 1 :]
+    assert after_create == [
+        "STATE:SYNCED_TABLE_PROVISIONING",
+        "STATE:SYNCED_TABLE_PROVISIONING_INITIAL_SNAPSHOT",
+        "STATE:SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE",
+        "PG:CREATE INDEX IF NOT EXISTS prior_claims_corpus_lb_ann",
+        "REGRANT",
+    ]
+    assert len(sleeps) == 2  # slept only while not yet ONLINE
+
+
+@pytest.mark.parametrize(
+    "states, match",
+    [
+        (
+            ["SYNCED_TABLE_PROVISIONING", "SYNCED_TABLE_OFFLINE_FAILED"],
+            "initial sync failed",
+        ),
+        (
+            ["SYNCED_TABLE_PROVISIONING"],
+            "did not reach SYNCED_TABLE_ONLINE",
+        ),  # never online
+    ],
+)
+def test_create_failed_or_timeout_raises_and_never_indexes_or_regrants(
+    monkeypatch, states, match
+):
+    monkeypatch.setattr(st, "ONLINE_ATTEMPTS", 3)
+    existing = [t.name for t in st.TABLES if t.name != "prior_claims_corpus"]
+    cli = FakeCli(existing=existing, online_states={"prior_claims_corpus": states})
+    statements, pg = _pg_recorder()
+    with pytest.raises(RuntimeError, match=match):
+        st.create(runner=cli, pg=pg, sleep=lambda seconds: None)
+    assert statements == []
+    assert not cli.regranted()
+
+
+def test_wait_for_online_timeout_is_bounded():
+    cli = FakeCli(
+        existing=["prior_claims_corpus"],
+        online_states={"prior_claims_corpus": ["SYNCED_TABLE_PROVISIONING"]},
+    )
+    sleeps = []
+    with pytest.raises(RuntimeError, match="within 30s"):
+        st.wait_for_online(
+            st.BY_NAME["prior_claims_corpus"],
+            runner=cli,
+            sleep=sleeps.append,
+            attempts=3,
+            interval=10.0,
+        )
+    assert sleeps == [10.0, 10.0, 10.0]
+
+
+def test_recreate_failed_initial_sync_never_regrants():
+    cli = FakeCli(
+        existing=["prior_claims_corpus"],
+        online_states={"prior_claims_corpus": ["SYNCED_TABLE_OFFLINE_FAILED"]},
+    )
+    statements, pg = _pg_recorder()
+    with pytest.raises(RuntimeError, match="initial sync failed"):
+        st.recreate(
+            "prior_claims_corpus", runner=cli, pg=pg, sleep=lambda seconds: None
+        )
+    # Only the pre-create DROP ran; no index DDL, no regrant.
+    assert statements == ["DROP TABLE IF EXISTS reference.prior_claims_corpus"]
+    assert not cli.regranted()
