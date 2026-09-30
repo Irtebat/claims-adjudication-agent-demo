@@ -128,11 +128,10 @@ UC source of a synced table:
 
 ### Event backbone
 
-1. Put the four Kafka secrets into scope `fe-bar-aiven-kafka` (`services/README.md`).
-2. `cd services && databricks bundle deploy -t prod --profile fe-bar`
+1. Put the four Kafka secrets into scope `fe-bar-aiven-kafka` (`services/README.md`). This is a hard preflight.
+2. From `services/`, deploy with schedules paused and explicitly activate them after verification: `databricks bundle deploy -t prod --profile fe-bar`.
 3. `databricks bundle run migrate -t prod --profile fe-bar` (once).
-4. The hourly schedules then run producer -> worker -> relay -> consumers. To drive it
-   by hand, `bundle run` them in that order.
+4. Independent hourly schedules are eventually consistent and do not guarantee producer -> worker -> relay -> consumers ordering. For a manual exercise, run them in that order.
 
 The worker writes RECOMMENDED adjudications only. The `claim.adjudicated` outbox row
 is written only by the app when an adjuster finalizes, so the relay and consumers run

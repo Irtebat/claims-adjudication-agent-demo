@@ -1,3 +1,5 @@
+> **Superseded 2026-10-01:** for current-corpus claims, see [current-state runtime evidence](../current-state/runtime-resources.md). Endpoint v1 is live but still reads legacy `public.prior_claims`. Retained as historical v1 smoke evidence.
+
 # Serving endpoint deployment evidence
 
 Status: **deployed and smoke-tested successfully**.

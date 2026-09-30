@@ -45,17 +45,16 @@ deploys and runs this job, then the routine refresh (see `docs/RUNBOOK.md`).
 
 ## Deployment
 
-Deploy to Databricks:
+Working directory for all bundle commands below: `demo/`.
 
 ```bash
-cd demo/
 databricks bundle deploy -t prod --profile fe-bar
 ```
 
 Run the job with custom parameters:
 
 ```bash
-databricks bundle run demo_backlog -t prod --profile fe-bar -- --count 1000 --seed 123 --mode serving_endpoint
+databricks bundle run demo_backlog -t prod --profile fe-bar --params count=1000,seed=123,mode=serving_endpoint
 ```
 
 Or run with all defaults (500 claims, seed 42, serving endpoint):
@@ -80,22 +79,24 @@ This is distinct from the seeded baseline (`synthetic_wave_2_baseline`) which ha
 
 ## Data Provenance
 
-All inserted claims and adjudications carry `data_provenance = 'synthetic_demo_backlog'`, making them trivial to identify and clean up:
+All inserted claims and adjudications carry `data_provenance = 'synthetic_demo_backlog'`. The SELECT statements are read-only Lakebase checks. The cleanup block is destructive, Lakebase-only, fully qualified, and transactional; review its target rows before committing.
 
 ```sql
 -- Find demo claims
-SELECT COUNT(*) FROM claims WHERE data_provenance = 'synthetic_demo_backlog';
+SELECT COUNT(*) FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog';
 
 -- Find demo adjudications
-SELECT COUNT(*) FROM adjudications WHERE data_provenance = 'agent_recommendation' AND claim_id IN (
-  SELECT claim_id FROM claims WHERE data_provenance = 'synthetic_demo_backlog'
+SELECT COUNT(*) FROM public.adjudications WHERE data_provenance = 'agent_recommendation' AND claim_id IN (
+  SELECT claim_id FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog'
 );
 
--- Clean up (if needed)
-DELETE FROM adjudications WHERE claim_id IN (
-  SELECT claim_id FROM claims WHERE data_provenance = 'synthetic_demo_backlog'
+-- DESTRUCTIVE: run only against the intended Lakebase database.
+BEGIN;
+DELETE FROM public.adjudications WHERE claim_id IN (
+  SELECT claim_id FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog'
 );
-DELETE FROM claims WHERE data_provenance = 'synthetic_demo_backlog';
+DELETE FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog';
+COMMIT;
 ```
 
 ## Files
@@ -128,6 +129,8 @@ uv run --with ruff ruff format demo
 ```
 
 ## Example Output
+
+Illustrative only; this is not captured live evidence.
 
 When deployed and run, the job produces a JSON summary:
 

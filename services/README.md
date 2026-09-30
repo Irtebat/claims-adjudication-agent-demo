@@ -1,5 +1,7 @@
 # services — Kafka event backbone
 
+> Status (2026-10-01): built at repo head but not deployed. Kafka secrets are a hard preflight. Deploy with schedules paused, or explicitly activate them after verification. Independent hourly schedules are eventually consistent; cross-job ordering is not guaranteed.
+
 The event-driven layer that turns the batch claims-adjudication agent into a
 streaming pipeline. New claims flow out as Kafka events, the governed serving
 endpoint writes a RECOMMENDED adjudication for each, and — only after a human

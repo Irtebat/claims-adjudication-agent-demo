@@ -71,9 +71,8 @@ triggered, and the run orders.
 - Kafka: Aiven.
 - Synthetic data only. Secrets live in Databricks secret scopes, not in source.
 
-Copy `config/config.example.yaml` to `config/config.local.yaml` and fill in values.
-`config.local.yaml` is not tracked.
+Use [`config/config.example.yaml`](config/config.example.yaml) as the configuration reference. Commands in each layer README state their working directory.
 
-## Development
+## Status
 
-See `CONVENTIONS.md` for how changes are proposed, reviewed, and committed.
+As of 2026-10-01 the app and data layers are live. The new prior-claims corpus is live in Lakebase, but endpoint v1 still reads the retired native table until the next promotion. Services are built but not deployed. See [current-state evidence](docs/evidence/current-state/).

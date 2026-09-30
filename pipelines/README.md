@@ -209,7 +209,8 @@ flag.
 ```bash
 databricks bundle validate --strict --target prod --profile fe-bar
 databricks bundle deploy --target prod --profile fe-bar
-databricks bundle run refresh_medallion --target prod --profile fe-bar
+# Dynamic native-CDF names make the wrapper mandatory.
+uv run --with pyyaml python pipelines/run.py refresh
 databricks bundle run deploy_metric_views --target prod --profile fe-bar
 uv run --with pyyaml python evidence.py
 ```

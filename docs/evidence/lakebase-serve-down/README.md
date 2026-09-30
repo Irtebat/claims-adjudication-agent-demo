@@ -1,3 +1,5 @@
+> **Superseded note (2026-10-01): old table names and native prior-claims evidence are historical; the current seven `reference.*` synced tables and `refresh-and-prior-claims/live-cutover.json` replace them.**
+
 # Evidence — Lakebase provisioning and serve-down
 
 Live evidence that the Lakebase operational plane was provisioned and that Unity

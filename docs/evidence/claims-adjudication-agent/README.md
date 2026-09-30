@@ -1,3 +1,5 @@
+> **Superseded note (2026-10-01): `apply_finalization_columns` and the eval bundle job are historical; the live app finalization transaction and direct human-gated evaluation workflow replace them.**
+
 # Evidence — claims-adjudication agent
 
 Proof for the claims-adjudication agent workstream: the deterministic authorities

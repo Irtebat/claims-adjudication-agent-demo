@@ -54,8 +54,8 @@ flowchart TB
 | `agent/` | Policy intake, deterministic authorities, retrieval, duplicate, fraud graph; the orchestrating ResponsesAgent, registered and deployed as a governed serving endpoint | Built |
 | `eval/` | MLflow evaluation harness + versioned candidate→prod promotion gate | Built |
 | `dashboards/` | AI/BI dashboard + Genie space over gold KPIs | Built |
-| `app/` | Adjuster review UI (Databricks App) | Planned |
-| `services/` | Kafka event backbone, adjudication worker, outbox relay, downstream consumers | Planned |
+| `app/` | Adjuster and business UI (Databricks App) | Live |
+| `services/` | Kafka event backbone, adjudication worker, outbox relay, downstream consumers | Built, not deployed |
 
 ## Design decisions
 
@@ -72,17 +72,24 @@ Committed execution evidence lives under `docs/evidence/`, one folder per
 workstream, each captured live against the `fe-bar` profile. Every folder has a
 README indexing its files and what they demonstrate.
 
-| Folder | Covers |
-| --- | --- |
-| `synthetic-data/` | Dataset generation, governance grants/masks, integrity checks, samples |
-| `lakebase-serve-down/` | Lakebase provisioning and Triggered serve-down parity |
-| `policy-intake-and-retrieval/` | Policy intake, resolution, in-process authorities, retrieval |
-| `cdf-incremental-history/` | Native CDF SCD Type 2 cutover and incremental proof |
-| `correctness-debt-fixes/` | Fraud-graph heat resolution, transactional policy-intake upsert, `heats_coils` dedup |
-| `pipelines-lakebase-cleanup/` | Resource rename, `run.py` separation, policy files relocated to `lakebase/` |
-| `claims-adjudication-agent/` | ResponsesAgent build, money-safety invariant enforcement, decision records |
-| `mlflow-lifecycle-hygiene/` | Independent eval runs, single `@prod` owner, packaged-artifact evaluation |
-| `gold-analytics/` | Gold KPI fact layer + governed metric view |
-| `serving-endpoint/` | Governed agent deployment + live end-to-end smoke test |
-| `genie-dashboards/` | AI/BI dashboard + Genie space over gold KPIs |
-| `refresh-and-prior-claims/` | Lakehouse-built prior-claims corpus, synced-table re-sync, routine/demo refresh composer, bootstrap ordering |
+| Folder | Status | Covers |
+| --- | --- | --- |
+| `current-state/` | current-live | Read-only 2026-10-01 inventory, counts, resources, and pending evidence |
+| `synthetic-data/` | historical-live | Dataset generation, governance grants/masks, integrity checks, samples |
+| `lakebase-serve-down/` | historical-live | Lakebase provisioning and Triggered serve-down parity |
+| `policy-intake-and-retrieval/` | historical-live | Policy intake, resolution, in-process authorities, retrieval |
+| `cdf-incremental-history/` | historical-live | Native CDF SCD Type 2 cutover and incremental proof |
+| `correctness-debt-fixes/` | historical-live | Fraud-graph heat resolution, transactional policy-intake upsert, `heats_coils` dedup |
+| `pipelines-lakebase-cleanup/` | instructions | Resource rename, `run.py` separation, policy files relocated to `lakebase/` |
+| `claims-adjudication-agent/` | historical-live | ResponsesAgent build, money-safety invariant enforcement, decision records |
+| `mlflow-lifecycle-hygiene/` | historical-live | Independent eval runs, single `@prod` owner, packaged-artifact evaluation |
+| `gold-analytics/` | historical-live | Gold KPI fact layer + governed metric view |
+| `serving-endpoint/` | superseded | Historical v1 endpoint smoke; current-corpus smoke awaits promotion |
+| `genie-dashboards/` | historical-live | AI/BI dashboard + Genie space over gold KPIs |
+| `refresh-and-prior-claims/` | current-live | Live corpus, indexes, grants, refresh composer, and bootstrap ordering |
+| `app-deploy/` | historical-live | App deployment runbook and grants |
+| `copilot-app-backend/` | superseded | Headless backend replaced by the live UI |
+| `execution-consistency/` | offline-only | Repository execution checks |
+| `kafka-events/` | offline-only | Kafka simulation; live end-to-end is pending |
+
+Pending live evidence is listed in [`current-state/pending.md`](evidence/current-state/pending.md).

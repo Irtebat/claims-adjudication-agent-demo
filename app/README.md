@@ -1,154 +1,67 @@
-# Steel Claims Cockpit — AppKit app (Wave 7, Stage A: BACKEND, headless)
+# App
 
-The Databricks App (AppKit — Node/TS/React) that adjusters and business users use to
-review, finalize, and analyze steel warranty/quality claims. **Stage A is the
-backend contract + headless logic + tests only — no UI.** Stage B builds the UI on
-this contract (Databricks brand tokens, Linear-style dense command layout).
+## Purpose
 
-## Roles & server-side authorization (`server/authz.ts`)
+The live app is the human review and analytics interface. Adjusters review queued recommendations, drill through cited policy, source records, risk, and precedent, then finalize decisions. Business users see claims history, governed analytics, and Genie. Multi-role callers can switch persona; the switch changes presentation, never authorization.
 
-Two roles, enforced on **every** `/api` route by a global guard registered in
-`onPluginsReady` (so it precedes the deferred plugin-route mount and also guards the
-auto-mounted Genie/analytics routes). Never enforced in the client.
+## Objects created
 
-| Surface                                                            | Adjuster | Business User |
-| ------------------------------------------------------------------ | -------- | ------------- |
-| `GET /api/queue` (pending queue)                                   | ✅       | ❌            |
-| `GET /api/claims/:id` (cockpit detail)                             | ✅       | ❌            |
-| `POST /api/claims/:id/finalize`                                    | ✅       | ❌            |
-| `GET /api/history` (finalized claims)                              | ✅       | ✅            |
-| `POST /api/genie/cockpit/*` (cockpit copilot)                      | ✅       | ❌            |
-| `POST /api/genie/business/*` (business chat)                       | ❌       | ✅            |
-| `/api/analytics/*`, `/api/business/dashboard` (business dashboard) | ❌       | ✅            |
+- App `steel-claims-cockpit`.
+- Screens: Adjuster Queue, Claim Cockpit, Claims History, Business Dashboard, and Genie assistants.
+- Read-only drill-through from Claim Cockpit to policy clauses, prior claims, and customer heat risk.
 
-Contract denials honored: Business Users are denied decision/finalize/queue;
-Adjusters are denied the business-dashboard data endpoint.
+## Resources configured
 
-**Role source (`server/identity.ts`):** governed **group membership** is the
-**primary** mechanism. The signed-in user's OBO token (`x-forwarded-access-token`) is
-presented to the Databricks **SCIM `/Me`** endpoint, and their **direct** group
-memberships are mapped to a role by matching each group's display name **or** id
-against `ADJUSTER_GROUPS` / `BUSINESS_GROUPS` (comma-separated). A **per-user
-allowlist** (`ADJUSTER_USERS` / `BUSINESS_USERS`, keyed on `x-forwarded-email`) is an
-**override** checked first — the escape hatch for individuals the group config can't
-(yet) cover. Resolution order: **allowlist → (no OBO token ⇒ deny) → group lookup →
-deny by default.**
+The bundle attaches SQL warehouse `38e458a09de4a055`, two Genie spaces, and the production Lakebase database. Server-side authorization derives a role set from Databricks groups. `GET /api/whoami` returns identity, all roles, and the default role.
 
-- **Namespace:** `GROUP_SCOPE` selects `account` (→ `/api/2.0/account/scim/v2/Me`) or
-  `workspace` (→ `/api/2.0/preview/scim/v2/Me`). **Default `account`.**
-- **No extra grant / scope:** the `/Me` lookup rides the OBO token's default
-  `iam.current-user:read` capability — **no** additional `user_api_scope` and **no**
-  account-admin grant is required.
-- **Fail-closed:** a caller matched by neither mechanism is hard-denied; any SCIM
-  error/timeout hard-denies (never opens the door); any unmapped `/api/*` route is
-  denied by default. Resolved roles are cached per user in a **bounded** LRU cache
-  (≤ 5000 entries, ~120s TTL; expired entries purged on access, oldest evicted at
-  capacity) — the OBO token is never cached, and failures are never cached.
+| Endpoint | Access |
+| --- | --- |
+| `GET /api/whoami` | Either role |
+| `GET /api/queue`, `GET /api/claims/:id`, `GET /api/source/:source/:id` | Adjuster |
+| `POST /api/claims/:id/finalize` | Adjuster |
+| `GET /api/history`, `/api/genie/history/*` | Either role |
+| `/api/genie/cockpit/*` | Adjuster |
+| `/api/genie/business/*`, `/api/analytics/*`, `GET /api/business/dashboard` | Business user |
 
-### Role configuration (plain app env vars — no resource/grant needed)
+Unknown API routes fail closed.
 
-| Env var           | Purpose                                                                |
-| ----------------- | ---------------------------------------------------------------------- |
-| `ADJUSTER_GROUPS` | **Primary.** Group display names / ids → `adjuster` (comma-sep).       |
-| `BUSINESS_GROUPS` | **Primary.** Group display names / ids → `business_user` (comma-sep).  |
-| `GROUP_SCOPE`     | `account` (default) or `workspace` — which SCIM `/Me` to call.         |
-| `ADJUSTER_USERS`  | Override. Emails pinned to `adjuster` (checked first, comma-sep).      |
-| `BUSINESS_USERS`  | Override. Emails pinned to `business_user` (checked first, comma-sep). |
+## Data flow
 
-`DATABRICKS_HOST` (SCIM host) is injected by the Apps runtime. `.env` is git-ignored;
-set these locally in your own `.env` for `npm run dev`. With none set, every guarded
-route hard-denies.
-
-## Authentication
-
-- **Lakebase (operational OLTP):** all reads/writes run as the **App service
-  principal** via the platform-injected identity (`appkit.lakebase` pool; the
-  platform mints the DB credential, `sslmode=require`). No `fe-bar` profile fallback.
-- **OBO (on-behalf-of the signed-in user):** used only for the **governed** surfaces
-  — the Genie copilot/chat (`dashboards.genie` scope) and the business-dashboard
-  warehouse queries (`sql` scope). The OBO user identity (`x-forwarded-email`) is
-  captured as `decided_by` on a finalization.
-
-## Backend endpoints
-
-- **(a) `GET /api/queue`** — claims ⋈ adjudications where `decision_status='RECOMMENDED'`, with sort/filter.
-- **(b) `GET /api/claims/:id`** — cockpit detail from ALREADY-PERSISTED data: the recommendation + full `adjudication_decision_records` trail (deterministic conformance/coverage/duplicate/settlement), citations, context (heats_coils, mill_test_certs, customers, customer_heat_risk), and prior-claim precedent. (Not Genie.)
-- **(c) `POST /api/claims/:id/finalize`** — the human-finalization transaction (below).
-- **(d) `GET /api/history`** — FINAL adjudications with `decided_by` / override metadata, sort/filter.
-- **(e) cockpit copilot NL** — Genie plugin, alias `cockpit` → operational space `01f1bb5b9d081378b00a283760825c64`.
-- **(f) business dashboard** — analytics plugin (`config/queries/business_kpis.sql`, governed gold) + business chat via Genie alias `business` → gold-analytics space `01f1bac20bf6119f84fa99c7ba438ba4`.
-
-## Finalization transaction (`server/finalize.ts`, Task 3)
-
-One Postgres transaction (App-SP pool), idempotent + first-write-wins:
-
-1. `UPDATE public.adjudications` → `decision_status='FINAL'` with verdict, disposition,
-   `approved_amount`, `override_flag`, `override_reason`, `decided_by`, `finalized_at`.
-   Guarded `WHERE decision_status='RECOMMENDED'`.
-2. `INSERT` a new immutable `record_version` into `public.adjudication_decision_records`
-   capturing the human-final decision + `decided_by` + `override_reason`, **preserving
-   the deterministic baseline** (`deterministic_verdict`/`disposition`, settlement,
-   conformance, coverage, duplicate) copied from the prior version.
-3. `INSERT` the `public.outbox` `claim.adjudicated` row (`event_id = adj-<id>`, payload
-   reflecting the FINAL decision). This is the ONLY place the fan-out is emitted —
-   the agent recommendation writes no outbox row.
-
-Server-side rules: `override_reason` is MANDATORY whenever any of {verdict,
-disposition, approved_amount} differs from the recommendation; the money math
-(`authorities.py`) is never re-run (an override is a logged override, not a
-recomputation); the final decision is validated internally money-consistent so it
-cannot violate the silver/gold medallion invariants. Re-finalizing an already-FINAL
-adjudication is a no-op (no double outbox, no new version).
-
-## Gates (all green, offline)
-
-```
-npm run test           # vitest — 52 tests (authz matrix + finalize contract + identity/group resolver + RoleCache)
-npx tsc -b tsconfig.server.json   # server typecheck — clean
-npx appkit lint        # ast-grep (no-double-type-assertion, etc.) — clean
-databricks bundle validate --profile fe-bar   # Validation OK
+```mermaid
+flowchart LR
+  U[Databricks user] --> A[Live app]
+  A -->|identity| D[Databricks APIs]
+  A -->|operations| L[Lakebase]
+  A -->|analytics| W[SQL warehouse]
+  A -->|questions| G[Genie]
 ```
 
-`server/**` (the backend contract) is eslint- and prettier-clean. Note: repo-wide
-`npm run lint` / `npm run format` also surface pre-existing warnings confined to the
-`databricks apps init` UI scaffold (`client/src/**`) and auto-generated appkit type
-stubs (`shared/appkit-types/*.d.ts`, the offline `hello_world` query stub) — untouched
-by this headless backend stage and cleaned up when the Stage-B UI + a warehouse-backed
-`generate-types` run land.
+## Deploy
 
-## Deploy runbook (LIVE — Stage A stops before these; several need the app SP)
+Working directory: `app/`.
 
-`databricks apps init` created the app SP is NOT done here. Deploying provisions the
-app's own service principal, whose id is needed to grant Lakebase. Order:
+```bash
+databricks bundle validate --strict -t default --profile fe-bar
+databricks bundle deploy -t default --profile fe-bar
+databricks bundle run app -t default --profile fe-bar
+```
 
-1. `databricks bundle deploy -t default --profile fe-bar` — creates the app + its SP,
-   injects `PGHOST`/`PGDATABASE`/`PGPORT`/`PGSSLMODE` + the resource envs.
-2. Grant the **app SP** a Lakebase Postgres role + fine-grained grants (the app SP is
-   distinct from the serving SP `claims-adjudication-serving`):
-   - `CONNECT` on `databricks_postgres`; `USAGE` on `public` + `reference`.
-   - `SELECT` on `public.claims`, `adjudications`, `adjudication_decision_records`,
-     and `reference.*` (including the synced precedent corpus
-     `reference.prior_claims_corpus`; `lakebase/run.py synced-tables` grants the
-     `reference.*` SELECTs when it creates or recreates a synced table).
-   - `SELECT, UPDATE` on `public.adjudications` (finalize UPDATE).
-   - `INSERT` on `public.adjudication_decision_records` (new record_version).
-   - **`INSERT` on `public.outbox`** ← REQUIRED for finalize; not in the serving SP's
-     documented grants (`docs/evidence/serving-endpoint/README.md`) — a NEW grant.
-3. Enable **user authorization** with scopes `dashboards.genie` + `sql` (in
-   `databricks.yml`, applied on deploy) so OBO works for Genie + the warehouse.
-4. Set the role config (plain app env vars — no resource/grant needed):
-   `ADJUSTER_GROUPS` / `BUSINESS_GROUPS` (comma-separated group display names or ids)
-   as the **primary** mechanism, and optionally `ADJUSTER_USERS` / `BUSINESS_USERS`
-   (comma-separated emails) as the per-user **override**. Optionally set `GROUP_SCOPE`
-   (`account` | `workspace`, default `account`). With none set, all guarded routes
-   hard-deny. The SCIM `/Me` group lookup needs **no** extra `user_api_scope` and
-   **no** admin grant (default `iam.current-user:read` covers `/Me`). See
-   `.env.example`.
-5. **Deploy-time verification (not a blocker, no grant):** on the deployed app, confirm
-   the narrowly-scoped OBO token returns a populated `groups[]` under
-   `iam.current-user:read` — the server logs the resolved group count once per real
-   request. The `/Me` endpoint + body shape are confirmed with a full user token; the
-   scoped-token case is the only bit that can only be verified live.
+## Run
 
-Steps 1–4 need the deployed app SP id and may need account-admin — they are the
-Stage-A STOP-AND-REPORT items (see `docs/evidence/copilot-app-backend/`).
+The deployed app starts automatically. Redeploy after an app change with the Deploy sequence.
+
+## Verify
+
+Working directory: `app/`. These commands are read-only.
+
+```bash
+databricks apps get steel-claims-cockpit --profile fe-bar -o json
+curl -fsS -H "Authorization: Bearer $DATABRICKS_TOKEN" \
+  "https://steel-claims-cockpit-7474655183924919.aws.databricksapps.com/api/whoami"
+```
+
+Verify the app is `RUNNING`, deployment is `SUCCEEDED`, `/api/whoami` returns the expected role set, each persona exposes only allowed screens, and adjuster drill-through opens the correct record. The curl requires a user token; never commit it.
+
+## Status
+
+As of 2026-10-01, repo head describes the full UI and the app is live. Persona screenshots and a fresh authenticated whoami capture remain [pending](../docs/evidence/current-state/pending.md).

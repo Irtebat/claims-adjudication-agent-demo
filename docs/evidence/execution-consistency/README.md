@@ -1,3 +1,5 @@
+> **Superseded note (2026-10-01): references to `create_synced_tables.sh` and old table names are historical; `lakebase/run.py synced-tables` and the current `reference.*` names replace them.**
+
 # Execution consistency — DABs for compute, direct-python only for the MLflow lifecycle
 
 Collapsed four inconsistent per-layer execution patterns into **two**, and stated the
