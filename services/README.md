@@ -2,9 +2,18 @@
 
 The event-driven layer that turns the batch claims-adjudication agent into a
 streaming pipeline. New claims flow out as Kafka events, the governed serving
-endpoint adjudicates them, and the outcome fans out to four downstream consumers
-— all with **exactly-once *business* processing**: every stage deduplicates, so a
-re-delivered event is a no-op.
+endpoint writes a RECOMMENDED adjudication for each, and — only after a human
+adjuster finalizes the claim in the App — the final decision fans out to four
+downstream consumers, all with **exactly-once *business* processing**: every stage
+deduplicates, so a re-delivered event is a no-op.
+
+**Who writes the outbox.** The worker path writes RECOMMENDED adjudications only
+(adjudication + decision record, no `public.outbox` row). The `claim.adjudicated`
+outbox row is written ONLY by the App's finalization transaction
+(`app/server/finalize.ts`), in the same transaction as the FINAL adjudication and the
+new decision-record version. Until an adjuster finalizes, the relay finds no
+unpublished outbox rows and the consumers receive no events: both jobs run and exit
+idle. That is expected, not a failure.
 
 ```
  Lakebase CDF (lb_claims_history, inserts)
@@ -14,8 +23,12 @@ re-delivered event is a no-op.
  │ claim.submitted  │ ─────────────────────────────────────────────┐
  └──────────────────┘                                               ▼
                                           governed serving endpoint  →  writer.py
-                                          (adjudication + decision record + outbox,
-                                           ONE Postgres transaction)
+                                          (RECOMMENDED adjudication + decision record,
+                                           ONE Postgres transaction, NO outbox row)
+                                                                     │
+                                          adjuster finalizes in the App (finalize.ts):
+                                          FINAL adjudication + record version + outbox,
+                                          ONE Postgres transaction
                                                                      │
  ┌──────────────────┐     relay (poll outbox WHERE published_at IS NULL,
  │  public.outbox   │ ──▶  publish, mark published only after broker ack)
@@ -52,8 +65,8 @@ compute is **scheduled serverless** (cheapest); every streaming job documents a
 |-----|------|--------------|
 | `fe-bar-services-migrate`   | `src/migrate.py`   | Drops `public.claims_pending`; grants the app SP the outbox/settlements/investigation/supplier-recovery privileges this layer needs. Run once. |
 | `fe-bar-services-producer`  | `src/producer.py`  | Spark structured streaming, `availableNow`. CDF inserts on `fe-bar-ir.cdf.lb_claims_history` → `claim.submitted`. Checkpointed; initial snapshot replays the ~5000 seeded claims once, then only new claims stream. |
-| `fe-bar-services-worker`    | `src/worker.py`    | Consumes `claim.submitted`; skips claims that already have an `agent_recommendation` adjudication; otherwise invokes the endpoint with `persist=true`. |
-| `fe-bar-services-relay`     | `src/relay.py`     | Polls unpublished `outbox` rows, publishes `claim.adjudicated`, sets `published_at` only after the broker acks. |
+| `fe-bar-services-worker`    | `src/worker.py`    | Consumes `claim.submitted`; skips claims that already have an `agent_recommendation` adjudication; otherwise invokes the endpoint with `persist=true`, which writes a RECOMMENDED adjudication + decision record (no outbox row). |
+| `fe-bar-services-relay`     | `src/relay.py`     | Polls unpublished `outbox` rows (written only by App finalization), publishes `claim.adjudicated`, sets `published_at` only after the broker acks. Idle until an adjuster finalizes. |
 | `fe-bar-services-consumers` | `src/consumers.py` | Four parallel tasks (settlement / investigation / supplier-recovery / notification), one Kafka consumer group each. |
 
 Pure, unit-tested cores (`events.py`, `config.py`, `producer_core.py`,
@@ -74,13 +87,17 @@ at every stage, keyed on stable, deterministic ids:
   seeded baseline is adjudicated once and re-delivery is skipped. The endpoint's
   `writer.py` is the deeper guarantee: first-write-wins on the deterministic
   `adjudication_id`.
-- **`writer.py` (one transaction)**: adjudication + decision record +
-  `claim.adjudicated` outbox row commit together, **all three `INSERT ... ON CONFLICT
-  DO NOTHING`** (first-write-wins) on their stable keys (adjudication on
-  `adjudication_id`, record on `(adjudication_id, record_version)`, outbox on
-  `event_id = adj-<adjudication_id>`). A same-id retry mutates none of them, so the
-  adjudication can never drift out of step with the immutable record or the outbox
-  payload.
+- **`writer.py` (one transaction, recommendation only)**: the RECOMMENDED
+  adjudication + decision record commit together, both `INSERT ... ON CONFLICT DO
+  NOTHING` (first-write-wins) on their stable keys (adjudication on
+  `adjudication_id`, record on `(adjudication_id, record_version)`). A same-id retry
+  mutates neither, so the adjudication can never drift out of step with the immutable
+  record. It writes **no** outbox row.
+- **App finalization (`app/server/finalize.ts`, one transaction)**: the FINAL
+  adjudication update, the next decision-record version, and the `claim.adjudicated`
+  outbox row (`event_id = adj-<adjudication_id>`, payload = the FINAL human decision)
+  commit together. Finalizing an already-FINAL adjudication is a no-op, so no double
+  outbox row is written. This is the only writer of `public.outbox`.
 - **Relay**: publishes, then sets `published_at` **only after the broker acks**.
   Crash before the mark → re-published next run → consumers dedup → no double
   *business* processing. `UPDATE ... WHERE published_at IS NULL` guards against
@@ -128,10 +145,17 @@ databricks bundle deploy   -t prod --profile fe-bar
 ```bash
 databricks bundle run migrate  -t prod --profile fe-bar   # drop pending queue + grants (once)
 databricks bundle run producer -t prod --profile fe-bar   # CDF inserts -> claim.submitted
-databricks bundle run worker   -t prod --profile fe-bar   # adjudicate (persist=true)
+databricks bundle run worker   -t prod --profile fe-bar   # RECOMMENDED adjudications (persist=true)
+# ... an adjuster finalizes claims in the App, which writes the outbox rows ...
 databricks bundle run relay    -t prod --profile fe-bar   # outbox -> claim.adjudicated
 databricks bundle run consumers -t prod --profile fe-bar  # fan-out (4 parallel tasks)
 ```
+
+**Schedules.** The producer, worker, relay, and consumers jobs deploy with an hourly
+periodic trigger. Until the four `fe-bar-aiven-kafka` secrets above exist, every
+scheduled run fails at Kafka client setup; that is expected and stops once the scope
+is populated. Pause the triggers if the failures are unwanted before then. See
+`docs/RUNBOOK.md` (event backbone run order).
 
 **Live-demo (continuous) mode:** flip each streaming job's trigger to `continuous`
 and adjust the notebook trigger / poll settings as documented at the bottom of

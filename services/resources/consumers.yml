@@ -4,7 +4,8 @@ resources:
       name: fe-bar-services-consumers
       max_concurrent_runs: 1
       description: |
-        The four downstream consumers of claim.adjudicated, one parallel task each
+        The four downstream consumers of claim.adjudicated (published by the relay
+        only for claims an adjuster has finalized; idle until then), one parallel task each
         (each is its own Kafka consumer group, so offsets are independent):
           - settlement        verdict APPROVE -> UPSERT settlements STL-<claim_id>
           - investigation     verdict PEND    -> INSERT investigation_cases INV-<claim_id> (DO NOTHING)

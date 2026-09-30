@@ -7,8 +7,13 @@ resources:
         Adjudication worker. Consumes claim.submitted, dedups on the claim id against
         an existing agent_recommendation adjudication, and invokes the governed
         endpoint (agents_fe-bar-ir-default-claims_adjudication_agent) with persist=true
-        so the endpoint's writer atomically writes adjudication + decision record +
-        claim.adjudicated outbox row.
+        so the endpoint's writer atomically writes a RECOMMENDED adjudication + its
+        decision record. It writes NO outbox row: the claim.adjudicated outbox row is
+        written only by the App's finalization transaction when an adjuster finalizes,
+        so the relay and consumers stay idle until then.
+
+        Fails on every scheduled run until the fe-bar-aiven-kafka secret scope holds the
+        Kafka credentials (see services/README.md).
 
         Default: scheduled serverless, hourly, bounded drain (max_messages) then exit.
 

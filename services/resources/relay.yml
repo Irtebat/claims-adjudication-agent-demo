@@ -4,7 +4,9 @@ resources:
       name: fe-bar-services-relay
       max_concurrent_runs: 1
       description: |
-        Outbox relay (transactional-outbox publish half). Polls
+        Outbox relay (transactional-outbox publish half). Outbox rows are written only
+        by the App's finalization transaction, so this job exits idle until an
+        adjuster finalizes a claim. Polls
         public.outbox WHERE published_at IS NULL, publishes each row to Kafka
         claim.adjudicated (key = aggregate_id = claim_id), and sets published_at
         ONLY after the broker acks. A crash between publish and mark re-publishes
