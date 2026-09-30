@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-10-01",
+  "commands": [
+    "databricks serving-endpoints get agents_fe-bar-ir-default-claims_adjudication_agent --profile fe-bar -o json",
+    "databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_agent prod --profile fe-bar -o json",
+    "databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_agent candidate --profile fe-bar -o json"
+  ],
+  "output": {
+    "endpoint":{"name":"agents_fe-bar-ir-default-claims_adjudication_agent","state":{"config_update":"NOT_UPDATING","ready":"READY"},"config_version":1,"served_entity":{"entity_name":"fe-bar-ir.default.claims_adjudication_agent","entity_version":"1","deployment":"DEPLOYMENT_READY","message":"Scaled to zero"},"traffic_percentage":100,"task":"agent/v1/responses"},
+    "aliases":[{"alias":"prod","version":1,"status":"READY","id":"c2ab49f2-90d4-4a2e-80f8-f5db7eff6068","run_id":"5d7b86abb1e146618cb03be6c9a34c59"},{"alias":"candidate","version":1,"status":"READY","id":"c2ab49f2-90d4-4a2e-80f8-f5db7eff6068","run_id":"5d7b86abb1e146618cb03be6c9a34c59"}]
+  }
+}

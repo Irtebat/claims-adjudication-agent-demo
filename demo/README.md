@@ -1,157 +1,60 @@
-# Steel Claims Demo Backlog Job
+# Demo backlog
 
-A Databricks Asset Bundle (DABs) job that generates N fresh synthetic claims and runs them through the adjudication agent to produce RECOMMENDED adjudications.
+## Purpose
 
-## What It Does
+Create deterministic synthetic claims and persisted RECOMMENDED adjudications for the adjuster queue.
 
-1. **Generates N synthetic claims** consistent with the label-pattern distribution used by `pipelines/src/generate.py`
-2. **Inserts claims into Lakebase** `public.claims` with `data_provenance='synthetic_demo_backlog'` for easy cleanup
-3. **Runs adjudication** via the governed serving endpoint or in-process to produce RECOMMENDED adjudications
-4. **Populates the adjuster queue** with claims that have RECOMMENDED adjudications ready for human review
+## Objects created
 
-## Parameters
+Job `steel-claims-demo-backlog`; Lakebase rows tagged `synthetic_demo_backlog`. It creates no finalized outbox event.
 
-The job accepts the following parameters (all have sensible defaults):
+## Resources configured
 
-- **count** (default: 500): Number of synthetic claims to generate (minimum 100)
-- **seed** (default: 42): Random seed for deterministic generation
-- **mode** (default: serving_endpoint): Adjudication mode
-  - `serving_endpoint`: Use the governed serving endpoint (preferred for isolation)
-  - `in_process`: Import and run the agent in-process (requires agent module)
-- **catalog** (default: fe-bar-ir): Unity Catalog
-- **endpoint** (default: projects/.../endpoints/primary): Lakebase endpoint
-- **postgres_database** (default: databricks_postgres): Postgres database name
+Parameters: `count` (500), `seed` (42), `mode` (`serving_endpoint`), Lakebase endpoint and database.
 
-## Distribution Consistency
+## Data flow
 
-The generator strictly follows the label-pattern distribution from `pipelines/src/generate.py`:
+```mermaid
+flowchart LR
+  G[Generator] --> C[public.claims] --> E[Agent endpoint] --> A[RECOMMENDED adjudications] --> Q[App queue]
+```
 
-Per 100 claims:
-- **20%** (0–19): clean
-- **20%** (20–39): in_spec_should_deny
-- **15%** (40–54): out_of_warranty_or_environment_excluded
-- **10%** (55–64): duplicate
-- **15%** (65–79): over_claim
-- **15%** (80–94): supplier_attributable
-- **5%** (95–99): fraud_cluster
+## Deploy
 
-This ensures the demo backlog maintains the same realistic claim distribution as the main synthetic baseline.
-
-## Demo refresh
-
-To load a backlog and bring every downstream layer up to date in one command, run
-`uv run --with pyyaml python scripts/refresh.py demo` from the repository root: it
-deploys and runs this job, then the routine refresh (see `docs/RUNBOOK.md`).
-
-## Deployment
-
-Working directory for all bundle commands below: `demo/`.
+Working directory: `demo/`.
 
 ```bash
+databricks bundle validate --strict -t prod --profile fe-bar
 databricks bundle deploy -t prod --profile fe-bar
 ```
 
-Run the job with custom parameters:
+## Run
+
+Working directory: `demo/`. CLI 1.17 job parameters use `--params`:
 
 ```bash
 databricks bundle run demo_backlog -t prod --profile fe-bar --params count=1000,seed=123,mode=serving_endpoint
 ```
 
-Or run with all defaults (500 claims, seed 42, serving endpoint):
-
-```bash
-databricks bundle run demo_backlog -t prod --profile fe-bar
-```
-
-## Recommendation Contract (Wave 7)
-
-The adjudications produced are **RECOMMENDED** (not yet FINAL):
-
-- `decision_status = 'RECOMMENDED'`
-- NO `public.outbox` row is written
-- Claims with RECOMMENDED adjudications populate the adjuster queue
-- Human adjuster finalizes in the Databricks App, which then:
-  - Marks `decision_status = 'FINAL'`
-  - Writes the `claim.adjudicated` outbox row
-  - Triggers event fan-out to downstream systems
-
-This is distinct from the seeded baseline (`synthetic_wave_2_baseline`) which has `decision_status = 'FINAL'` and was pre-adjudicated at setup time.
-
-## Data Provenance
-
-All inserted claims and adjudications carry `data_provenance = 'synthetic_demo_backlog'`. The SELECT statements are read-only Lakebase checks. The cleanup block is destructive, Lakebase-only, fully qualified, and transactional; review its target rows before committing.
+Cleanup is destructive and Lakebase-only; use fully qualified names and a transaction:
 
 ```sql
--- Find demo claims
-SELECT COUNT(*) FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog';
-
--- Find demo adjudications
-SELECT COUNT(*) FROM public.adjudications WHERE data_provenance = 'agent_recommendation' AND claim_id IN (
-  SELECT claim_id FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog'
-);
-
--- DESTRUCTIVE: run only against the intended Lakebase database.
 BEGIN;
-DELETE FROM public.adjudications WHERE claim_id IN (
-  SELECT claim_id FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog'
-);
-DELETE FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog';
+DELETE FROM public.adjudications WHERE claim_id IN (SELECT claim_id FROM public.claims WHERE data_provenance='synthetic_demo_backlog');
+DELETE FROM public.claims WHERE data_provenance='synthetic_demo_backlog';
 COMMIT;
 ```
 
-## Files
+## Verify
 
-- **databricks.yml**: DABs bundle configuration
-- **src/generator_core.py**: Pure, importable claims generator (no Spark/Lakebase required)
-- **src/runner.py**: Notebook entry point (Databricks job)
-- **tests/test_generator_core.py**: Comprehensive unit tests for the generator
-- **pyproject.toml**: Ruff linting configuration
-
-## Testing Locally
-
-Run unit tests (no Spark/Databricks account needed):
+Working directory: `demo/`. Read-only:
 
 ```bash
-uv run --project eval pytest demo/tests -q
+databricks jobs list --profile fe-bar -o json
 ```
 
-Check formatting and linting:
+Expected: `steel-claims-demo-backlog` is listed. A completed run returns a JSON summary; any sample summary in documentation is illustrative, not live evidence.
 
-```bash
-uv run --with ruff ruff check demo
-uv run --with ruff ruff format --check demo
-```
+## Status
 
-Apply formatting fixes:
-
-```bash
-uv run --with ruff ruff format demo
-```
-
-## Example Output
-
-Illustrative only; this is not captured live evidence.
-
-When deployed and run, the job produces a JSON summary:
-
-```json
-{
-  "catalog": "fe-bar-ir",
-  "count": 500,
-  "seed": 42,
-  "mode": "serving_endpoint",
-  "data_provenance": "synthetic_demo_backlog",
-  "inserted_claims": 500,
-  "adjudicated": 500,
-  "failed": 0,
-  "queue_count": 500,
-  "timestamp": "2026-09-28T15:42:30.123456"
-}
-```
-
-## Troubleshooting
-
-- **"IP-ACL error" from serving endpoint**: The job runs serverless and may hit IP-ACL restrictions. Contact your workspace admin.
-- **"In-process mode: cannot import agent"**: The agent module may not be installed or on the path. Use serving_endpoint mode instead.
-- **Blank adjudications**: Verify the serving endpoint is deployed and accepts `custom_inputs.claim`.
-- **403 errors on outbox**: This is expected — the recommendation write does NOT create outbox rows per Wave 7 contract.
+2026-10-01: job exists in repo head and is deployed on `fe-bar`. A new demo backlog run was not executed for this documentation change and remains pending.

@@ -1,0 +1,14 @@
+{
+  "captured_at": "2026-10-01",
+  "commands": [
+    "databricks apps get steel-claims-cockpit --profile fe-bar -o json",
+    "databricks lakeview list --profile fe-bar -o json",
+    "databricks genie get-space 01f1bb5b9d081378b00a283760825c64 --profile fe-bar -o json",
+    "databricks genie get-space 01f1bac20bf6119f84fa99c7ba438ba4 --profile fe-bar -o json"
+  ],
+  "output": {
+    "app":{"name":"steel-claims-cockpit","url":"https://steel-claims-cockpit-7474655183924919.aws.databricksapps.com","app_status":{"state":"RUNNING"},"compute_status":{"state":"ACTIVE"},"active_deployment":{"deployment_id":"01f1bbf43d9a167ba74823540cd7c262","create_time":"2026-09-29T10:55:10Z","status":{"state":"SUCCEEDED"}},"service_principal_client_id":"d5309ee7-a8ea-499f-99d4-4ccbd8369d93"},
+    "dashboard":{"dashboard_id":"01f1bac220111001a171872b5185e8e6","display_name":"Steel Quality Claims Analytics","lifecycle_state":"ACTIVE","warehouse_id":"38e458a09de4a055"},
+    "genie":[{"space_id":"01f1bb5b9d081378b00a283760825c64","title":"Steel Claims Operational Cockpit","warehouse_id":"38e458a09de4a055","update_time":"2026-09-28T21:26:34.109Z"},{"space_id":"01f1bac20bf6119f84fa99c7ba438ba4","title":"Steel Quality Claims Analytics","warehouse_id":"38e458a09de4a055","update_time":"2026-09-27T22:24:17.905Z"}]
+  }
+}

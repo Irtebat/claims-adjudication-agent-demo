@@ -1,50 +1,54 @@
-# AI/BI dashboard and Genie space
+# Dashboards and Genie
 
-This directory contains the deployed Steel Quality Claims Analytics dashboard and its linked, curated Genie space.
+## Purpose
 
-## Dashboard
+Provide governed quality analytics and natural-language access to operational and gold data.
 
-`quality_claims.lvdash.json` has four pages: Executive COPQ, Quality / Metallurgy, Finance / Recovery, and Trust / Ops. Governed quality KPIs come from `gold.quality_claims_metrics`; cycle time and specialized analytics come from the corresponding `gold_*` analytics tables. The four leakage categories remain separate because they may overlap.
+## Objects created
 
-### Data sources
+AI/BI dashboard `Steel Quality Claims Analytics` and Genie spaces `Steel Claims Operational Cockpit` and `Steel Quality Claims Analytics`.
 
-- `gold.gold_claim_adjudication_fact` — cross-filterable claim-grain detail.
-- `gold.gold_quality_kpis`, `gold.gold_failure_mode_analytics`, `gold.gold_supplier_recovery_analytics`, `gold.gold_fraud_cluster_analytics`, `gold.gold_agent_human_alignment`, and `gold.gold_retrieval_citation_kpis` — dashboard-ready aggregates.
-- `gold.quality_claims_metrics` — governed reusable measures shared by the dashboard and Genie.
+## Resources configured
 
-Workflow-backlog visuals remain deferred until settlement, recovery, and investigation events exist (downstream services, not yet built).
+Dashboard ID `01f1bac220111001a171872b5185e8e6`; operational Genie ID `01f1bb5b9d081378b00a283760825c64`; analytics Genie ID `01f1bac20bf6119f84fa99c7ba438ba4`; warehouse `38e458a09de4a055`.
 
-Deploy with the authenticated `fe-bar` profile:
+Obtain IDs with `databricks lakeview list` and `databricks genie list-spaces`. If a space is recreated, edit `quality_claims.lvdash.json` `uiSettings.genieSpace.overrideId`, validate, and redeploy the dashboard bundle.
 
-```sh
-cd dashboards
+## Data flow
+
+```mermaid
+flowchart LR
+  G[Gold facts and metric view] --> D[AI/BI dashboard]
+  G --> B[Analytics Genie]
+  O[Operational governed data] --> C[Cockpit Genie]
+```
+
+## Deploy
+
+Working directory: `dashboards/`.
+
+```bash
 databricks bundle validate --strict -t prod --profile fe-bar
 databricks bundle deploy -t prod --profile fe-bar
-databricks bundle summary -t prod --profile fe-bar
 ```
 
-## Genie
+## Run
 
-`genie/genie_space.json` is the parsed, version-controlled serialized space. It uses the metric view plus failure-mode, supplier-recovery, fraud-cluster, and agent-human-alignment analytics. It does not attach the underlying wide claim fact.
+Dashboards and Genie run on read. After an override-ID edit, repeat both Deploy commands; bundle validation alone does not update the deployed dashboard.
 
-Create a new space reproducibly:
+## Verify
 
-```sh
-SERIALIZED=$(jq -c '.' dashboards/genie/genie_space.json | jq -Rs '.')
-jq -n --arg warehouse_id '38e458a09de4a055' \
-  --arg title 'Steel Quality Claims Analytics' \
-  --arg parent_path '/Workspace/Users/<user>/genie-spaces' \
-  --argjson serialized_space "$SERIALIZED" \
-  '{warehouse_id:$warehouse_id,title:$title,parent_path:$parent_path,serialized_space:$serialized_space}' \
-  > /tmp/create-genie.json
-databricks genie create-space --json @/tmp/create-genie.json --profile fe-bar
+Working directory: `dashboards/`. Read-only:
+
+```bash
+databricks lakeview list --profile fe-bar -o json
+databricks lakeview get 01f1bac220111001a171872b5185e8e6 --profile fe-bar -o json
+databricks genie get-space 01f1bb5b9d081378b00a283760825c64 --profile fe-bar -o json
+databricks genie get-space 01f1bac20bf6119f84fa99c7ba438ba4 --profile fe-bar -o json
 ```
 
-To update the deployed space, build the same `SERIALIZED` value and run:
+Expected: dashboard lifecycle `ACTIVE`; both spaces return the titles above and warehouse `38e458a09de4a055`.
 
-```sh
-jq -n --argjson serialized_space "$SERIALIZED" '{serialized_space:$serialized_space}' > /tmp/update-genie.json
-databricks genie update-space <space-id> --json @/tmp/update-genie.json --profile fe-bar
-```
+## Status
 
-The dashboard's `uiSettings.genieSpace.overrideId` links to the deployed space. Change it when importing into another workspace.
+2026-10-01: definitions at repo head match one ACTIVE deployed dashboard and two live Genie spaces on `fe-bar`.

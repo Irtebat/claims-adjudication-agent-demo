@@ -1,78 +1,69 @@
-# Steel Quality and Warranty Claims Adjudication Agent
+# Steel quality claims adjudication
 
-A reference implementation of an agent that adjudicates steel quality and warranty
-claims for a coated-flat-steel producer, built end to end on Databricks. A human
-adjuster reviews and finalizes each decision. The agent recommends APPROVE, DENY,
-or PEND-INVESTIGATE, with a disposition, an approved amount, and a cited rationale.
+## Purpose
 
-Design principle: decisions that move money are made by deterministic, auditable
-tools (conformance against the Mill Test Certificate, coverage math, and duplicate
-detection). Language-model retrieval only finds and cites supporting clauses; it
-does not decide outcomes.
+Reference implementation for governed steel warranty-claim recommendations and human finalization. Deterministic authorities decide eligibility and money; retrieval supplies citations.
 
-## Architecture
+### Start here
 
-The implementation connects these Databricks capabilities as one flow:
+1. Read the [runbook](docs/RUNBOOK.md) for bootstrap, refresh, release, and recovery order.
+2. Use the owning layer README for exact working directories and commands.
+3. Compare repository intent with [current live evidence](docs/evidence/current-state/README.md) before operating.
 
-| Capability      | Role                                                         |
-| --------------- | ------------------------------------------------------------ |
-| Lakeflow        | Ingest synthetic reference, master, and history into UC      |
-| Unity Catalog   | Govern data and functions; host deterministic UC functions   |
-| Lakebase        | Postgres store of record for the live claim (OLTP)           |
-| Mosaic AI Agent | ResponsesAgent with tools that produce the recommendation    |
-| Genie           | Natural-language query over gold KPIs                        |
-| Databricks App  | Adjuster review UI                                           |
+## Objects created
 
-A Kafka event backbone (topics `claim.submitted` and `claim.adjudicated`) links the
-operational store to downstream services. An MLflow evaluation loop measures and
-improves the agent.
+Unity Catalog medallion objects, Lakebase operational and reference tables, an MLflow agent model and serving endpoint, evaluation runs, a Databricks App, an AI/BI dashboard, two Genie spaces, and optional Kafka jobs.
 
-## Repository layout
+## Resources configured
 
-| Path        | Contents                                                      |
-| ----------- | ------------------------------------------------------------- |
-| config/     | Environment config templates (placeholders only, no secrets)  |
-| pipelines/  | Synthetic data generation and Lakeflow pipelines              |
-| lakebase/   | Postgres schema, extensions, and synced-table definitions     |
-| agent/      | Mosaic AI agent and its tools                                  |
-| eval/       | MLflow evaluation harness and scorers                          |
-| services/   | Kafka worker, outbox relay, and downstream consumers          |
-| app/        | Databricks App (adjuster UI)                                   |
-| dashboards/ | AI/BI dashboards and Genie definitions                         |
-| docs/       | Documentation and committed execution evidence                 |
+| Layer | README |
+| --- | --- |
+| Pipelines | [pipelines](pipelines/README.md) |
+| Lakebase | [lakebase](lakebase/README.md) |
+| Agent | [agent](agent/README.md) |
+| Evaluation | [eval](eval/README.md) |
+| App | [app](app/README.md) |
+| Dashboards and Genie | [dashboards](dashboards/README.md) |
+| Demo | [demo](demo/README.md) |
+| Services | [services](services/README.md) |
+| Cross-layer composers | [scripts](scripts/README.md) |
 
-## Execution model
+All Databricks commands use explicit profile `fe-bar`. Secrets stay in Databricks secret scopes.
 
-Every layer uses the **same two execution mechanisms — and only these two**:
+## Data flow
 
-1. **DABs bundle — `databricks bundle deploy` + `databricks bundle run <job>` — for
-   anything that runs on Databricks compute** (jobs, pipelines, apps). This is the
-   canonical mechanism; always pass `--target prod --profile fe-bar`. A command that
-   is a plain `bundle` operation is invoked directly, never wrapped in a script.
-2. **Direct `uv run python` only for two cases:**
-   - **(a) the human-gated MLflow model lifecycle** — `agent`'s
-     `register → evaluate → promote`, an interactive operator loop with a human
-     decision at promotion, not a scheduled job; and
-   - **(b) thin wrappers that add real orchestration or guards a plain `bundle run`
-     cannot express** — sourcing the authored warranty schedule into the generator,
-     the Lakebase reseed/CDF-exists guards, and resolving the dynamic native-CDF
-     table names before a medallion run.
+```mermaid
+flowchart LR
+  LB[Lakebase OLTP] -->|native CDF| P[Lakeflow medallion]
+  P --> G[Gold facts and corpus]
+  G -->|triggered sync| R[Lakebase reference]
+  R --> A[Agent]
+  A --> E[Serving endpoint]
+  E --> UI[Live app]
+  G --> D[Dashboard and Genie]
+  UI -->|FINAL + outbox| LB
+```
 
-Each layer README below states this rule and lists the exact commands for that
-layer. `scripts/bootstrap.py` composes the end-to-end path from these mechanisms
-directly, and `scripts/refresh.py routine|demo` composes the refreshes (see
-`scripts/README.md`). `docs/RUNBOOK.md` lists what exists, how each piece is
-triggered, and the run orders.
+## Deploy
 
-## Environment
+Deploy each bundle from its owning directory in the runbook order. There is no root bundle.
 
-- Databricks CLI profile: `fe-bar` (always pass `--profile fe-bar`).
-- Unity Catalog: `fe-bar-ir`.
-- Kafka: Aiven.
-- Synthetic data only. Secrets live in Databricks secret scopes, not in source.
+## Run
 
-Use [`config/config.example.yaml`](config/config.example.yaml) as the configuration reference. Commands in each layer README state their working directory.
+Use `scripts/bootstrap.py` only for a new workspace and `scripts/refresh.py` for composed refreshes. Use the human-gated agent release sequence separately.
+
+## Verify
+
+Working directory: repository root. Read-only checks:
+
+```bash
+databricks jobs list --profile fe-bar -o json
+databricks pipelines list-pipelines --profile fe-bar -o json
+databricks apps get steel-claims-cockpit --profile fe-bar -o json
+```
+
+Expected: core jobs are listed, the medallion pipeline is `IDLE` after a completed update, and the app is `RUNNING`. Detailed expected output is committed under [current-state evidence](docs/evidence/current-state/).
 
 ## Status
 
-As of 2026-10-01 the app and data layers are live. The new prior-claims corpus is live in Lakebase, but endpoint v1 still reads the retired native table until the next promotion. Services are built but not deployed. See [current-state evidence](docs/evidence/current-state/).
+2026-10-01: repository head contains all layers. On profile `fe-bar`, the app, medallion, Lakebase synced tables, agent v1 endpoint, dashboard, and Genie spaces are live. The 4,999-row corpus is live, but endpoint v1 still reads legacy `public.prior_claims` until promotion. Services are built but not deployed.

@@ -1,0 +1,22 @@
+{
+  "captured_at": "2026-10-01",
+  "commands": [
+    "databricks jobs list --profile fe-bar -o json",
+    "databricks pipelines list-pipelines --profile fe-bar -o json"
+  ],
+  "output": {
+    "jobs": [
+      {"job_id":1010723195549393,"name":"fe-bar-prior-claims-corpus"},{"job_id":652173252928977,"name":"steel-claims-demo-backlog"},{"job_id":572103750470193,"name":"steel-claims-refresh-medallion"},{"job_id":977038442223530,"name":"steel-claims-deploy-metric-views"},{"job_id":571949792600855,"name":"fe-bar-deploy-claims-adjudication-agent"},{"job_id":105847413582825,"name":"steel-claims-generate-raw"},{"job_id":310576676613808,"name":"fe-bar-fraud-graph"},{"job_id":198359542789213,"name":"fe-bar-lakebase-setup-and-seed"},{"job_id":12437594526675,"name":"steel-claims-validate-generator"}
+    ],
+    "pipelines": [
+      {"pipeline_id":"495e25a1-d984-4993-8a07-7b9ba7c33467","name":"steel-claims","state":"IDLE","latest_update":"COMPLETED"},
+      {"pipeline_id":"056f0b9d-4d94-45f4-8f6e-b41720627baf","name":"reference.heats_coils sync","state":"IDLE","latest_update":"COMPLETED"},
+      {"pipeline_id":"1e8fddb2-f544-40e5-85b4-ee5d5c5c5501","name":"reference.customer_heat_risk sync","state":"IDLE","latest_update":"COMPLETED"},
+      {"pipeline_id":"488823f9-63c3-44c8-9cfb-fb07120a7e15","name":"reference.customers sync","state":"IDLE","latest_update":"COMPLETED"},
+      {"pipeline_id":"53705cb9-2f8b-4dd1-a973-a202c3fea4cf","name":"reference.defect_codes sync","state":"IDLE","latest_update":"COMPLETED"},
+      {"pipeline_id":"af125178-4888-4402-826b-dc573c0f183f","name":"reference.suppliers sync","state":"IDLE","latest_update":"COMPLETED"},
+      {"pipeline_id":"c9279f3c-1a83-4e3f-bf8e-f07497f2fbb7","name":"reference.prior_claims_corpus sync","state":"IDLE","latest_update":"COMPLETED"},
+      {"pipeline_id":"f435d0e6-6d8f-48c7-9f5c-65229d5225af","name":"reference.mill_test_certs sync","state":"IDLE","latest_update":"COMPLETED"}
+    ]
+  }
+}

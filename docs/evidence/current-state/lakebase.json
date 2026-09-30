@@ -1,0 +1,21 @@
+{
+  "captured_at": "2026-10-01",
+  "command": "uv run --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' python docs/evidence/current-state/capture_lakebase.py",
+  "queries": {
+    "indexes": "SELECT schemaname, tablename, indexname, indexdef FROM pg_indexes WHERE schemaname='reference' AND tablename='prior_claims_corpus' ORDER BY indexname",
+    "grants": "SELECT grantee, table_schema, table_name, privilege_type FROM information_schema.role_table_grants WHERE table_schema='reference' AND privilege_type='SELECT' ORDER BY grantee, table_name",
+    "count": "SELECT count(*) FROM reference.prior_claims_corpus"
+  },
+  "output": {
+    "count": 4999,
+    "indexes": [
+      {"indexname":"prior_claims_corpus_lb_ann","indexdef":"CREATE INDEX prior_claims_corpus_lb_ann ON ONLY reference.prior_claims_corpus USING lakebase_ann (((embedding)::vector(1024)) vector_cosine_ops)"},
+      {"indexname":"prior_claims_corpus_lb_bm25","indexdef":"CREATE INDEX prior_claims_corpus_lb_bm25 ON ONLY reference.prior_claims_corpus USING lakebase_bm25 (to_tsvector('english'::regconfig, defect_narrative))"},
+      {"indexname":"prior_claims_corpus_pkey","indexdef":"CREATE UNIQUE INDEX prior_claims_corpus_pkey ON ONLY reference.prior_claims_corpus USING btree (claim_id)"}
+    ],
+    "consumer_select_grants": [
+      {"grantee":"47643eb1-dbd5-40a6-a51d-5da6b8e2da7a","tables":["customer_heat_risk","heats_coils","mill_test_certs","prior_claims_corpus"]},
+      {"grantee":"d5309ee7-a8ea-499f-99d4-4ccbd8369d93","tables":["customer_heat_risk","customers","heats_coils","mill_test_certs","prior_claims_corpus"]}
+    ]
+  }
+}
