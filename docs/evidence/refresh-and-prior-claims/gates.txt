@@ -32,3 +32,21 @@ Found 2 errors in 1 file (checked 3 source files)
 
 ## compileall
 ok
+
+# Follow-up gates (bootstrap gap, serverless caching, retrieval index use)  generated 2026-09-30T19:25:48Z, HEAD 0e24964
+# bundle validate not run this round (no workspace commands requested; no bundle YAML changed)
+## GATE: authorities.py diff vs main: 0 lines
+pipelines (pyspark 4.0.1, Java 17): 39 passed in 12.32s
+pipelines (no pyspark): 36 passed, 1 skipped in 0.10s
+lakebase: 31 passed in 0.21s
+agent: 101 passed, 3 skipped, 1 warning in 8.11s
+services: 34 passed in 0.06s
+app:       Tests  84 passed (84)
+pipelines ruff: check clean, format clean
+scripts ruff: check clean, format clean
+agent ruff: check clean, format clean
+lakebase ruff: check clean, format clean
+services ruff: check clean, format clean
+mypy pipelines: Found 2 errors in 1 file (checked 3 source files)
+compileall ok
+(mypy: the same 2 pre-existing render_governance errors as on main)

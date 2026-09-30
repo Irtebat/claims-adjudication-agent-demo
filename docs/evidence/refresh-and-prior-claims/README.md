@@ -44,6 +44,27 @@ Branch `refresh-commands-and-prior-claims`, off `main` 888ea2d.
   `gold.adjudications_current` has 4999 `FINAL` rows and 1 `REVIEWED`;
   `gold.claims_current` has 5000 rows.
 
+## Follow-up fixes (code and tests only, no workspace commands)
+
+- Empty-workspace bootstrap: the gold fact now joins the always-defined pipeline view
+  `decision_records_for_fact` (empty and typed while the decision-record CDF source is
+  absent). `pipelines/tests/test_decision_records_bootstrap.py` executes the real
+  transformation on local Spark (pyspark 4.0.1, Java 17) with the source absent: no
+  streaming table or flow is registered, the view is empty with the declared schema,
+  and the fact's own decision-record SQL, extracted from `gold_analytics.sql`, runs
+  against it and returns one row per adjudication with NULL agent columns. With the
+  source present the view exposes the identical schema. Without pyspark that module
+  is skipped (reported as 1 skipped).
+- `pipelines/run.py refresh` fails loudly when the decision-record CDF table is not
+  found, unless `--allow-missing-decision-records` is passed (the bootstrap passes it).
+- `prior_claims_corpus` job (failed live in run 124128428225115 with
+  `NOT_SUPPORTED_WITH_SERVERLESS` on PERSIST TABLE): no caching; the candidate set is
+  staged once to the Delta table `gold.prior_claims_corpus_staging`. A test scans the
+  job and its local imports for cache/persist calls.
+- Retrieval: each arm queries `reference.prior_claims_corpus` directly and orders by
+  the indexed expression; tests assert character identity with the index DDL (built
+  from shared constants in `agent/src/retrieval.py`) and the absence of any CTE.
+
 ## Live run: not performed (blocked)
 
 The first live step, deploying the agent bundle so the new `prior_claims_corpus` job
