@@ -6,9 +6,10 @@ import directly because the notebook's directory is the working directory.
 """
 
 import ast
+import os
 import re
+import subprocess
 import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -74,31 +75,81 @@ def test_job_is_notebook_source(job):
     assert (SRC / f"{job}.py").read_text().startswith("# Databricks notebook source\n")
 
 
-@pytest.mark.parametrize("job", JOBS)
-def test_import_prologue_runs_without_file(job, monkeypatch):
-    """Exec the imports as a notebook would: no __file__, no sys.path bootstrap."""
-    # Runtime-only third-party deps; any attribute import resolves to the stub itself.
-    for name in (
-        "psycopg",
-        "databricks",
-        "databricks.sdk",
-        "pyspark",
-        "pyspark.sql",
-        "pyspark.sql.types",
-    ):
-        stub = types.ModuleType(name)
-        stub.__getattr__ = lambda attr, stub=stub: stub
-        monkeypatch.setitem(sys.modules, name, stub)
-    tree = _tree(job)
+_STUB = """\
+class _Any:
+    def __getattr__(self, name):
+        return self
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+
+def __getattr__(name):
+    return _Any()
+"""
+
+# Runtime-only third-party deps, stubbed as files so the subprocess imports them normally.
+_STUB_FILES = (
+    "psycopg.py",
+    "confluent_kafka.py",
+    "databricks/__init__.py",
+    "databricks/sdk.py",
+    "pyspark/__init__.py",
+    "pyspark/sql/__init__.py",
+    "pyspark/sql/types.py",
+)
+
+# Runs inside the subprocess: the notebook's directory (cwd) goes first on sys.path, as
+# Databricks does for a notebook task, then the stubs. `-I` drops PYTHONPATH, user site,
+# and the implicit cwd entry, so nothing else can make services/src importable.
+_RUNNER = """\
+import os, sys
+stubs, prologue = sys.argv[1], sys.argv[2]
+sys.path[:0] = [os.getcwd(), stubs]
+namespace = {"__name__": "__main__"}
+exec(compile(open(prologue).read(), "<notebook>", "exec"), namespace)
+assert "__file__" not in namespace
+"""
+
+# Jobs whose opening statements import a sibling module from services/src.
+SIBLING_IMPORT_JOBS = [job for job in JOBS if job != "migrate"]
+
+
+def _run_prologue(job, cwd, tmp_path):
+    """Exec the job's statements before its first dbutils/spark use, like a notebook task."""
+    stubs = tmp_path / "stubs"
+    for rel in _STUB_FILES:
+        (stubs / rel).parent.mkdir(parents=True, exist_ok=True)
+        (stubs / rel).write_text(_STUB)
     body = []
-    for node in tree.body:
+    for node in _tree(job).body:
         if re.search(r"\b(dbutils|spark)\b", ast.unparse(node)):
             break
         body.append(node)
-    prologue = ast.Module(body=body, type_ignores=[])
-    namespace = {"__name__": "__main__"}
-    exec(compile(prologue, str(SRC / f"{job}.py"), "exec"), namespace)
-    assert "__file__" not in namespace
+    prologue = tmp_path / "prologue.py"
+    prologue.write_text(ast.unparse(ast.Module(body=body, type_ignores=[])))
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    return subprocess.run(
+        [sys.executable, "-I", "-c", _RUNNER, str(stubs), str(prologue)],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.parametrize("job", JOBS)
+def test_import_prologue_runs_from_notebook_dir(job, tmp_path):
+    result = _run_prologue(job, SRC, tmp_path)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("job", SIBLING_IMPORT_JOBS)
+def test_import_prologue_fails_outside_notebook_dir(job, tmp_path):
+    """Negative control: from services/, sibling imports must not resolve."""
+    result = _run_prologue(job, SERVICES, tmp_path)
+    assert result.returncode != 0
+    assert "ModuleNotFoundError" in result.stderr
 
 
 @pytest.mark.parametrize("job", JOBS)
