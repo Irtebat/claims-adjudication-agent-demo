@@ -44,6 +44,12 @@ flowchart LR
 
 Working directory: `app/`.
 
+### First-time only
+
+Before first deploy, grant the app service principal `d5309ee7-a8ea-499f-99d4-4ccbd8369d93` the Lakebase privileges required by finalization: `INSERT` on `public.outbox`; `SELECT, UPDATE` on `public.adjudications`; and `INSERT` on `public.adjudication_decision_records`. Use the reviewed SQL in [app deployment grants](../docs/evidence/app-deploy/grants.sql); the services `migrate` job also applies the schema/grants needed by that layer.
+
+Configure `ADJUSTER_GROUPS`, `BUSINESS_GROUPS`, and `GROUP_SCOPE` (`account` by default). `ADJUSTER_USERS` and `BUSINESS_USERS` are per-user overrides, not the primary role mechanism. `app.yaml` currently pins one email for the demo account. With no matching group or override, guarded routes deny by default.
+
 ```bash
 databricks bundle validate --strict -t default --profile fe-bar
 databricks bundle deploy -t default --profile fe-bar
@@ -60,11 +66,14 @@ Working directory: `app/`. These commands are read-only.
 
 ```bash
 databricks apps get steel-claims-cockpit --profile fe-bar -o json
-curl -fsS -H "Authorization: Bearer $DATABRICKS_TOKEN" \
+APP_OAUTH_TOKEN="$(databricks auth token --profile fe-bar -o json | jq -r .access_token)"
+curl -fsS -H "Authorization: Bearer $APP_OAUTH_TOKEN" \
   "https://steel-claims-cockpit-7474655183924919.aws.databricksapps.com/api/whoami"
 ```
 
-Verify the app is `RUNNING`, deployment is `SUCCEEDED`, `/api/whoami` returns the expected role set, each persona exposes only allowed screens, and adjuster drill-through opens the correct record. The curl requires a user token; never commit it.
+The token command is confirmed on CLI 1.17 and requires U2M authentication. Verify the app is `RUNNING`, deployment is `SUCCEEDED`, and `/api/whoami` returns the expected role set. Never print or commit the bearer.
+
+Development checks from `app/`: `npm test && npx tsc -b tsconfig.server.json && npx appkit lint`.
 
 ## Status
 

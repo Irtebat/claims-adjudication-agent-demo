@@ -46,11 +46,14 @@ Working directory: repository root for wrappers; `pipelines/` for the metric-vie
 ```bash
 uv run --with pyyaml python pipelines/run.py generate
 uv run --with pyyaml python pipelines/run.py refresh
+uv run --with pyyaml python pipelines/run.py refresh --allow-missing-decision-records
+uv run --with pyyaml python pipelines/run.py govern
 cd pipelines
 databricks bundle run deploy_metric_views -t prod --profile fe-bar
 ```
 
 Do not run `refresh_medallion` directly: the wrapper resolves all native-CDF names. Full refresh is reserved for the schema-change procedure in the runbook.
+`--allow-missing-decision-records` is only for bootstrap or a workspace where no decision record has ever been written; routine live refresh should fail closed without it.
 
 ## Verify
 
@@ -62,6 +65,8 @@ databricks experimental aitools tools query --warehouse 38e458a09de4a055 --profi
 ```
 
 Expected: pipeline `steel-claims` is `IDLE` with latest update `COMPLETED`; the inventory includes the published types captured in [UC evidence](../docs/evidence/current-state/uc-inventory.json).
+
+Development checks from the repository root: `uv run --with ruff ruff check pipelines && uv run --with pytest --with pyyaml pytest -q pipelines/tests`.
 
 ## Status
 

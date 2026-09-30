@@ -63,6 +63,8 @@ uv run python -c 'import mlflow; mlflow.set_tracking_uri("databricks://fe-bar");
 
 Expected: aliases resolve to explicit READY versions; the latest relevant MLflow run is `FINISHED` and its `candidate_version` equals `N`.
 
+Development checks from `eval/`: `uv run ruff check src tests && uv run ruff format --check src tests && uv run pytest -q`.
+
 ## Status
 
 2026-10-01: repo head contains the direct human-gated workflow; no eval bundle job is current. On `fe-bar`, both `@candidate` and `@prod` resolve to version 1.

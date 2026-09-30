@@ -64,6 +64,8 @@ databricks apps get steel-claims-cockpit --profile fe-bar -o json
 
 Expected: core jobs are listed, the medallion pipeline is `IDLE` after a completed update, and the app is `RUNNING`. Detailed expected output is committed under [current-state evidence](docs/evidence/current-state/).
 
+Development checks are layer-specific; run the short command line in each layer README. Documentation checks: `git diff --check` plus the repository link and heading checks used by this change.
+
 ## Status
 
 2026-10-01: repository head contains all layers. On profile `fe-bar`, the app, medallion, Lakebase synced tables, agent v1 endpoint, dashboard, and Genie spaces are live. The 4,999-row corpus is live, but endpoint v1 still reads legacy `public.prior_claims` until promotion. Services are built but not deployed.

@@ -1,5 +1,7 @@
 {
   "captured_at": "2026-10-01",
+  "artifact_type": "projection",
+  "derived_by": "Projected from the listed CLI JSON responses by selecting job id/name and pipeline id/name/state/latest update.",
   "commands": [
     "databricks jobs list --profile fe-bar -o json",
     "databricks pipelines list-pipelines --profile fe-bar -o json"

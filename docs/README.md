@@ -41,8 +41,8 @@ flowchart TB
   agent --> endpoint
   gold --> dash["AI/BI dashboards + Genie"]
   gold --> evalx["eval: MLflow gate + promotion"]
-  agent -. planned .-> app["app: adjuster UI"]
-  endpoint -. planned .-> svc["services: Kafka worker,<br/>outbox relay, consumers"]
+  agent --> app["live app:<br/>adjuster + business UI"]
+  endpoint -. "built, not deployed" .-> svc["services: Kafka worker,<br/>outbox relay, consumers"]
 ```
 
 ## Layers

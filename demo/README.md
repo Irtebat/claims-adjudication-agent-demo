@@ -10,7 +10,7 @@ Job `steel-claims-demo-backlog`; Lakebase rows tagged `synthetic_demo_backlog`. 
 
 ## Resources configured
 
-Parameters: `count` (500), `seed` (42), `mode` (`serving_endpoint`), Lakebase endpoint and database.
+Parameters: `count` (500), `seed` (42), `mode` (`serving_endpoint`), Lakebase endpoint and database. Keep `count >= 100` so every injected label pattern is represented.
 
 ## Data flow
 
@@ -34,12 +34,19 @@ Working directory: `demo/`. CLI 1.17 job parameters use `--params`:
 
 ```bash
 databricks bundle run demo_backlog -t prod --profile fe-bar --params count=1000,seed=123,mode=serving_endpoint
+cd ..
+uv run --with pyyaml python scripts/refresh.py demo
 ```
 
-Cleanup is destructive and Lakebase-only; use fully qualified names and a transaction:
+Connect with `databricks psql --project fe-bar-operational-plane --profile fe-bar`. Cleanup is destructive and Lakebase-only; use fully qualified names and a transaction:
 
 ```sql
 BEGIN;
+DELETE FROM public.adjudication_decision_records WHERE adjudication_id IN (
+  SELECT adjudication_id FROM public.adjudications WHERE claim_id IN (
+    SELECT claim_id FROM public.claims WHERE data_provenance='synthetic_demo_backlog'
+  )
+);
 DELETE FROM public.adjudications WHERE claim_id IN (SELECT claim_id FROM public.claims WHERE data_provenance='synthetic_demo_backlog');
 DELETE FROM public.claims WHERE data_provenance='synthetic_demo_backlog';
 COMMIT;
@@ -54,6 +61,8 @@ databricks jobs list --profile fe-bar -o json
 ```
 
 Expected: `steel-claims-demo-backlog` is listed. A completed run returns a JSON summary; any sample summary in documentation is illustrative, not live evidence.
+
+Development checks from the repository root: `uv run --project eval pytest demo/tests -q && uv run --with ruff ruff check demo`.
 
 ## Status
 

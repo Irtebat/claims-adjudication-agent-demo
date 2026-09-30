@@ -47,6 +47,8 @@ databricks pipelines list-pipelines --profile fe-bar -o json
 
 Expected: corpus state starts with `SYNCED_TABLE_ONLINE`; medallion and all seven sync pipelines are idle after completed updates.
 
+Development checks from the repository root: `uv run --with ruff ruff check scripts && uv run --with pytest --with pyyaml pytest -q pipelines/tests`.
+
 ## Status
 
 2026-10-01: repo head includes the bootstrap fallback and corpus refresh ordering. The one-time corpus cutover is complete on `fe-bar`; routine refresh may be used.

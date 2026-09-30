@@ -49,6 +49,8 @@ databricks genie get-space 01f1bac20bf6119f84fa99c7ba438ba4 --profile fe-bar -o 
 
 Expected: dashboard lifecycle `ACTIVE`; both spaces return the titles above and warehouse `38e458a09de4a055`.
 
+Development check from `dashboards/`: `jq empty quality_claims.lvdash.json genie/genie_space.json`.
+
 ## Status
 
 2026-10-01: definitions at repo head match one ACTIVE deployed dashboard and two live Genie spaces on `fe-bar`.

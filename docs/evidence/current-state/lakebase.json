@@ -1,5 +1,7 @@
 {
   "captured_at": "2026-10-01",
+  "artifact_type": "projection",
+  "derived_by": "Projected from the read-only rows printed by capture_lakebase.py; consumer grants are grouped by grantee and table.",
   "command": "uv run --with 'psycopg[binary]==3.2.10' --with 'databricks-sdk>=0.81.0' python docs/evidence/current-state/capture_lakebase.py",
   "queries": {
     "indexes": "SELECT schemaname, tablename, indexname, indexdef FROM pg_indexes WHERE schemaname='reference' AND tablename='prior_claims_corpus' ORDER BY indexname",

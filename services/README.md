@@ -14,7 +14,7 @@ The producer keys events by `claim_id`; the worker deduplicates an existing agen
 
 ## Resources configured
 
-Secret scope `fe-bar-aiven-kafka` requires four Kafka keys defined by the resource files. `migrate` applies schema/grants first; dropping legacy `claims_pending` is cleanup, not its primary purpose. Jobs are independent hourly schedules, so ordering is eventual unless driven manually.
+Secret scope `fe-bar-aiven-kafka` requires `bootstrap-servers`, `sasl-username`, `sasl-password`, and `ssl-ca-pem`. Scope `claims-agent` requires `app-sp-client-id` and `app-sp-client-secret`. `migrate` applies schema/grants first; dropping legacy `claims_pending` is cleanup, not its primary purpose. Jobs are independent hourly schedules, so ordering is eventual unless driven manually.
 
 The relay sets `published_at` only after broker acknowledgement. A crash can republish, so downstream consumers use deterministic `STL-`, `INV-`, and `SRC-<claim_id>` keys with UPSERT/ON CONFLICT semantics. This is idempotent apply, not a claim that Kafka itself delivers exactly once.
 
@@ -31,13 +31,20 @@ Checkpoint replay, worker retry, relay retry, and repeated consumer delivery the
 
 ## Deploy
 
-Secret writes are mutating and must be performed deliberately before deployment:
+Scope creation and secret writes are mutating and must be performed deliberately before deployment:
 
 ```bash
-databricks secrets put-secret fe-bar-aiven-kafka <key> --profile fe-bar
+databricks secrets create-scope fe-bar-aiven-kafka --profile fe-bar
+databricks secrets create-scope claims-agent --profile fe-bar
+databricks secrets put-secret fe-bar-aiven-kafka bootstrap-servers --profile fe-bar
+databricks secrets put-secret fe-bar-aiven-kafka sasl-username --profile fe-bar
+databricks secrets put-secret fe-bar-aiven-kafka sasl-password --profile fe-bar
+databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem --profile fe-bar
+databricks secrets put-secret claims-agent app-sp-client-id --profile fe-bar
+databricks secrets put-secret claims-agent app-sp-client-secret --profile fe-bar
 ```
 
-Working directory: `services/`. Deploy schedules paused, then activate explicitly:
+Working directory: `services/`. All four schedules are authored `UNPAUSED`; production mode does not pause them. Deploy only after both scopes contain every key, or producer, worker, relay, and consumers start failing on their hourly schedules.
 
 ```bash
 databricks bundle validate --strict -t prod --profile fe-bar
@@ -62,10 +69,15 @@ Working directory: `services/`. Read-only:
 
 ```bash
 databricks secrets list-secrets fe-bar-aiven-kafka --profile fe-bar -o json
+databricks secrets list-secrets claims-agent --profile fe-bar -o json
 databricks jobs list --profile fe-bar -o json
 ```
 
-Expected before deployment: all required secret key names exist; values are never returned. Expected after deployment: five `fe-bar-services-*` jobs exist and intended schedules show the chosen pause state.
+Expected before deployment: all six required key names exist; values are never returned. Expected after deployment: five `fe-bar-services-*` jobs exist and the four processing schedules are `UNPAUSED`.
+
+To pause or resume a deployed schedule, use the Jobs UI: Workflows → Jobs & Pipelines → select the job → Schedule & Triggers → toggle the schedule. CLI 1.17 `jobs update JOB_ID --json ...` is a partial-update API, but changing `schedule` requires carrying forward the job's complete cron and timezone; the UI toggle avoids accidentally replacing those fields.
+
+Development checks from `services/`: `uv run pytest -q && uv run --with ruff ruff check . && uv run --with ruff ruff format --check .`.
 
 ## Status
 

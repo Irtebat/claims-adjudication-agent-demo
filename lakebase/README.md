@@ -26,7 +26,7 @@ Desired and deployed synced-table inventory on 2026-10-01:
 
 ## Resources configured
 
-Bundle job `fe-bar-lakebase-setup-and-seed`; native CDF to `fe-bar-ir.cdf`; ANN and BM25 corpus indexes. Before create/recreate, confirm the app and serving principal IDs and overrides `APP_SP_PRINCIPAL` / `SERVING_SP_PRINCIPAL`; creation waits up to one hour for `SYNCED_TABLE_ONLINE*` before indexes and grants run.
+Bundle job `fe-bar-lakebase-setup-and-seed`; native CDF to `fe-bar-ir.cdf`; ANN and BM25 corpus indexes. Before create/recreate, confirm app principal `d5309ee7-a8ea-499f-99d4-4ccbd8369d93` and serving principal `47643eb1-dbd5-40a6-a51d-5da6b8e2da7a`, or override `APP_SP_PRINCIPAL` / `SERVING_SP_PRINCIPAL` after rotation. Creation waits up to one hour for `SYNCED_TABLE_ONLINE*` before indexes and grants run.
 
 Create runs `regrant_synced_table_selects.py` only after a new table reaches ONLINE. Routine re-sync preserves ownership, indexes, and grants, so it does not regrant. Recreate drops them; after ONLINE it rebuilds indexes and regrants SELECT.
 
@@ -60,7 +60,9 @@ Working directory: repository root. First-time only:
 ```bash
 uv run --with pyyaml python lakebase/run.py setup-and-seed
 uv run --with pyyaml python lakebase/run.py create-cdf
+uv run --with pyyaml python lakebase/run.py policy-intake
 uv run --with pyyaml python lakebase/run.py synced-tables
+uv run --with pyyaml python lakebase/run.py recreate-synced-table --table prior_claims_corpus
 ```
 
 Routine refresh uses `resync-synced-tables`; recreate is only for incompatible schema changes. Both creation and recreation poll until ONLINE; failure or timeout stops before post-create grants.
@@ -76,6 +78,8 @@ databricks serving-endpoints get agents_fe-bar-ir-default-claims_adjudication_ag
 ```
 
 Repeat `get-synced-table` for all seven names above. Expected: `status.detailed_state` starts with `SYNCED_TABLE_ONLINE`; app and serving principal IDs match the grant preflight. Index and grant output is in [Lakebase evidence](../docs/evidence/current-state/lakebase.json).
+
+Development checks from the repository root: `uv run --with ruff ruff check lakebase && uv run --with pytest pytest -q lakebase/tests`.
 
 ## Status
 

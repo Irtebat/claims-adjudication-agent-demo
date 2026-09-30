@@ -45,13 +45,15 @@ databricks bundle validate --strict -t prod --profile fe-bar
 databricks bundle deploy -t prod --profile fe-bar
 ```
 
-First-time setup runs fraud graph and corpus construction after the first medallion pass, then creates/resyncs the Lakebase tables. A routine release is human-gated: register, evaluate, promote, then run `deploy_claims_agent`.
+First-time setup follows `scripts/bootstrap.py`: run `fraud_graph` before the first medallion refresh so it publishes an empty typed `gold.customer_heat_risk`; refresh the medallion; then run `fraud_graph` again with real claims, run `prior_claims_corpus`, and refresh again. Create synced tables after the app and serving principals exist. A routine release is human-gated: register, evaluate, promote, then deploy the endpoint.
 
 ## Run
 
 Working directory: `agent/`.
 
 ```bash
+databricks bundle run fraud_graph -t prod --profile fe-bar
+databricks bundle run prior_claims_corpus -t prod --profile fe-bar
 uv run python src/register_agent.py --profile fe-bar
 uv run python ../eval/src/evaluate.py --profile fe-bar --experiment /Shared/claims-adjudication-offline-evaluation --candidate-version N
 uv run python ../eval/src/promote.py --profile fe-bar --candidate-version N --promote
@@ -72,6 +74,8 @@ databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_age
 ```
 
 Expected now: endpoint `READY`, served entity version `1`, and both aliases resolve to READY version 1. After promotion, expected served version must equal the promoted `@prod` version and the smoke must prove corpus retrieval.
+
+Development checks from `agent/`: `uv run ruff check src tests && uv run ruff format --check src tests && uv run pytest -q`.
 
 ## Status
 
