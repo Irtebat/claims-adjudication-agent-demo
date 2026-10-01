@@ -120,7 +120,7 @@ def test_model_adapter_reuses_predict_retry_and_persist_guard():
 
     model = Model()
     adapter = model_adapter("model", "models:/x@prod", loader=lambda _: model)
-    adapter.isolate_process = False
+    adapter.isolate_worker = False
     with pytest.raises(PersistenceViolation, match="persistence invariant"):
         compare(
             [_records()[0]],
@@ -138,7 +138,7 @@ def test_endpoint_uses_invocations_rest_and_fails_closed():
         }
     }
     adapter = endpoint_adapter("endpoint", "claims/name", SimpleNamespace(api_client=api_client))
-    adapter.isolate_process = False
+    adapter.isolate_worker = False
     output, _ = adapter.predict({"claim_id": "c"})
     assert output["verdict"] == "DENY"
     api_client.do.assert_called_once_with(
@@ -287,13 +287,28 @@ def test_deterministic_adapter_captures_local_recommendation_before_model_path_p
 def test_per_claim_timeout_is_recorded_as_failure():
     adapter = callable_adapter("slow", lambda claim: time.sleep(1))
     adapter.timeout_seconds = 0.01
-    adapter.isolate_process = True
+    adapter.isolate_worker = True
     report = compare(
         _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
     )
     row = report["per_claim"][0]["candidates"]["slow"]
     assert row["verdict"] is False
     assert "ClaimTimeoutError" in row["error"]
+
+
+def test_isolated_worker_propagates_traceback():
+    def explode(claim):
+        raise ValueError(f"bad claim {claim['claim_id']}")
+
+    adapter = callable_adapter("broken", explode)
+    adapter.isolate_worker = True
+    report = compare(
+        _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
+    )
+
+    error = report["per_claim"][0]["candidates"]["broken"]["error"]
+    assert "Traceback (most recent call last)" in error
+    assert "ValueError: bad claim one" in error
 
 
 def test_first_five_failures_abort_and_log_diagnostics(monkeypatch):

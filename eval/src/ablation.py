@@ -5,11 +5,13 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-import multiprocessing
 import os
+import queue
 import sys
 import tempfile
+import threading
 import time
+import traceback
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -188,44 +190,35 @@ class CandidateAdapter:
     deterministic: bool = False
     close: Callable[[], None] | None = None
     timeout_seconds: int = DEFAULT_CLAIM_TIMEOUT_SECONDS
-    isolate_process: bool = False
+    isolate_worker: bool = False
 
     def predict(self, claim: dict) -> tuple[dict, float]:
         started = time.perf_counter()
-        if not self.isolate_process:
+        if not self.isolate_worker:
             output = standardize_output(self.invoke(claim), deterministic=self.deterministic)
             return output, (time.perf_counter() - started) * 1000
 
-        context = multiprocessing.get_context("fork")
-        parent, child = context.Pipe(duplex=False)
+        result: queue.Queue = queue.Queue(maxsize=1)
 
         def invoke() -> None:
             try:
-                child.send((True, self.invoke(claim)))
-            except BaseException as exc:
-                child.send((False, (type(exc).__name__, str(exc))))
-            finally:
-                child.close()
+                result.put((True, self.invoke(claim)))
+            except BaseException:
+                result.put((False, traceback.format_exc()))
 
-        worker = context.Process(target=invoke, name=f"ablation-{self.name}", daemon=True)
+        worker = threading.Thread(target=invoke, name=f"ablation-{self.name}", daemon=True)
         worker.start()
-        child.close()
-        if not parent.poll(self.timeout_seconds):
-            worker.terminate()
-            worker.join(timeout=5)
-            parent.close()
+        try:
+            succeeded, value = result.get(timeout=self.timeout_seconds)
+        except queue.Empty as exc:
             raise ClaimTimeoutError(
                 f"candidate {self.name} exceeded {self.timeout_seconds}s for claim "
                 f"{claim.get('claim_id')}"
-            )
-        succeeded, value = parent.recv()
-        parent.close()
-        worker.join(timeout=5)
+            ) from exc
         if not succeeded:
-            error_type, message = value
-            if error_type == "PersistenceViolation":
-                raise PersistenceViolation(message)
-            raise RuntimeError(f"{error_type}: {message}")
+            if "PersistenceViolation" in value:
+                raise PersistenceViolation(value)
+            raise RuntimeError(f"candidate worker failed:\n{value}")
         output = standardize_output(value, deterministic=self.deterministic)
         return output, (time.perf_counter() - started) * 1000
 
@@ -274,7 +267,7 @@ def deterministic_adapter(name: str, profile: str | None = None) -> CandidateAda
 def model_adapter(name: str, uri: str, loader=mlflow.pyfunc.load_model) -> CandidateAdapter:
     model = load_candidate(uri, loader=loader)
     return CandidateAdapter(
-        name, lambda claim: predict_claim(claim, model=model), isolate_process=True
+        name, lambda claim: predict_claim(claim, model=model), isolate_worker=True
     )
 
 
@@ -296,7 +289,7 @@ def endpoint_adapter(
             raise PersistenceViolation(f"{name}: endpoint persistence invariant failed")
         return response
 
-    return CandidateAdapter(name, invoke, isolate_process=True)
+    return CandidateAdapter(name, invoke, isolate_worker=True)
 
 
 def resolve_candidate(spec: str) -> CandidateAdapter:
