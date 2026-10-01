@@ -121,9 +121,9 @@ correction rate, per-claim disagreements, dimension deltas, and McNemar-style pa
 counts. Unsupported citation and judge results are `N/A`, never zero. Candidate runs
 share an `ablation_id`; the comparison JSON is an MLflow artifact and is not committed.
 
-The deterministic adapter late-imports `deterministic_recommendation` from
-`agent/src/authorities.py` or `agent/src/decision_record.py`, with an actionable error
-until the `deterministic-ruleset` branch lands. The production agent candidate is
+The deterministic adapter builds the same frozen resolution/authority context as the
+agent, then late-imports `decision_record.deterministic_recommendation(context)`, with an
+actionable error until the `deterministic-ruleset` branch lands. The production candidate is
 `models:/fe-bar-ir.default.claims_adjudication_agent@prod` and local model invocation
 enforces `persist=false`.
 
@@ -134,9 +134,9 @@ uv run --project . python src/ablation.py --dataset heldout --n 100 --candidates
 uv run --project . python src/ablation.py --dataset history --n 100 --candidates deterministic_baseline,agent@prod
 ```
 
-`history` resolves to the MLflow-managed dataset
-`fe-bar-ir.default.claims_adjudication_eval_history`; selection round-robins stable
-verdict/disposition/claim-type strata to exactly 100 rows.
+`history` queries the existing labeled histories through `build_dataset.py`, resolves
+their policy oracles, then round-robins stable verdict/disposition/claim-type strata to
+exactly 100 rows; it does not rely on a separately named history dataset.
 
 The planning estimate is 350,000 agent tokens per command (100 claims × one LLM
 candidate × 3,500 tokens/claim), or roughly 700,000 tokens for both commands; use
@@ -144,13 +144,23 @@ candidate × 3,500 tokens/claim), or roughly 700,000 tokens for both commands; u
 
 ### Narrative-dependent held-out design
 
-`src/heldout.py` creates exactly 100 records: 20 each for narrative-only installation
-misuse, environment exclusion, contradictory defect mode, disclosed prior repair, and
-neutral controls. Each scenario records its written-policy basis. It clones real
-reference-linked rows, retaining existing coil/customer identifiers so resolution works,
-and puts labels only under `expectations`. Its sole permitted destination is the isolated
-evaluation dataset `fe-bar-ir.eval.heldout_claims`; it contains no code path to Lakebase
-`public.claims` / `adjudications` or medallion tables. No live table is created by tests.
+`src/heldout.py` creates exactly 100 records: 25 each for narrative-only excluded
+installation, excluded environment, coastal proximity below 2 km, and neutral controls.
+These are the narrative-relevant exclusions actually authored in
+`lakebase/src/policy_source.json`; each row records its policy clause and section reference.
+Treatment structured fields remain neutral (`inland`, `ventilated`, 10 km), so the current
+structured authority approves while narrative-grounded gold denies. Controls use the same
+neutral facts and retain their real source labels. Inputs are limited to
+`LEAN_CLAIM_COLUMNS`, labels exist only under `expectations`, IDs are opaque, and several
+factual paraphrases are rotated per stratum.
+
+The only live creation path writes the isolated MLflow/UC evaluation dataset
+`fe-bar-ir.eval.heldout_claims`; it never writes Lakebase `public.claims` /
+`adjudications` or medallion tables. It is prepared but has not been executed:
+
+```bash
+uv run --project . python src/heldout.py --create --profile fe-bar
+```
 
 Tests use synthetic fixtures and make no live calls.
 

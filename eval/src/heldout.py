@@ -1,199 +1,220 @@
-"""Build a narrative-dependent, leakage-free held-out claims dataset.
-
-The builder is deliberately storage-agnostic.  Live callers must provide an MLflow
-evaluation-dataset writer or a writer for ``fe-bar-ir.eval.heldout_claims``; this
-module never writes claims, adjudications, or medallion tables.
-"""
+"""Policy-grounded narrative-dependent held-out dataset builder."""
 
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
-from collections import Counter, defaultdict
-from typing import Any, Callable, Iterable
+import uuid
+from collections import Counter
+from typing import Any, Iterable
+
+import mlflow
+
+from build_dataset import LABEL_KEYS, LEAN_CLAIM_COLUMNS, _execute_sql, source_sql
+from resolver_oracle import ResolverOracle
 
 HELDOUT_TABLE = "fe-bar-ir.eval.heldout_claims"
 SCENARIO_COUNTS = {
-    "narrative_installation_misuse": 20,
-    "narrative_environment_exclusion": 20,
-    "narrative_defect_mode_override": 20,
-    "narrative_prior_repair": 20,
-    "neutral_control": 20,
+    "narrative_excluded_installation": 25,
+    "narrative_excluded_environment": 25,
+    "narrative_coastal_proximity": 25,
+    "neutral_control": 25,
 }
-SCENARIO_POLICY = {
-    "narrative_installation_misuse": (
-        "Narrative evidence of installation misuse triggers the written installation exclusion, "
-        "even when the structured installation field is benign."
-    ),
-    "narrative_environment_exclusion": (
-        "Narrative evidence of excluded exposure triggers the written environment exclusion, "
-        "even when the structured environment field is benign."
-    ),
-    "narrative_defect_mode_override": (
-        "The described physical failure mode controls classification when it contradicts the "
-        "structured defect code."
-    ),
-    "narrative_prior_repair": (
-        "A disclosed prior unsuccessful repair requires investigation rather than automatic "
-        "approval under the written escalation policy."
-    ),
-    "neutral_control": (
-        "The narrative agrees with structured fields, so the ordinary structured-field outcome "
-        "is unchanged."
-    ),
+POLICY = {
+    "narrative_excluded_installation": {
+        "section_ref": "warranties.coverage.excluded_installations",
+        "clause_id": "/warranties/coverage/excluded_installations",
+        "fact": "standing_water",
+    },
+    "narrative_excluded_environment": {
+        "section_ref": "warranties.coverage.excluded_environments",
+        "clause_id": "/warranties/coverage/excluded_environments",
+        "fact": "marine",
+    },
+    "narrative_coastal_proximity": {
+        "section_ref": "warranties.coverage.min_coast_distance_km",
+        "clause_id": "/warranties/coverage/min_coast_distance_km",
+        "fact": "coast_distance_km<2.0",
+    },
+    "neutral_control": {
+        "section_ref": "warranties.coverage",
+        "clause_id": "/warranties/coverage",
+        "fact": "structured_and_narrative_agree",
+    },
 }
 NARRATIVES = {
-    "narrative_installation_misuse": (
-        "Inspection found panels fastened through drainage channels contrary to installation "
-        "instructions; trapped water originated at those fasteners."
+    "narrative_excluded_installation": (
+        "Photos show rainwater remaining in the panel laps for days after each storm.",
+        "The inspection found persistent pooled water beneath the installed sheets.",
+        "Drainage is blocked and water stands against the underside of the panels.",
+        "Site notes record ponding in the roof channels after otherwise light rainfall.",
     ),
-    "narrative_environment_exclusion": (
-        "The installed material is continuously exposed to marine salt spray at the shoreline, "
-        "an excluded environment, despite the intake field stating inland."
+    "narrative_excluded_environment": (
+        "Salt spray reaches the building directly from the adjacent tidal harbor.",
+        "The panels face open sea and receive airborne salt during onshore winds.",
+        "Inspection notes salt deposits from regular marine aerosol exposure.",
+        "The installation is beside a working seaport with direct seawater mist.",
     ),
-    "narrative_defect_mode_override": (
-        "Measurements are within mechanical tolerance; the observed failure is coating "
-        "delamination and exposed substrate, not the recorded tensile defect."
-    ),
-    "narrative_prior_repair": (
-        "The customer reports that an earlier authorized patch repair failed at the same location; "
-        "escalation and repair-history review are required."
+    "narrative_coastal_proximity": (
+        "The survey places the building 0.6 km from the shoreline.",
+        "The installation coordinates are 1.2 km inland from the coast.",
+        "A site map measures 0.9 km between the roof and the high-water line.",
+        "The customer facility is 1.7 km from the nearest coastline.",
     ),
     "neutral_control": (
-        "Inspection confirms the reported defect mode and the stated installation and environment "
-        "conditions; no prior repair was attempted."
+        "The inland roof is ventilated and remains dry beneath the panels.",
+        "Inspection confirms free drainage, inland exposure, and no retained water.",
+        "The site is well inland with ventilated installation and clear drainage paths.",
+        "No salt exposure or ponding was observed at the ventilated inland site.",
     ),
 }
-
-
-def _stable_rows(rows: Iterable[dict]) -> list[dict]:
-    return sorted(rows, key=lambda row: hashlib.sha256(str(row["claim_id"]).encode()).hexdigest())
-
-
-def _gold(scenario: str, source: dict) -> dict:
-    """Return policy-derived labels; callers place these under expectations only."""
-    if scenario in {"narrative_installation_misuse", "narrative_environment_exclusion"}:
-        return {"verdict": "DENY", "disposition_class": "DENY", "approval_subchoice": None}
-    if scenario == "narrative_prior_repair":
-        return {
-            "verdict": "PEND",
-            "disposition_class": "PEND",
-            "approval_subchoice": "PEND_INVESTIGATE",
-        }
-    if scenario == "narrative_defect_mode_override":
-        return {
-            "verdict": "APPROVE",
-            "disposition_class": "APPROVE",
-            "approval_subchoice": "REWORK",
-        }
-    disposition = source.get("gold_disposition") or "CREDIT"
-    verdict = source.get("gold_verdict") or "APPROVE"
-    return {
-        "verdict": verdict,
-        "disposition_class": disposition_class(disposition, verdict),
-        "approval_subchoice": approval_subchoice(disposition, verdict),
-    }
+_ID_NAMESPACE = uuid.UUID("8d142754-2467-4e77-810b-b702595834b8")
 
 
 def disposition_class(disposition: str | None, verdict: str | None = None) -> str | None:
     if disposition in {"CREDIT", "REWORK", "REPLACEMENT"}:
         return "APPROVE"
+    if disposition == "DUPLICATE":
+        return "DENY"
     if disposition == "PEND_INVESTIGATE":
         return "PEND"
     return disposition or verdict
 
 
 def approval_subchoice(disposition: str | None, verdict: str | None = None) -> str | None:
-    return (
-        disposition
-        if disposition_class(disposition, verdict) == "APPROVE"
-        else (disposition if disposition == "PEND_INVESTIGATE" else None)
+    return disposition if disposition_class(disposition, verdict) == "APPROVE" else None
+
+
+def _opaque_id(source_id: str, scenario: str, index: int) -> str:
+    return str(uuid.uuid5(_ID_NAMESPACE, f"{source_id}|{scenario}|{index}"))
+
+
+def _source_rows(rows: Iterable[dict]) -> list[dict]:
+    eligible = [
+        row
+        for row in rows
+        if row.get("claim_type") == "coating_warranty"
+        and row.get("gold_verdict") == "APPROVE"
+        and row.get("gold_disposition") in {"CREDIT", "REWORK", "REPLACEMENT"}
+    ]
+    return sorted(
+        eligible, key=lambda row: hashlib.sha256(str(row["claim_id"]).encode()).hexdigest()
     )
 
 
 def build_heldout_records(reference_rows: Iterable[dict], n: int = 100) -> tuple[list[dict], dict]:
-    """Create exactly 100 records from real reference-linked claim rows.
-
-    ``reference_rows`` must already contain valid claim/coil/customer identifiers from the
-    existing data.  Rows are cloned and only the narrative plus synthetic claim id changes,
-    preserving resolver-compatible reference keys.
-    """
+    """Clone real resolver-compatible approved warranty rows into four fixed strata."""
     if n != 100:
         raise ValueError("the narrative held-out study is fixed at exactly 100 claims")
-    rows = _stable_rows(reference_rows)
-    if len(rows) < max(SCENARIO_COUNTS.values()):
-        raise ValueError("at least 20 resolver-compatible reference rows are required")
-    records: list[dict] = []
+    rows = _source_rows(reference_rows)
+    if len(rows) < 25:
+        raise ValueError("at least 25 approved real coating-warranty reference rows are required")
+    records = []
     for scenario, count in SCENARIO_COUNTS.items():
         for index in range(count):
-            source = copy.deepcopy(rows[index % len(rows)])
-            source["claim_id"] = f"HELDOUT-{scenario}-{index:03d}"
-            source["defect_narrative"] = NARRATIVES[scenario]
-            if scenario == "narrative_installation_misuse":
-                source.update(claim_type="coating_warranty", installation="ventilated")
-            elif scenario == "narrative_environment_exclusion":
-                source.update(claim_type="coating_warranty", environment="inland")
-            elif scenario == "narrative_defect_mode_override":
-                source.update(claim_type="material_nonconformance", defect_code="MECH")
-            for key in tuple(source):
-                if key.startswith("gold_") or key in {"label", "expectations"}:
-                    source.pop(key)
+            source = rows[index]
+            claim = {key: source.get(key) for key in LEAN_CLAIM_COLUMNS}
+            claim.update(
+                claim_id=_opaque_id(str(source["claim_id"]), scenario, index),
+                environment="inland",
+                installation="ventilated",
+                coast_distance_km="10.0",
+                defect_narrative=NARRATIVES[scenario][index % len(NARRATIVES[scenario])],
+            )
+            if scenario == "neutral_control":
+                verdict, disposition = source["gold_verdict"], source["gold_disposition"]
+            else:
+                verdict, disposition = "DENY", "DENY"
             records.append(
                 {
-                    "inputs": {"claim": source},
+                    "inputs": {"claim": claim},
                     "expectations": {
-                        **_gold(scenario, rows[index % len(rows)]),
+                        "verdict": verdict,
+                        "disposition": disposition,
+                        "disposition_class": disposition_class(disposition, verdict),
+                        "approval_subchoice": approval_subchoice(disposition, verdict),
                         "scenario_type": scenario,
-                        "policy_basis": SCENARIO_POLICY[scenario],
+                        "policy_clause_id": POLICY[scenario]["clause_id"],
+                        "policy_section_ref": POLICY[scenario]["section_ref"],
+                        "narrative_fact": POLICY[scenario]["fact"],
+                        "structured_only_verdict": source["gold_verdict"],
+                        "oracle_clause_ids": source.get("_oracle_clause_ids"),
                     },
                 }
             )
-    stratification = Counter(r["expectations"]["scenario_type"] for r in records)
+    validate_heldout(records)
     metadata = {
         "record_count": len(records),
-        "stratification": dict(sorted(stratification.items())),
-        "scenario_policy": SCENARIO_POLICY,
+        "stratification": dict(
+            sorted(Counter(r["expectations"]["scenario_type"] for r in records).items())
+        ),
+        "policy": POLICY,
         "destination": HELDOUT_TABLE,
         "labels_location": "expectations_only",
     }
-    validate_heldout(records)
     return records, metadata
 
 
 def validate_heldout(records: list[dict]) -> None:
     if len(records) != 100:
         raise ValueError(f"held-out set must contain 100 claims, got {len(records)}")
-    counts: dict[str, int] = defaultdict(int)
+    counts = Counter()
     for record in records:
         claim = record.get("inputs", {}).get("claim", {})
-        leaked = {
-            "verdict",
-            "disposition",
-            "disposition_class",
-            "approval_subchoice",
-        } & claim.keys()
+        leaked = (LABEL_KEYS | {"disposition_class", "approval_subchoice"}) & claim.keys()
         if leaked:
             raise ValueError(f"held-out label leakage in inputs.claim: {sorted(leaked)}")
-        counts[record["expectations"]["scenario_type"]] += 1
+        if set(claim) != set(LEAN_CLAIM_COLUMNS):
+            raise ValueError("held-out inputs must be projected to LEAN_CLAIM_COLUMNS")
+        expected = record["expectations"]
+        if not expected.get("policy_clause_id") or not expected.get("policy_section_ref"):
+            raise ValueError("each held-out row must cite its written policy")
+        treatment = expected["scenario_type"] != "neutral_control"
+        differs = expected["structured_only_verdict"] != expected["verdict"]
+        if differs != treatment:
+            raise ValueError("held-out row is not genuinely narrative-dependent")
+        counts[expected["scenario_type"]] += 1
     if dict(counts) != SCENARIO_COUNTS:
         raise ValueError(f"invalid held-out stratification: {dict(counts)}")
 
 
-def persist(records: list[dict], writer: Callable[[str, list[dict]], Any]) -> Any:
-    """Persist only to the isolated eval destination via an explicitly supplied writer."""
-    validate_heldout(records)
-    return writer(HELDOUT_TABLE, records)
+def create_live(profile: str, warehouse_id: str) -> tuple[Any, dict]:
+    """Explicit live creation path; writes only the isolated UC evaluation dataset."""
+    rows = _source_rows(_execute_sql(profile, warehouse_id, source_sql()))
+    oracles = ResolverOracle(profile).resolve_rows(rows[:25])
+    for row, oracle in zip(rows[:25], oracles):
+        row["_oracle_clause_ids"] = oracle["oracle_clause_ids"]
+    records, metadata = build_heldout_records(rows)
+    try:
+        dataset = mlflow.genai.datasets.get_dataset(name=HELDOUT_TABLE)
+    except Exception as exc:
+        if not any(text in str(exc).lower() for text in ("not found", "does not exist")):
+            raise
+        dataset = mlflow.genai.datasets.create_dataset(uc_table_name=HELDOUT_TABLE)
+    dataset.merge_records(records)
+    return dataset, metadata
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--describe", action="store_true", help="print design; perform no writes")
+    parser.add_argument("--describe", action="store_true")
+    parser.add_argument("--create", action="store_true")
+    parser.add_argument("--profile")
+    parser.add_argument("--warehouse-id", default="38e458a09de4a055")
     args = parser.parse_args()
-    if not args.describe:
-        parser.error("live creation requires an explicit application-owned writer; use --describe")
-    print(json.dumps({"destination": HELDOUT_TABLE, "stratification": SCENARIO_COUNTS}, indent=2))
+    if args.create:
+        if not args.profile:
+            parser.error("--create requires explicit --profile")
+        mlflow.set_tracking_uri("databricks")
+        _, metadata = create_live(args.profile, args.warehouse_id)
+        print(json.dumps(metadata, indent=2))
+    elif args.describe:
+        print(
+            json.dumps({"destination": HELDOUT_TABLE, "stratification": SCENARIO_COUNTS}, indent=2)
+        )
+    else:
+        parser.error("choose --describe or --create")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,10 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
+from databricks.sdk.core import ApiClient
 
+import ablation
 from ablation import (
     NA,
     callable_adapter,
@@ -9,24 +12,26 @@ from ablation import (
     deterministic_baseline,
     endpoint_adapter,
     model_adapter,
+    normalize_expectations,
+    score,
     standardize_output,
     stratified_sample,
 )
 
 
-def _candidate(verdict, disposition, *, citations=None, violations=None, tokens=0):
+def _candidate(verdict, disposition, *, citations=None, violations=None, tokens=None):
     def invoke(claim):
-        return {
-            "custom_outputs": {
-                "recommendation": {
-                    "recommended_verdict": verdict,
-                    "recommended_disposition": disposition,
-                },
-                "cited_clause_ids": citations,
-                "invariant_violations": violations or [],
-                "usage": {"total_tokens": tokens},
-            }
+        data = {
+            "recommendation": {
+                "recommended_verdict": verdict,
+                "recommended_disposition": disposition,
+            },
+            "cited_clause_ids": citations,
+            "invariant_violations": violations,
         }
+        if tokens is not None:
+            data["usage"] = {"total_tokens": tokens}
+        return {"custom_outputs": data}
 
     return invoke
 
@@ -37,42 +42,56 @@ def _records():
             "inputs": {"claim": {"claim_id": "one"}},
             "expectations": {
                 "verdict": "APPROVE",
-                "disposition_class": "APPROVE",
-                "approval_subchoice": "CREDIT",
+                "disposition": "CREDIT",
                 "oracle_clause_ids": ["a"],
             },
         },
         {
             "inputs": {"claim": {"claim_id": "two"}},
-            "expectations": {
-                "verdict": "DENY",
-                "disposition_class": "DENY",
-                "approval_subchoice": None,
-                "oracle_clause_ids": ["a"],
-            },
+            "expectations": {"verdict": "DENY", "disposition": "DUPLICATE"},
         },
     ]
 
 
-def test_paired_report_splits_disposition_and_uses_na():
-    baseline = callable_adapter("baseline", _candidate("APPROVE", "CREDIT"))
+def test_na_is_excluded_and_all_dimensions_are_paired():
+    baseline = callable_adapter("baseline", _candidate("APPROVE", "CREDIT"), deterministic=True)
     challenger = callable_adapter(
-        "challenger", _candidate("DENY", "DENY", citations=["a"], violations=["corrected"])
+        "challenger", _candidate("DENY", "DUPLICATE", citations=[], violations=["fixed"])
     )
     report = compare(_records(), [baseline, challenger])
-    assert report["paired"]["verdict"] == {
-        "delta": 0.0,
-        "both_correct": 0,
-        "baseline_only_correct": 1,
-        "challenger_only_correct": 1,
-        "both_wrong": 0,
+    assert report["summary"]["baseline"]["approval_subchoice"] == 1.0
+    assert report["summary"]["baseline"]["citation"] == NA
+    assert report["summary"]["baseline"]["judge"] == NA
+    assert report["summary"]["baseline"]["tokens_per_claim"] == NA
+    assert report["summary"]["baseline"]["invariant_correction_rate"] == NA
+    assert set(report["paired_vs_baseline"]["challenger"]) >= {
+        "verdict",
+        "disposition_class",
+        "approval_subchoice",
+        "citation",
+        "judge",
     }
-    assert report["per_claim"][0]["candidates"]["baseline"]["citation"] == NA
-    assert report["per_claim"][0]["candidates"]["baseline"]["judge"] == NA
-    assert report["summary"]["challenger"]["invariant_correction_rate"] == 1.0
+    assert report["paired_vs_baseline"]["challenger"]["citation"]["comparable_count"] == 0
 
 
-def test_model_adapter_enforces_persist_false():
+def test_subchoice_only_applies_to_approvals_and_empty_citations_fail():
+    denied = standardize_output(
+        _candidate("DENY", "DUPLICATE", citations=[])(None), deterministic=True
+    )
+    scores = score(denied, {"verdict": "DENY", "disposition": "DUPLICATE"})
+    assert scores["disposition_class"] is True
+    assert scores["approval_subchoice"] == NA
+    assert scores["citation"] == NA
+    assert score(denied, {"oracle_clause_ids": ["a"]})["citation"] is False
+
+
+def test_history_expectations_derive_split_disposition():
+    duplicate = normalize_expectations({"verdict": "DENY", "disposition": "DUPLICATE"})
+    assert duplicate["disposition_class"] == "DENY"
+    assert duplicate["approval_subchoice"] is None
+
+
+def test_model_adapter_reuses_predict_retry_and_persist_guard():
     class Model:
         def predict(self, request):
             assert request["custom_inputs"]["persist"] is False
@@ -83,16 +102,56 @@ def test_model_adapter_enforces_persist_false():
         adapter.predict({"claim_id": "c"})
 
 
-def test_endpoint_adapter_sends_persist_false():
-    class Endpoints:
-        def query(self, **kwargs):
-            assert kwargs["name"] == "claims"
-            assert kwargs["custom_inputs"]["persist"] is False
-            return {"recommendation": {"recommended_verdict": "DENY"}}
-
-    adapter = endpoint_adapter("endpoint", "claims", SimpleNamespace(serving_endpoints=Endpoints()))
+def test_endpoint_uses_invocations_rest_and_fails_closed():
+    api_client = MagicMock(spec=ApiClient)
+    api_client.do.return_value = {
+        "custom_outputs": {
+            "write_result": {"persisted": False},
+            "recommendation": {"recommended_verdict": "DENY"},
+        }
+    }
+    adapter = endpoint_adapter("endpoint", "claims/name", SimpleNamespace(api_client=api_client))
     output, _ = adapter.predict({"claim_id": "c"})
     assert output["verdict"] == "DENY"
+    api_client.do.assert_called_once_with(
+        "POST",
+        "/api/2.0/serving-endpoints/claims%2Fname/invocations",
+        body={
+            "input": [{"role": "user", "content": '{"claim_id": "c"}'}],
+            "custom_inputs": {"claim": {"claim_id": "c"}, "persist": False},
+        },
+    )
+    api_client.do.return_value = {"custom_outputs": {"write_result": {"persisted": True}}}
+    with pytest.raises(RuntimeError, match="persistence invariant"):
+        adapter.predict({"claim_id": "c"})
+
+
+def test_per_claim_failure_is_recorded_and_other_rows_continue():
+    calls = 0
+
+    def flaky(claim):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("bad row")
+        return _candidate("DENY", "DUPLICATE")(claim)
+
+    report = compare(
+        _records(),
+        [callable_adapter("base", flaky), callable_adapter("other", flaky)],
+    )
+    assert calls == 4
+    assert report["summary"]["base"]["failure_count"] == 1
+    assert "bad row" in report["per_claim"][0]["candidates"]["base"]["error"]
+
+
+def test_every_candidate_is_paired_against_first():
+    candidates = [
+        callable_adapter("base", _candidate("APPROVE", "CREDIT")),
+        callable_adapter("one", _candidate("DENY", "DUPLICATE")),
+        callable_adapter("two", _candidate("DENY", "DUPLICATE")),
+    ]
+    assert set(compare(_records(), candidates)["paired_vs_baseline"]) == {"one", "two"}
 
 
 def test_standard_output_requires_dict():
@@ -101,18 +160,32 @@ def test_standard_output_requires_dict():
 
 
 def test_missing_parallel_ruleset_has_actionable_import_error(monkeypatch):
-    monkeypatch.setattr("ablation.importlib.import_module", lambda _: SimpleNamespace())
-    with pytest.raises(ImportError, match="land branch deterministic-ruleset first"):
+    monkeypatch.setitem(__import__("sys").modules, "decision_record", SimpleNamespace())
+    with pytest.raises(ImportError, match="land that branch first"):
         deterministic_baseline({"claim_id": "c"})
 
 
-def test_history_selection_round_robins_strata():
+def test_trace_token_usage_maps_claim(monkeypatch):
+    rows = [{"request": {"claim": {"claim_id": "c"}}, "usage": {"total_tokens": 42}}]
+    monkeypatch.setattr(ablation.mlflow, "search_traces", lambda run_id: _Frame(rows))
+    assert ablation._trace_token_usage("run") == {"c": 42}
+
+
+class _Frame:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def iterrows(self):
+        return enumerate(self.rows)
+
+
+def test_history_selection_round_robins_derived_strata():
     records = []
-    for verdict, count in (("APPROVE", 8), ("DENY", 2)):
+    for verdict, disposition, count in (("APPROVE", "CREDIT", 8), ("DENY", "DUPLICATE", 2)):
         records.extend(
             {
                 "inputs": {"claim": {"claim_id": f"{verdict}-{index}", "claim_type": "x"}},
-                "expectations": {"verdict": verdict, "disposition": verdict},
+                "expectations": {"verdict": verdict, "disposition": disposition},
             }
             for index in range(count)
         )

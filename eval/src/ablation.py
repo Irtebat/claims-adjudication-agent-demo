@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import sys
 import tempfile
 import time
 import uuid
@@ -12,23 +13,32 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import quote
 
 import mlflow
 from databricks.sdk import WorkspaceClient
 
+from build_dataset import _execute_sql, make_record, source_sql, stable_holdout
 from heldout import approval_subchoice, disposition_class
+from predict import load_candidate, predict_claim
+from resolver_oracle import AGENT_SRC, ResolverOracle
 
 MODEL_URI = "models:/fe-bar-ir.default.claims_adjudication_agent@prod"
-HISTORY_DATASET = "fe-bar-ir.default.claims_adjudication_eval_history"
 CANDIDATE_ALIASES = {"agent@prod": MODEL_URI, "deterministic_baseline": "deterministic_baseline"}
 NA = "N/A"
+QUALITY_DIMENSIONS = ("verdict", "disposition_class", "approval_subchoice", "citation", "judge")
+SUMMARY_DIMENSIONS = QUALITY_DIMENSIONS + (
+    "tokens_per_claim",
+    "latency_ms_per_claim",
+    "invariant_correction_rate",
+)
 
 
 def _custom(output: dict) -> dict:
     return output.get("custom_outputs", output)
 
 
-def standardize_output(output: Any) -> dict:
+def standardize_output(output: Any, deterministic: bool = False) -> dict:
     if hasattr(output, "model_dump"):
         output = output.model_dump()
     if isinstance(output, list) and len(output) == 1:
@@ -39,15 +49,22 @@ def standardize_output(output: Any) -> dict:
     recommendation = data.get("recommendation", data)
     disposition = recommendation.get("recommended_disposition") or recommendation.get("disposition")
     verdict = recommendation.get("recommended_verdict") or recommendation.get("verdict")
+    judge = data.get("judge_scores")
+    if isinstance(judge, dict):
+        judge = judge.get("overall")
+    if isinstance(judge, str) and judge.lower() in {"yes", "no"}:
+        judge = judge.lower() == "yes"
+    elif isinstance(judge, str):
+        judge = None
     return {
         "verdict": "PEND" if verdict == "PEND_INVESTIGATE" else verdict,
         "disposition_class": disposition_class(disposition, verdict),
         "approval_subchoice": approval_subchoice(disposition, verdict),
         "approved_amount": recommendation.get("approved_amount"),
         "cited_clause_ids": data.get("cited_clause_ids"),
-        "judge_scores": data.get("judge_scores"),
-        "invariant_violations": data.get("invariant_violations") or [],
-        "usage": data.get("usage") or output.get("usage") or {},
+        "judge_score": judge,
+        "invariant_violations": None if deterministic else data.get("invariant_violations"),
+        "usage": data.get("usage") or output.get("usage"),
         "raw": output,
     }
 
@@ -60,55 +77,47 @@ def _load_callable(path: str) -> Callable[[dict], dict]:
 
 
 def deterministic_baseline(claim: dict) -> dict:
-    """Late-bind the parallel ruleset without making this branch depend on it."""
-    errors = []
-    for module_name in ("authorities", "decision_record"):
-        try:
-            function = getattr(importlib.import_module(module_name), "deterministic_recommendation")
-            return function(claim)
-        except (ImportError, AttributeError) as exc:
-            errors.append(f"{module_name}: {exc}")
-    raise ImportError(
-        "deterministic_baseline requires deterministic_recommendation from agent/src/authorities.py "
-        "or agent/src/decision_record.py; land branch deterministic-ruleset first. "
-        + "; ".join(errors)
-    )
+    """Run the ruleset on the same frozen authority context used by the agent."""
+    if str(AGENT_SRC) not in sys.path:
+        sys.path.insert(0, str(AGENT_SRC))
+    try:
+        from agent import ClaimsAdjudicationAgent
+        from db import connect
+        from decision_record import deterministic_recommendation
+    except (ImportError, AttributeError) as exc:
+        raise ImportError(
+            "deterministic_baseline requires decision_record.deterministic_recommendation(context) "
+            "from branch deterministic-ruleset; land that branch first"
+        ) from exc
+    profile = __import__("os").environ.get("LAKEBASE_PROFILE") or "fe-bar"
+    with connect(profile=profile, autocommit=True) as connection:
+        context = ClaimsAdjudicationAgent()._deterministic_core(connection, claim)
+    return deterministic_recommendation(context)
 
 
 @dataclass
 class CandidateAdapter:
     name: str
     invoke: Callable[[dict], dict]
+    deterministic: bool = False
 
     def predict(self, claim: dict) -> tuple[dict, float]:
         started = time.perf_counter()
-        output = standardize_output(self.invoke(claim))
+        output = standardize_output(self.invoke(claim), deterministic=self.deterministic)
         return output, (time.perf_counter() - started) * 1000
 
 
-def callable_adapter(name: str, function: str | Callable[[dict], dict]) -> CandidateAdapter:
+def callable_adapter(
+    name: str, function: str | Callable[[dict], dict], deterministic: bool = False
+) -> CandidateAdapter:
     return CandidateAdapter(
-        name, _load_callable(function) if isinstance(function, str) else function
+        name, _load_callable(function) if isinstance(function, str) else function, deterministic
     )
 
 
 def model_adapter(name: str, uri: str, loader=mlflow.pyfunc.load_model) -> CandidateAdapter:
-    model = loader(uri)
-
-    def invoke(claim: dict) -> dict:
-        request = {
-            "input": [{"role": "user", "content": json.dumps(claim, sort_keys=True)}],
-            "custom_inputs": {"claim": claim, "persist": False},
-        }
-        output = model.predict(request)
-        dumped = output.model_dump() if hasattr(output, "model_dump") else output
-        if isinstance(dumped, list) and len(dumped) == 1:
-            dumped = dumped[0]
-        if _custom(dumped).get("write_result", {}).get("persisted") is not False:
-            raise RuntimeError(f"{name}: registered-model persistence invariant failed")
-        return dumped
-
-    return CandidateAdapter(name, invoke)
+    model = load_candidate(uri, loader=loader)
+    return CandidateAdapter(name, lambda claim: predict_claim(claim, model=model))
 
 
 def endpoint_adapter(
@@ -117,12 +126,17 @@ def endpoint_adapter(
     workspace = client or WorkspaceClient()
 
     def invoke(claim: dict) -> dict:
-        response = workspace.serving_endpoints.query(
-            name=endpoint,
-            input=[{"role": "user", "content": json.dumps(claim, sort_keys=True)}],
-            custom_inputs={"claim": claim, "persist": False},
+        response = workspace.api_client.do(
+            "POST",
+            f"/api/2.0/serving-endpoints/{quote(endpoint, safe='')}/invocations",
+            body={
+                "input": [{"role": "user", "content": json.dumps(claim, sort_keys=True)}],
+                "custom_inputs": {"claim": claim, "persist": False},
+            },
         )
-        return response.as_dict() if hasattr(response, "as_dict") else response
+        if _custom(response).get("write_result", {}).get("persisted") is not False:
+            raise RuntimeError(f"{name}: endpoint persistence invariant failed")
+        return response
 
     return CandidateAdapter(name, invoke)
 
@@ -130,7 +144,7 @@ def endpoint_adapter(
 def resolve_candidate(spec: str) -> CandidateAdapter:
     resolved = CANDIDATE_ALIASES.get(spec, spec)
     if resolved == "deterministic_baseline":
-        return callable_adapter(spec, deterministic_baseline)
+        return callable_adapter(spec, deterministic_baseline, deterministic=True)
     if resolved.startswith("models:/"):
         return model_adapter(spec, resolved)
     if resolved.startswith("endpoint:"):
@@ -138,39 +152,156 @@ def resolve_candidate(spec: str) -> CandidateAdapter:
     return callable_adapter(spec, resolved.removeprefix("callable:"))
 
 
-def _tokens(output: dict) -> int:
-    usage = output.get("usage") or {}
-    return int(usage.get("total_tokens") or usage.get("total_token_count") or 0)
+def normalize_expectations(expectations: dict) -> dict:
+    normalized = dict(expectations)
+    disposition = normalized.get("disposition")
+    if "disposition_class" not in normalized:
+        normalized["disposition_class"] = disposition_class(disposition, normalized.get("verdict"))
+    if "approval_subchoice" not in normalized:
+        normalized["approval_subchoice"] = approval_subchoice(
+            disposition, normalized.get("verdict")
+        )
+    return normalized
+
+
+def _token_count(output: dict) -> int | str:
+    usage = output.get("usage")
+    if not isinstance(usage, dict):
+        return NA
+    value = usage.get("total_tokens") or usage.get("total_token_count")
+    return int(value) if value is not None else NA
 
 
 def score(output: dict, expectations: dict) -> dict:
+    expected = normalize_expectations(expectations)
     result = {
-        dimension: output.get(dimension) == expectations.get(dimension)
-        for dimension in ("verdict", "disposition_class", "approval_subchoice")
+        "verdict": output.get("verdict") == expected.get("verdict"),
+        "disposition_class": output.get("disposition_class") == expected.get("disposition_class"),
+        "approval_subchoice": (
+            output.get("approval_subchoice") == expected.get("approval_subchoice")
+            if expected.get("disposition_class") == "APPROVE"
+            else NA
+        ),
     }
+    oracle = expected.get("oracle_clause_ids")
+    citations = output.get("cited_clause_ids")
     result["citation"] = (
-        NA
-        if output.get("cited_clause_ids") is None
-        else set(output["cited_clause_ids"]) <= set(expectations.get("oracle_clause_ids") or [])
+        NA if not oracle or citations is None else bool(citations) and set(citations) <= set(oracle)
     )
-    result["judge"] = NA if output.get("judge_scores") is None else output["judge_scores"]
-    result["invariant_corrected"] = bool(output.get("invariant_violations"))
+    result["judge"] = output.get("judge_score") if output.get("judge_score") is not None else NA
+    violations = output.get("invariant_violations")
+    result["invariant_corrected"] = NA if violations is None else bool(violations)
     return result
 
 
 def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict]:
     observations = []
     for record in records:
-        output, latency_ms = candidate.predict(record["inputs"]["claim"])
-        observations.append(
-            {
-                **score(output, record["expectations"]),
-                "claim_id": record["inputs"]["claim"]["claim_id"],
-                "tokens": _tokens(output),
-                "latency_ms": latency_ms,
-            }
-        )
+        claim_id = record["inputs"]["claim"]["claim_id"]
+        try:
+            output, latency_ms = candidate.predict(record["inputs"]["claim"])
+            observations.append(
+                {
+                    **score(output, record["expectations"]),
+                    "claim_id": claim_id,
+                    "tokens": _token_count(output),
+                    "latency_ms": latency_ms,
+                    "error": None,
+                }
+            )
+        except Exception as exc:
+            observations.append(
+                {
+                    **{key: NA for key in QUALITY_DIMENSIONS},
+                    "invariant_corrected": NA,
+                    "claim_id": claim_id,
+                    "tokens": NA,
+                    "latency_ms": NA,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
     return observations
+
+
+def _recursive_claim_id(value: Any) -> str | None:
+    if isinstance(value, dict):
+        if "claim_id" in value:
+            return str(value["claim_id"])
+        return next(
+            (found for item in value.values() if (found := _recursive_claim_id(item))), None
+        )
+    if isinstance(value, list):
+        return next((found for item in value if (found := _recursive_claim_id(item))), None)
+    if isinstance(value, str):
+        try:
+            return _recursive_claim_id(json.loads(value))
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+
+def _trace_token_usage(run_id: str) -> dict[str, int]:
+    usage = {}
+    for _, row in mlflow.search_traces(run_id=run_id).iterrows():
+        claim_id = _recursive_claim_id(row.get("request"))
+        if not claim_id:
+            continue
+        for field in ("token_usage", "usage", "trace_metadata"):
+            value = row.get(field)
+            if isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    continue
+            if isinstance(value, dict):
+                tokens = value.get("total_tokens") or value.get("total_token_count")
+                if tokens is not None:
+                    usage[claim_id] = int(tokens)
+                    break
+    return usage
+
+
+def _mean(values: list[Any]) -> float | str:
+    measured = [value for value in values if value != NA]
+    if not measured:
+        return NA
+    return sum(float(value) for value in measured) / len(measured)
+
+
+def _summary(observations: list[dict]) -> dict:
+    return {
+        **{
+            dimension: _mean([row[dimension] for row in observations])
+            for dimension in QUALITY_DIMENSIONS
+        },
+        "tokens_per_claim": _mean([row["tokens"] for row in observations]),
+        "latency_ms_per_claim": _mean([row["latency_ms"] for row in observations]),
+        "invariant_correction_rate": _mean([row["invariant_corrected"] for row in observations]),
+        "failure_count": sum(row["error"] is not None for row in observations),
+    }
+
+
+def _paired(baseline: list[dict], challenger: list[dict], summaries: tuple[dict, dict]) -> dict:
+    result = {}
+    for dimension in SUMMARY_DIMENSIONS:
+        base_mean, candidate_mean = summaries[0][dimension], summaries[1][dimension]
+        item = {"delta": NA if NA in (base_mean, candidate_mean) else candidate_mean - base_mean}
+        if dimension in QUALITY_DIMENSIONS:
+            pairs = [
+                (base[dimension], other[dimension])
+                for base, other in zip(baseline, challenger)
+                if base[dimension] != NA and other[dimension] != NA
+            ]
+            boolean_pairs = [(bool(base), bool(other)) for base, other in pairs]
+            item.update(
+                comparable_count=len(pairs),
+                both_correct=sum(base and other for base, other in boolean_pairs),
+                baseline_only_correct=sum(base and not other for base, other in boolean_pairs),
+                challenger_only_correct=sum(not base and other for base, other in boolean_pairs),
+                both_wrong=sum(not base and not other for base, other in boolean_pairs),
+            )
+        result[dimension] = item
+    return result
 
 
 def _report(candidates: list[CandidateAdapter], aggregates: dict[str, list[dict]]) -> dict:
@@ -185,39 +316,39 @@ def _report(candidates: list[CandidateAdapter], aggregates: dict[str, list[dict]
                 key: value for key, value in observation.items() if key != "claim_id"
             }
         rows.append(row)
-    dimensions = ("verdict", "disposition_class", "approval_subchoice")
-    summary = {}
-    for candidate, observations in aggregates.items():
-        summary[candidate] = {
-            **{
-                dimension: sum(bool(x[dimension]) for x in observations) / len(observations)
-                for dimension in dimensions
-            },
-            "tokens_per_claim": sum(x["tokens"] for x in observations) / len(observations),
-            "latency_ms_per_claim": sum(x["latency_ms"] for x in observations) / len(observations),
-            "invariant_correction_rate": sum(x["invariant_corrected"] for x in observations)
-            / len(observations),
-        }
-    baseline, challenger = candidates[0].name, candidates[1].name
-    paired = {}
-    for dimension in dimensions:
-        b = [x[dimension] for x in aggregates[baseline]]
-        c = [x[dimension] for x in aggregates[challenger]]
-        paired[dimension] = {
-            "delta": summary[challenger][dimension] - summary[baseline][dimension],
-            "both_correct": sum(x and y for x, y in zip(b, c)),
-            "baseline_only_correct": sum(x and not y for x, y in zip(b, c)),
-            "challenger_only_correct": sum(not x and y for x, y in zip(b, c)),
-            "both_wrong": sum(not x and not y for x, y in zip(b, c)),
-        }
-    return {"per_claim": rows, "summary": summary, "paired": paired}
+    summary = {name: _summary(observations) for name, observations in aggregates.items()}
+    baseline = candidates[0].name
+    paired = {
+        candidate.name: _paired(
+            aggregates[baseline],
+            aggregates[candidate.name],
+            (summary[baseline], summary[candidate.name]),
+        )
+        for candidate in candidates[1:]
+    }
+    return {"per_claim": rows, "summary": summary, "paired_vs_baseline": paired}
 
 
 def compare(records: list[dict], candidates: list[CandidateAdapter]) -> dict:
     if len(candidates) < 2:
         raise ValueError("ablation requires at least two candidates")
-    aggregates = {candidate.name: _observations(records, candidate) for candidate in candidates}
-    return _report(candidates, aggregates)
+    return _report(
+        candidates, {candidate.name: _observations(records, candidate) for candidate in candidates}
+    )
+
+
+def _numeric_metrics(prefix: str, values: dict) -> dict:
+    return {
+        f"{prefix}{name}": float(value)
+        for name, value in values.items()
+        if value != NA and isinstance(value, (bool, int, float))
+    }
+
+
+def _metric_component(value: str) -> str:
+    return "".join(
+        character if character.isalnum() or character in "-_." else "_" for character in value
+    )
 
 
 def run(
@@ -226,22 +357,28 @@ def run(
     if len(candidates) < 2:
         raise ValueError("ablation requires at least two candidates")
     ablation_id = ablation_id or str(uuid.uuid4())
-    candidate_runs = []
-    aggregates = {}
+    candidate_runs, aggregates = [], {}
     for candidate in candidates:
         with mlflow.start_run(run_name=f"ablation-{ablation_id}-{candidate.name}") as active:
-            mlflow.set_tag("ablation_id", ablation_id)
-            mlflow.set_tag("candidate", candidate.name)
-            aggregates[candidate.name] = _observations(records, candidate)
-            candidate_summary = _report(
-                [candidate, candidate], {candidate.name: aggregates[candidate.name]}
-            )["summary"][candidate.name]
-            mlflow.log_metrics(candidate_summary)
+            mlflow.set_tags({"ablation_id": ablation_id, "candidate": candidate.name})
+            observations = _observations(records, candidate)
+            try:
+                trace_tokens = _trace_token_usage(active.info.run_id)
+            except Exception:
+                trace_tokens = {}
+            for observation in observations:
+                if observation["tokens"] == NA and observation["claim_id"] in trace_tokens:
+                    observation["tokens"] = trace_tokens[observation["claim_id"]]
+            aggregates[candidate.name] = observations
+            mlflow.log_metrics(_numeric_metrics("", _summary(observations)))
             candidate_runs.append(active.info.run_id)
     report = _report(candidates, aggregates)
     with mlflow.start_run(run_name=f"ablation-{ablation_id}-comparison") as active:
-        mlflow.set_tag("ablation_id", ablation_id)
-        mlflow.set_tag("run_type", "paired_comparison")
+        mlflow.set_tags({"ablation_id": ablation_id, "run_type": "paired_comparison"})
+        for candidate, dimensions in report["paired_vs_baseline"].items():
+            for dimension, metrics in dimensions.items():
+                prefix = f"{_metric_component(candidate)}.{dimension}."
+                mlflow.log_metrics(_numeric_metrics(prefix, metrics))
         with tempfile.TemporaryDirectory() as directory:
             artifact = Path(directory) / "ablation-comparison.json"
             artifact.write_text(json.dumps(report, indent=2, default=str) + "\n")
@@ -256,14 +393,9 @@ def run(
 
 
 def _stratum(record: dict) -> tuple:
-    expectations = record.get("expectations") or {}
+    expected = normalize_expectations(record.get("expectations") or {})
     claim = (record.get("inputs") or {}).get("claim") or {}
-    return (
-        expectations.get("scenario_type"),
-        expectations.get("verdict"),
-        expectations.get("disposition_class") or expectations.get("disposition"),
-        claim.get("claim_type"),
-    )
+    return (expected.get("verdict"), expected.get("disposition_class"), claim.get("claim_type"))
 
 
 def stratified_sample(records: list[dict], n: int) -> list[dict]:
@@ -275,23 +407,27 @@ def stratified_sample(records: list[dict], n: int) -> list[dict]:
     ordered = [groups[key] for key in sorted(groups, key=lambda value: tuple(map(str, value)))]
     selected = []
     while len(selected) < n:
-        progressed = False
         for group in ordered:
             if group and len(selected) < n:
                 selected.append(group.pop(0))
-                progressed = True
-        if not progressed:
-            break
     return selected
 
 
-def load_records(dataset: str, n: int) -> list[dict]:
-    name = {
-        "heldout": "fe-bar-ir.eval.heldout_claims",
-        "history": HISTORY_DATASET,
-    }.get(dataset, dataset)
-    managed = mlflow.genai.datasets.get_dataset(name=name)
-    records = managed.to_df().to_dict("records")
+def build_history_records(profile: str, warehouse_id: str, n: int) -> list[dict]:
+    selected = stable_holdout(
+        _execute_sql(profile, warehouse_id, source_sql()), size=n, minimum_rare=min(10, n // 10)
+    )
+    oracles = ResolverOracle(profile).resolve_rows(selected)
+    return stratified_sample(
+        [make_record(row, oracle) for row, oracle in zip(selected, oracles)], n
+    )
+
+
+def load_records(dataset: str, n: int, profile: str, warehouse_id: str) -> list[dict]:
+    if dataset == "history":
+        return build_history_records(profile, warehouse_id, n)
+    name = "fe-bar-ir.eval.heldout_claims" if dataset == "heldout" else dataset
+    records = mlflow.genai.datasets.get_dataset(name=name).to_df().to_dict("records")
     if dataset == "heldout" and n != 100:
         raise ValueError("heldout comparison must use its complete 100-row stratification")
     return stratified_sample(records, n)
@@ -314,6 +450,8 @@ def main() -> None:
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--n", type=int, default=100)
     parser.add_argument("--candidates", required=True)
+    parser.add_argument("--profile", default="fe-bar")
+    parser.add_argument("--warehouse-id", default="38e458a09de4a055")
     parser.add_argument("--estimate-only", action="store_true")
     args = parser.parse_args()
     specs = [item.strip() for item in args.candidates.split(",") if item.strip()]
@@ -321,7 +459,7 @@ def main() -> None:
         print(json.dumps(estimate_tokens(args.n, specs), indent=2))
         return
     mlflow.set_tracking_uri("databricks")
-    records = load_records(args.dataset, args.n)
+    records = load_records(args.dataset, args.n, args.profile, args.warehouse_id)
     print(
         json.dumps(run(records, [resolve_candidate(spec) for spec in specs]), indent=2, default=str)
     )
