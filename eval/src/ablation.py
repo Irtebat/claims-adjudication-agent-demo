@@ -25,6 +25,7 @@ from predict import PersistenceViolation, load_candidate, predict_claim
 from resolver_oracle import AGENT_SRC, ResolverOracle
 
 MODEL_URI = "models:/fe-bar-ir.default.claims_adjudication_agent@prod"
+DEFAULT_EXPERIMENT = "/Shared/claims-adjudication-ablation"
 CANDIDATE_ALIASES = {"agent@prod": MODEL_URI, "deterministic_baseline": "deterministic_baseline"}
 NA = "N/A"
 QUALITY_DIMENSIONS = ("verdict", "disposition_class", "approval_subchoice", "citation", "judge")
@@ -539,6 +540,7 @@ def main() -> None:
     parser.add_argument("--candidates", required=True)
     parser.add_argument("--profile", default="fe-bar")
     parser.add_argument("--warehouse-id")
+    parser.add_argument("--experiment", default=DEFAULT_EXPERIMENT)
     parser.add_argument("--estimate-only", action="store_true")
     args = parser.parse_args()
     specs = [item.strip() for item in args.candidates.split(",") if item.strip()]
@@ -548,6 +550,7 @@ def main() -> None:
     if args.dataset == "history" and not args.warehouse_id:
         parser.error("--dataset history requires --warehouse-id")
     mlflow.set_tracking_uri("databricks")
+    mlflow.set_experiment(args.experiment)
     records = load_records(args.dataset, args.n, args.profile, args.warehouse_id)
     print(
         json.dumps(run(records, [resolve_candidate(spec) for spec in specs]), indent=2, default=str)

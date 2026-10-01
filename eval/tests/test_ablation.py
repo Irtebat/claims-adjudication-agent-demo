@@ -1,3 +1,4 @@
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -267,3 +268,35 @@ def test_history_selection_round_robins_derived_strata():
         "APPROVE",
         "DENY",
     ]
+
+
+def test_main_selects_experiment_before_starting_runs(monkeypatch, capsys):
+    events = []
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "ablation.py",
+            "--dataset",
+            "heldout",
+            "--candidates",
+            "deterministic_baseline,agent@prod",
+        ],
+    )
+    monkeypatch.setattr(
+        ablation.mlflow, "set_tracking_uri", lambda uri: events.append(("uri", uri))
+    )
+    monkeypatch.setattr(
+        ablation.mlflow, "set_experiment", lambda name: events.append(("experiment", name))
+    )
+    monkeypatch.setattr(ablation, "load_records", lambda *args: [])
+    monkeypatch.setattr(ablation, "resolve_candidate", lambda spec: spec)
+    monkeypatch.setattr(ablation, "run", lambda records, candidates: {"candidate_runs": []})
+
+    ablation.main()
+
+    assert events == [
+        ("uri", "databricks"),
+        ("experiment", "/Shared/claims-adjudication-ablation"),
+    ]
+    assert '"candidate_runs": []' in capsys.readouterr().out
