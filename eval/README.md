@@ -112,6 +112,46 @@ uv run ruff format --check src tests
 uv run pytest -q
 ```
 
+## Paired ablation study (prepared; do not run until ruleset lands)
+
+`src/ablation.py` evaluates every candidate on the identical ordered records and exact
+scoring functions. It reports verdict, broad `disposition_class`, and the separate
+approval remedy (`approval_subchoice`), plus tokens/claim, latency/claim, invariant
+correction rate, per-claim disagreements, dimension deltas, and McNemar-style paired
+counts. Unsupported citation and judge results are `N/A`, never zero. Candidate runs
+share an `ablation_id`; the comparison JSON is an MLflow artifact and is not committed.
+
+The deterministic adapter late-imports `deterministic_recommendation` from
+`agent/src/authorities.py` or `agent/src/decision_record.py`, with an actionable error
+until the `deterministic-ruleset` branch lands. The production agent candidate is
+`models:/fe-bar-ir.default.claims_adjudication_agent@prod` and local model invocation
+enforces `persist=false`.
+
+After that branch lands, run from `eval/`:
+
+```bash
+uv run --project . python src/ablation.py --dataset heldout --n 100 --candidates deterministic_baseline,agent@prod
+uv run --project . python src/ablation.py --dataset history --n 100 --candidates deterministic_baseline,agent@prod
+```
+
+`history` resolves to the MLflow-managed dataset
+`fe-bar-ir.default.claims_adjudication_eval_history`; selection round-robins stable
+verdict/disposition/claim-type strata to exactly 100 rows.
+
+The planning estimate is 350,000 agent tokens per command (100 claims × one LLM
+candidate × 3,500 tokens/claim), or roughly 700,000 tokens for both commands; use
+`--estimate-only` to print the assumption without loading data or invoking a candidate.
+
+### Narrative-dependent held-out design
+
+`src/heldout.py` creates exactly 100 records: 20 each for narrative-only installation
+misuse, environment exclusion, contradictory defect mode, disclosed prior repair, and
+neutral controls. Each scenario records its written-policy basis. It clones real
+reference-linked rows, retaining existing coil/customer identifiers so resolution works,
+and puts labels only under `expectations`. Its sole permitted destination is the isolated
+evaluation dataset `fe-bar-ir.eval.heldout_claims`; it contains no code path to Lakebase
+`public.claims` / `adjudications` or medallion tables. No live table is created by tests.
+
 Tests use synthetic fixtures and make no live calls.
 
 ## Live evaluation
