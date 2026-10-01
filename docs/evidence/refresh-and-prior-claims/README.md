@@ -1,3 +1,5 @@
+> **Historical note (2026-10-01):** any native `public.prior_claims` state in this folder is historical; `live-cutover.json` and `reference.prior_claims_corpus` replace it.
+
 # Evidence — refresh commands and lakehouse-built prior claims
 
 Branch `refresh-commands-and-prior-claims`, off `main` 888ea2d.

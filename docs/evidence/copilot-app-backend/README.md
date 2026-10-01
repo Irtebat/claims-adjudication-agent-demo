@@ -1,3 +1,5 @@
+> **Superseded 2026-10-01:** replaced by the live full UI and [current-state app evidence](../current-state/runtime-resources.md). Retained as history.
+
 # Evidence — Wave 7 Stage A: Copilot App BACKEND contract (headless)
 
 Branch `copilot-app-backend` off `main` (e84bf20). No UI in this stage. authorities.py

@@ -1,5 +1,7 @@
 # Post-merge live steps
 
+> **Superseded 2026-10-01:** the `claims_pending` cleanup below is historical. The table is retired and current services migration treats its drop only as legacy cleanup.
+
 Run these only after the PR is merged and reviewed.
 
 ```bash

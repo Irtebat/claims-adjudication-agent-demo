@@ -1,3 +1,5 @@
+> **Superseded note (2026-10-01): `claims_pending` is retired; recommendations use persisted adjudications and the app finalization/outbox flow. Live Kafka evidence remains pending.**
+
 # Kafka event backbone — evidence
 
 Wave 8 turns the batch claims-adjudication agent into a streaming pipeline over

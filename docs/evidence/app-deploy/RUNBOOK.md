@@ -1,3 +1,5 @@
+> **Superseded note (2026-10-01): the old single-role `/api/whoami` contract is replaced by the live role-set response documented in `app/README.md`.**
+
 # Steel Claims Cockpit — App Deploy Runbook & Evidence
 
 Deploy date: 2026-09-29 · Profile: `fe-bar` · Workspace: `https://fe-sandbox-fe-bar-ir.cloud.databricks.com`

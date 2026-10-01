@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-10-01",
+  "command_template": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.<table> --profile fe-bar -o json",
+  "output": [
+    {"name":"heats_coils","detailed_state":"SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE","pipeline_id":"056f0b9d-4d94-45f4-8f6e-b41720627baf","sync_end_time":"2026-09-24T11:37:42.919916Z"},
+    {"name":"mill_test_certs","detailed_state":"SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE","pipeline_id":"f435d0e6-6d8f-48c7-9f5c-65229d5225af","sync_end_time":"2026-09-23T16:53:01.125273Z"},
+    {"name":"customers","detailed_state":"SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE","pipeline_id":"488823f9-63c3-44c8-9cfb-fb07120a7e15","sync_end_time":"2026-09-23T16:53:11.559495Z"},
+    {"name":"suppliers","detailed_state":"SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE","pipeline_id":"af125178-4888-4402-826b-dc573c0f183f","sync_end_time":"2026-09-23T16:53:17.541223Z"},
+    {"name":"defect_codes","detailed_state":"SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE","pipeline_id":"53705cb9-2f8b-4dd1-a973-a202c3fea4cf","sync_end_time":"2026-09-23T16:53:29.293593Z"},
+    {"name":"customer_heat_risk","detailed_state":"SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE","pipeline_id":"1e8fddb2-f544-40e5-85b4-ee5d5c5c5501","sync_end_time":"2026-09-29T06:18:52.370833Z"},
+    {"name":"prior_claims_corpus","detailed_state":"SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE","pipeline_id":"c9279f3c-1a83-4e3f-bf8e-f07497f2fbb7","sync_end_time":"2026-09-30T19:33:15.980038Z"}
+  ]
+}

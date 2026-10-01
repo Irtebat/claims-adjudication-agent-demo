@@ -1,0 +1,11 @@
+{
+  "captured_at": "2026-10-01",
+  "command": "databricks experimental aitools tools query --warehouse 38e458a09de4a055 --profile fe-bar -o json '<SQL shown in the sql field below>'",
+  "sql": "SELECT 'gold.claims_current' object, count(*) rows FROM `fe-bar-ir`.gold.claims_current UNION ALL SELECT 'gold.prior_claims_corpus',count(*) FROM `fe-bar-ir`.gold.prior_claims_corpus UNION ALL SELECT 'silver.claims_history',count(*) FROM `fe-bar-ir`.silver.claims_history",
+  "output": [
+    {"object":"gold.claims_current","rows":5000},
+    {"object":"silver.claims_history","rows":5000},
+    {"object":"gold.prior_claims_corpus","rows":4999},
+    {"object":"reference.prior_claims_corpus","rows":4999,"source":"read-only Lakebase query; see lakebase.json"}
+  ]
+}
