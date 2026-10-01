@@ -93,7 +93,9 @@ at every stage, keyed on stable, deterministic ids:
 
   A skip makes no endpoint call and no write. Either way the offset is committed
   only after the claim is invoked or deliberately skipped; a failure before that
-  leaves it uncommitted for re-delivery. The endpoint's
+  leaves it uncommitted for re-delivery. A Kafka error/event message (transport
+  error, partition EOF) is counted in `consumer_errors` and never committed; the
+  consumers job does the same. The endpoint's
   `writer.py` is the deeper guarantee: first-write-wins on the deterministic
   `adjudication_id`.
 - **`writer.py` (one transaction, recommendation only)**: the RECOMMENDED

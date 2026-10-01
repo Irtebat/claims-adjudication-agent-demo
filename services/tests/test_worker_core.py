@@ -124,3 +124,41 @@ def test_parse_and_extract_claim_round_trip():
     extracted = worker_core.claim_from_event(event)
     assert extracted["claim_id"] == "CLM-1"
     assert set(extracted) == set(events.CLAIM_FIELDS)
+
+
+class _Msg:
+    def __init__(self, raw=None, error=None):
+        self._raw, self._error = raw, error
+
+    def value(self):
+        return self._raw
+
+    def error(self):
+        return self._error
+
+
+@pytest.mark.parametrize("error", ["_PARTITION_EOF", "_TRANSPORT"])
+def test_error_message_is_not_committed_or_invoked(error):
+    lookups, invoked, commits = [], [], []
+    outcome = worker_core.handle_message(
+        _Msg(error=error),
+        lookup=lookups.append,
+        invoke=invoked.append,
+        commit=lambda: commits.append(error),
+    )
+    assert outcome == worker_core.CONSUMER_ERROR
+    assert (lookups, invoked, commits) == ([], [], [])
+
+
+def test_valid_message_is_routed_through_dedup():
+    table = _Adjudications([])
+    invoked, commits = [], []
+    outcome = worker_core.handle_message(
+        _Msg(raw=_raw("CLM-1")),
+        lookup=table.lookup,
+        invoke=invoked.append,
+        commit=lambda: commits.append("CLM-1"),
+    )
+    assert outcome == worker_core.ADJUDICATE
+    assert [c["claim_id"] for c in invoked] == ["CLM-1"]
+    assert commits == ["CLM-1"]

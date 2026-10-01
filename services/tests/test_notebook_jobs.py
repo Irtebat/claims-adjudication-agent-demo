@@ -180,3 +180,17 @@ def test_no_cache_or_persist_on_serverless():
         p.name for p in SRC.glob("*.py") if re.search(r"\.(cache|persist)\(", p.read_text())
     ]
     assert offenders == []
+
+
+@pytest.mark.parametrize("job", ["worker", "consumers"])
+def test_kafka_error_messages_are_never_committed(job):
+    """No `if msg.error():` branch in a consuming job commits an offset."""
+    branches = [
+        node
+        for node in ast.walk(_tree(job))
+        if isinstance(node, ast.If) and "msg.error()" in ast.unparse(node.test)
+    ]
+    source = (SRC / f"{job}.py").read_text()
+    assert branches or "worker_core.handle_message(" in source
+    for node in branches:
+        assert ".commit(" not in "\n".join(ast.unparse(n) for n in node.body)

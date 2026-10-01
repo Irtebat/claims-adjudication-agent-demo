@@ -37,6 +37,7 @@ DEDUP_SQL = (
 ADJUDICATE = "adjudicate"
 SKIP_FINAL = "skip_already_final"
 SKIP_AGENT = "skip_already_adjudicated"
+CONSUMER_ERROR = "consumer_error"
 
 
 def dedup_params(claim_id: str) -> tuple[list[str], str, str]:
@@ -78,3 +79,15 @@ def parse_submitted(raw: bytes | str) -> dict:
 def claim_from_event(event: dict) -> dict:
     """Extract the claim payload the serving endpoint expects from the event."""
     return event["claim"]
+
+
+def handle_message(msg, *, lookup, invoke, commit) -> str:
+    """Handle one polled message; a Kafka error/event message is never committed.
+
+    An error message (transport error, partition EOF, ...) carries no claim, so it was
+    neither invoked nor deliberately skipped: committing it could advance the offset
+    past an unprocessed claim. It is counted as CONSUMER_ERROR and left uncommitted.
+    """
+    if msg.error():
+        return CONSUMER_ERROR
+    return handle_submitted(msg.value(), lookup=lookup, invoke=invoke, commit=commit)

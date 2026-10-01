@@ -65,21 +65,20 @@ with lakebase.connect(autocommit=True) as conn:
         if msg is None:
             print("Idle poll timeout reached; draining complete.")
             break
-        if msg.error():
-            errors += 1
-            print(f"Consumer error (skipping): {msg.error()}")
-            consumer.commit(msg, asynchronous=False)
-            continue
-
-        processed += 1
         # Skips (already FINAL/REVIEWED, or already agent-recommended) make no endpoint
-        # call and no write; the offset commits only after the claim is handled.
-        outcome = worker_core.handle_submitted(
-            msg.value(),
+        # call and no write; the offset commits only after the claim is handled. A Kafka
+        # error/event message is counted and never committed.
+        outcome = worker_core.handle_message(
+            msg,
             lookup=lookup,
             invoke=lambda claim: serving.invoke(ws, claim, persist=True),
             commit=lambda: consumer.commit(msg, asynchronous=False),
         )
+        if outcome == worker_core.CONSUMER_ERROR:
+            errors += 1
+            print(f"Consumer error (not committed): {msg.error()}")
+            continue
+        processed += 1
         outcomes[outcome] += 1
 
 consumer.close()
