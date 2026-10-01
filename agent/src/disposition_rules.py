@@ -1,29 +1,28 @@
 """Deterministic disposition + routing rules — derived from policy semantics, not labels.
 
 The authorities (``authorities.py``) decide eligibility and money. These rules decide
-*which remedy* an eligible claim gets and when a claim is *held* instead of closed.
-They read only authority outputs (conformance, coverage, settlement), the duplicate
-gate, and the advisory heat risk — never a ground-truth label — and they never
-change an amount: an APPROVE pays exactly the settlement authority's number, and
-every other verdict pays zero.
+*which remedy* an eligible claim gets. They read only authority outputs
+(conformance, coverage, settlement), the duplicate gate, and the advisory heat risk
+— never a ground-truth label — and they never change an amount or a verdict: the
+verdict is the authorities' eligibility, an APPROVE pays exactly the settlement
+authority's number, and every other verdict pays zero.
 
-Pure stdlib, no I/O. Shared by the no-LLM baseline
-(``decision_record.deterministic_recommendation``) and the agent's invariant check
-(``decision_record.enforce_invariants``), so both pick the same disposition.
+Pure stdlib, no I/O. Used by the no-LLM baseline
+(``decision_record.deterministic_recommendation``) and by
+``decision_record.deterministic_outcome``, whose disposition the agent's
+``enforce_invariants`` records as ``rule_disposition`` next to the agent's own
+(a valid agent disposition is kept, so agent-vs-rules stays measurable).
 
 Rules, in precedence order (first match wins):
 
 R1 duplicate          The duplicate gate matched a prior claim -> DENY / DUPLICATE.
                       A duplicate is never payable and never held.
 R2 unknown_claim_type The claim type has no authority -> PEND_INVESTIGATE.
-R3 fraud_hold         The authorities found the claim NOT eligible (in-spec material,
-                      or outside warranty) AND the customer/heat risk score is
-                      >= ``FRAUD_HOLD_RISK_THRESHOLD`` -> PEND_INVESTIGATE instead of
-                      DENY. An unsubstantiated claim from a concentrated heat cluster
-                      looks like a fabricated claim; it is held for investigation
-                      rather than closed. An eligible claim is NOT held on risk alone:
-                      its nonconformance/coverage is proven by the MTC and policy, so
-                      the risk stays an advisory flag. Both outcomes pay zero.
+R3 fraud_review       ADVISORY ONLY — decides nothing. When the customer/heat risk
+                      score is >= ``FRAUD_REVIEW_RISK_THRESHOLD`` the recommendation
+                      carries ``fraud_review_suggested`` for the adjuster. Heat risk
+                      is advisory and no policy defines a hold threshold, so it never
+                      changes a verdict, disposition, or amount.
 R4 ineligible         Not eligible -> DENY / DENY.
 R5 supplier_attributable
                       Eligible material-nonconformance claim whose MTC fails a
@@ -49,9 +48,9 @@ from __future__ import annotations
 # rather than the mill's own process (compute_conformance's property names).
 SUPPLIER_ATTRIBUTABLE_PROPERTIES = frozenset({"coating_adhesion", "coating_weight_g_m2"})
 
-# The advisory customer/heat risk score at which an unsubstantiated claim is held
+# The advisory customer/heat risk score at which a fraud review is suggested
 # (inclusive). Same threshold as the recommendation's advisory ``fraud_risk`` flag.
-FRAUD_HOLD_RISK_THRESHOLD = 0.5
+FRAUD_REVIEW_RISK_THRESHOLD = 0.5
 
 
 def supplier_attributable(claim_type: str | None, conformance: dict) -> bool:
@@ -68,8 +67,8 @@ def over_claim_partial(settlement: dict) -> bool:
 
 
 def fraud_risk(risk: dict | None) -> bool:
-    """The advisory fraud signal: risk score at or above the hold threshold."""
-    return float((risk or {}).get("risk_score") or 0.0) >= FRAUD_HOLD_RISK_THRESHOLD
+    """R3 advisory signal: risk score at or above the review threshold."""
+    return float((risk or {}).get("risk_score") or 0.0) >= FRAUD_REVIEW_RISK_THRESHOLD
 
 
 def approve_disposition(

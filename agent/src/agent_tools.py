@@ -162,8 +162,9 @@ def default_recommendation(core: dict) -> dict:
     """A deterministic recommendation aligned to the authorities.
 
     Used as the baseline the LLM refines and as the fallback when the LLM is
-    unreachable. Verdict, disposition, amount and flags come from
-    ``deterministic_recommendation`` (rules R1-R7 in ``disposition_rules``), so it
+    unreachable. It is ``deterministic_recommendation`` (rules R1-R7 in
+    ``disposition_rules``; verdict and amount are the deterministic outcome's)
+    enriched with the core's citations, precedent, and a narrative rationale, so it
     always satisfies the invariants and is always a safe recommendation.
     """
     det = core["deterministic"]
@@ -178,26 +179,16 @@ def default_recommendation(core: dict) -> dict:
         for p in core.get("precedent", [])
     ]
     return {
-        "recommended_verdict": baseline["verdict"],
-        "recommended_disposition": baseline["disposition"],
-        "settlement_estimate": baseline["settlement_estimate"],
+        **baseline,
         "cited_clause_ids": [c["citation_key"] for c in core.get("citations", [])],
         "precedent": precedent,
-        "rationale": _deterministic_rationale(det, core, baseline),
-        "flags": baseline["flags"],
-        "confidence": 0.6,
+        "rationale": _deterministic_rationale(det, core),
     }
 
 
-def _deterministic_rationale(det: dict, core: dict, baseline: dict) -> str:
+def _deterministic_rationale(det: dict, core: dict) -> str:
     reason = det["reason"]
     verdict = det["verdict"]
-    if baseline["verdict"] == "PEND_INVESTIGATE" and det["eligible"] is False:
-        return (
-            f"Not eligible ({reason}) and the customer/heat risk score "
-            f"{(core.get('risk') or {}).get('risk_score')} indicates a concentrated "
-            "cluster; held for investigation instead of denied. Pays nothing."
-        )
     if reason == "duplicate_claim":
         return (
             f"Duplicate of claim {det.get('duplicate_of_claim_id')}: same coil, defect, tonnage "
