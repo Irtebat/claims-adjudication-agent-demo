@@ -1,0 +1,45 @@
+{
+  "status": "blocked_agent_process_isolation_failure",
+  "profile": "fe-bar",
+  "ablation_id": "848fae67-5628-4e34-8bd2-3303f8c9e0c7",
+  "heldout": {
+    "record_count": 100,
+    "deterministic_baseline": {
+      "run_id": "c42dca0a6d0e4805acb6eecc9300dc30",
+      "status": "FINISHED",
+      "metrics": {
+        "verdict": 0.25,
+        "verdict_n": 100,
+        "disposition_class": 0.25,
+        "disposition_class_n": 100,
+        "approval_subchoice": 1.0,
+        "approval_subchoice_n": 25,
+        "amount": 0.18,
+        "amount_n": 100,
+        "duplicate": 1.0,
+        "duplicate_n": 100,
+        "pend_routing": 1.0,
+        "pend_routing_n": 100,
+        "citation_n": 0,
+        "failure_count": 0,
+        "latency_ms_per_claim": 1335.9841900551692
+      }
+    },
+    "agent": {
+      "run_id": "eee45d7a5ae844628f2dd15f37434d30",
+      "status": "FAILED",
+      "metrics": {},
+      "error": "CandidateBatchFailure: agent@prod failed its first 5 rows: ['EOFError: ', 'EOFError: ', 'EOFError: ', 'EOFError: ', 'EOFError: ']"
+    },
+    "comparison_run_id": null
+  },
+  "history": {
+    "status": "not_started",
+    "reason": "Stopped after the held-out retry failed, as required."
+  },
+  "safety": {
+    "persist": false,
+    "lakebase_public_writes": false,
+    "authorities_py_modified": false
+  }
+}
