@@ -120,6 +120,7 @@ def test_model_adapter_reuses_predict_retry_and_persist_guard():
 
     model = Model()
     adapter = model_adapter("model", "models:/x@prod", loader=lambda _: model)
+    adapter.isolate_process = False
     with pytest.raises(PersistenceViolation, match="persistence invariant"):
         compare(
             [_records()[0]],
@@ -137,6 +138,7 @@ def test_endpoint_uses_invocations_rest_and_fails_closed():
         }
     }
     adapter = endpoint_adapter("endpoint", "claims/name", SimpleNamespace(api_client=api_client))
+    adapter.isolate_process = False
     output, _ = adapter.predict({"claim_id": "c"})
     assert output["verdict"] == "DENY"
     api_client.do.assert_called_once_with(
@@ -285,6 +287,7 @@ def test_deterministic_adapter_captures_local_recommendation_before_model_path_p
 def test_per_claim_timeout_is_recorded_as_failure():
     adapter = callable_adapter("slow", lambda claim: time.sleep(1))
     adapter.timeout_seconds = 0.01
+    adapter.isolate_process = True
     report = compare(
         _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
     )
