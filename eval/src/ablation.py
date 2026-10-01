@@ -6,12 +6,14 @@ import argparse
 import importlib
 import json
 import os
+import signal
 import sys
 import tempfile
 import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
@@ -28,12 +30,37 @@ MODEL_URI = "models:/fe-bar-ir.default.claims_adjudication_agent@prod"
 DEFAULT_EXPERIMENT = "/Shared/claims-adjudication-ablation"
 CANDIDATE_ALIASES = {"agent@prod": MODEL_URI, "deterministic_baseline": "deterministic_baseline"}
 NA = "N/A"
-QUALITY_DIMENSIONS = ("verdict", "disposition_class", "approval_subchoice", "citation", "judge")
+QUALITY_DIMENSIONS = (
+    "verdict",
+    "disposition_class",
+    "approval_subchoice",
+    "amount",
+    "duplicate",
+    "pend_routing",
+    "citation",
+    "judge",
+)
 SUMMARY_DIMENSIONS = QUALITY_DIMENSIONS + (
     "tokens_per_claim",
     "latency_ms_per_claim",
     "invariant_correction_rate",
 )
+DEFAULT_CLAIM_TIMEOUT_SECONDS = 120
+EARLY_FAILURE_LIMIT = 5
+
+
+class ClaimTimeoutError(TimeoutError):
+    """One candidate exceeded the per-claim wall-clock budget."""
+
+
+class CandidateBatchFailure(RuntimeError):
+    """A candidate failed every row in the initial diagnostic window."""
+
+    def __init__(self, candidate: str, observations: list[dict]):
+        self.candidate = candidate
+        self.observations = observations
+        errors = [row["error"] for row in observations]
+        super().__init__(f"{candidate} failed its first {len(observations)} rows: {errors}")
 
 
 def _custom(output: dict) -> dict:
@@ -62,6 +89,7 @@ def standardize_output(output: Any, deterministic: bool = False) -> dict:
         "verdict": "PEND" if verdict == "PEND_INVESTIGATE" else verdict,
         "disposition_class": disposition_class(disposition, verdict),
         "approval_subchoice": approval_subchoice(disposition, verdict),
+        "disposition": disposition,
         "approved_amount": recommendation.get("approved_amount"),
         "cited_clause_ids": None if deterministic else data.get("cited_clause_ids"),
         "judge_score": judge,
@@ -78,16 +106,29 @@ def _load_callable(path: str) -> Callable[[dict], dict]:
     return getattr(importlib.import_module(module_name), attribute)
 
 
-def _deterministic_context(connection, claim: dict) -> dict:
+def _deterministic_context(
+    connection,
+    claim: dict,
+    *,
+    authority_runtime=None,
+    deterministic_outcome_fn=None,
+    duplicate_fn=None,
+) -> dict:
     if str(AGENT_SRC) not in sys.path:
         sys.path.insert(0, str(AGENT_SRC))
-    try:
-        from authorities_runtime import AuthorityRuntime
-        from decision_record import deterministic_outcome
-        from duplicate import check_duplicate_claim
-    except (ImportError, AttributeError) as exc:
-        raise ImportError("deterministic baseline requires the agent authority runtime") from exc
-    frozen = AuthorityRuntime(connection).freeze(claim["coil_id"])
+    if authority_runtime is None or deterministic_outcome_fn is None or duplicate_fn is None:
+        try:
+            from authorities_runtime import AuthorityRuntime
+            from decision_record import deterministic_outcome
+            from duplicate import check_duplicate_claim
+        except (ImportError, AttributeError) as exc:
+            raise ImportError(
+                "deterministic baseline requires the agent authority runtime"
+            ) from exc
+        authority_runtime = authority_runtime or AuthorityRuntime
+        deterministic_outcome_fn = deterministic_outcome_fn or deterministic_outcome
+        duplicate_fn = duplicate_fn or check_duplicate_claim
+    frozen = authority_runtime(connection).freeze(claim["coil_id"])
     conformance = frozen.conformance()
     coverage = frozen.coverage(claim)
     settlement = frozen.settlement(
@@ -99,8 +140,8 @@ def _deterministic_context(connection, claim: dict) -> dict:
             "proration_factor": coverage.get("proration_factor", 1.0),
         }
     )
-    duplicate = check_duplicate_claim(connection, claim)
-    deterministic = deterministic_outcome(
+    duplicate = duplicate_fn(connection, claim)
+    deterministic = deterministic_outcome_fn(
         claim.get("claim_type"), conformance, coverage, settlement, duplicate
     )
     return {
@@ -146,10 +187,24 @@ class CandidateAdapter:
     invoke: Callable[[dict], dict]
     deterministic: bool = False
     close: Callable[[], None] | None = None
+    timeout_seconds: int = DEFAULT_CLAIM_TIMEOUT_SECONDS
 
     def predict(self, claim: dict) -> tuple[dict, float]:
         started = time.perf_counter()
-        output = standardize_output(self.invoke(claim), deterministic=self.deterministic)
+
+        def timeout_handler(signum, frame):
+            raise ClaimTimeoutError(
+                f"candidate {self.name} exceeded {self.timeout_seconds}s for claim "
+                f"{claim.get('claim_id')}"
+            )
+
+        previous = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.setitimer(signal.ITIMER_REAL, self.timeout_seconds)
+        try:
+            output = standardize_output(self.invoke(claim), deterministic=self.deterministic)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
         return output, (time.perf_counter() - started) * 1000
 
 
@@ -163,7 +218,12 @@ def callable_adapter(
 
 def deterministic_adapter(name: str, profile: str | None = None) -> CandidateAdapter:
     """Open one Lakebase connection and reuse it for every claim in this candidate run."""
+    if str(AGENT_SRC) not in sys.path:
+        sys.path.insert(0, str(AGENT_SRC))
+    from authorities_runtime import AuthorityRuntime
     from db import connect
+    from decision_record import deterministic_outcome, deterministic_recommendation
+    from duplicate import check_duplicate_claim
 
     manager = connect(
         profile=profile or os.environ.get("LAKEBASE_PROFILE") or "fe-bar", autocommit=True
@@ -175,7 +235,15 @@ def deterministic_adapter(name: str, profile: str | None = None) -> CandidateAda
 
     return CandidateAdapter(
         name,
-        lambda claim: _recommend_from_context(_deterministic_context(connection, claim)),
+        lambda claim: deterministic_recommendation(
+            _deterministic_context(
+                connection,
+                claim,
+                authority_runtime=AuthorityRuntime,
+                deterministic_outcome_fn=deterministic_outcome,
+                duplicate_fn=check_duplicate_claim,
+            )
+        ),
         deterministic=True,
         close=close,
     )
@@ -249,6 +317,21 @@ def score(output: dict, expectations: dict) -> dict:
             else NA
         ),
     }
+    expected_amount = expected.get("approved_amount")
+    try:
+        result["amount"] = (
+            NA
+            if expected_amount is None
+            else Decimal(str(output.get("approved_amount"))) == Decimal(str(expected_amount))
+        )
+    except (InvalidOperation, TypeError):
+        result["amount"] = False
+    result["duplicate"] = (output.get("disposition") == "DUPLICATE") == (
+        expected.get("disposition") == "DUPLICATE"
+    )
+    result["pend_routing"] = (output.get("verdict") == "PEND") == (
+        expected.get("verdict") == "PEND"
+    )
     oracle = expected.get("oracle_clause_ids")
     citations = output.get("cited_clause_ids")
     result["citation"] = (
@@ -273,6 +356,7 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
                     "tokens": _token_count(output),
                     "latency_ms": latency_ms,
                     "error": None,
+                    "prediction": output,
                 }
             )
         except PersistenceViolation:
@@ -286,6 +370,9 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
                     "approval_subchoice": (
                         False if expected.get("disposition_class") == "APPROVE" else NA
                     ),
+                    "amount": False if expected.get("approved_amount") is not None else NA,
+                    "duplicate": False,
+                    "pend_routing": False,
                     "citation": (
                         NA
                         if candidate.deterministic or not expected.get("oracle_clause_ids")
@@ -297,8 +384,18 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
                     "tokens": NA,
                     "latency_ms": NA,
                     "error": f"{type(exc).__name__}: {exc}",
+                    "prediction": None,
                 }
             )
+        if len(observations) == EARLY_FAILURE_LIMIT and all(
+            row["error"] is not None for row in observations
+        ):
+            if mlflow.active_run() is not None:
+                mlflow.log_dict(
+                    {"candidate": candidate.name, "per_claim": observations},
+                    "ablation-errors.json",
+                )
+            raise CandidateBatchFailure(candidate.name, observations)
     return observations
 
 
@@ -350,6 +447,10 @@ def _summary(observations: list[dict]) -> dict:
     return {
         **{
             dimension: _mean([row[dimension] for row in observations])
+            for dimension in QUALITY_DIMENSIONS
+        },
+        **{
+            f"{dimension}_n": sum(row[dimension] != NA for row in observations)
             for dimension in QUALITY_DIMENSIONS
         },
         "tokens_per_claim": _mean([row["tokens"] for row in observations]),

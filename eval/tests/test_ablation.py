@@ -1,4 +1,5 @@
 import sys
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -232,7 +233,7 @@ def test_deterministic_adapter_reuses_one_connection(monkeypatch):
     monkeypatch.setitem(
         __import__("sys").modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager())
     )
-    monkeypatch.setattr(ablation, "_deterministic_context", lambda connection, claim: claim)
+    monkeypatch.setattr(ablation, "_deterministic_context", lambda *args, **kwargs: args[1])
     monkeypatch.setattr(
         ablation,
         "_recommend_from_context",
@@ -241,6 +242,75 @@ def test_deterministic_adapter_reuses_one_connection(monkeypatch):
     adapter = deterministic_adapter("baseline")
     compare(_records(), [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))])
     assert events == ["enter", "exit"]
+
+
+def test_deterministic_adapter_captures_local_recommendation_before_model_path_pollution(
+    monkeypatch,
+):
+    class Manager:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *args):
+            return None
+
+    def local_recommendation(context):
+        return _candidate("APPROVE", "CREDIT")(context)
+
+    monkeypatch.setitem(sys.modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager()))
+    monkeypatch.setitem(
+        sys.modules, "authorities_runtime", SimpleNamespace(AuthorityRuntime=object)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "decision_record",
+        SimpleNamespace(
+            deterministic_outcome=lambda *args: {},
+            deterministic_recommendation=local_recommendation,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules, "duplicate", SimpleNamespace(check_duplicate_claim=lambda *args: {})
+    )
+    monkeypatch.setattr(ablation, "_deterministic_context", lambda *args, **kwargs: {})
+
+    adapter = deterministic_adapter("baseline")
+    sys.modules["decision_record"] = SimpleNamespace()
+    output, _ = adapter.predict({"claim_id": "c"})
+
+    assert output["verdict"] == "APPROVE"
+    adapter.close()
+
+
+def test_per_claim_timeout_is_recorded_as_failure():
+    adapter = callable_adapter("slow", lambda claim: time.sleep(1))
+    adapter.timeout_seconds = 0.01
+    report = compare(
+        _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
+    )
+    row = report["per_claim"][0]["candidates"]["slow"]
+    assert row["verdict"] is False
+    assert "ClaimTimeoutError" in row["error"]
+
+
+def test_first_five_failures_abort_and_log_diagnostics(monkeypatch):
+    records = [
+        {"inputs": {"claim": {"claim_id": str(index)}}, "expectations": {"verdict": "DENY"}}
+        for index in range(6)
+    ]
+    logged = []
+    monkeypatch.setattr(ablation.mlflow, "active_run", lambda: object())
+    monkeypatch.setattr(
+        ablation.mlflow, "log_dict", lambda value, path: logged.append((value, path))
+    )
+    adapter = callable_adapter("broken", lambda claim: (_ for _ in ()).throw(ValueError("boom")))
+
+    with pytest.raises(ablation.CandidateBatchFailure, match="first 5 rows"):
+        ablation._observations(records, adapter)
+
+    assert logged[0][1] == "ablation-errors.json"
+    assert len(logged[0][0]["per_claim"]) == 5
+    assert "ValueError: boom" in logged[0][0]["per_claim"][0]["error"]
 
 
 class _Frame:

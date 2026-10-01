@@ -124,8 +124,10 @@ def build_heldout_records(reference_rows: Iterable[dict], n: int = 100) -> tuple
             )
             if scenario == "neutral_control":
                 verdict, disposition = source["gold_verdict"], source["gold_disposition"]
+                approved_amount = source.get("gold_approved_amount")
             else:
                 verdict, disposition = "DENY", "DENY"
+                approved_amount = "0.00"
             records.append(
                 {
                     "inputs": {"claim": claim},
@@ -134,6 +136,7 @@ def build_heldout_records(reference_rows: Iterable[dict], n: int = 100) -> tuple
                         "disposition": disposition,
                         "disposition_class": disposition_class(disposition, verdict),
                         "approval_subchoice": approval_subchoice(disposition, verdict),
+                        "approved_amount": approved_amount,
                         "scenario_type": scenario,
                         "policy_clause_id": POLICY[scenario]["clause_id"],
                         "policy_section_ref": POLICY[scenario]["section_ref"],
