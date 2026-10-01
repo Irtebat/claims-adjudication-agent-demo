@@ -1,7 +1,30 @@
+import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import register_agent
+
+
+def test_logging_uses_pip_requirements_without_uv_project(monkeypatch):
+    agent_dir = Path(register_agent.__file__).resolve().parents[1]
+    assert not (agent_dir / "uv.lock").exists()
+
+    observed = {}
+
+    def log_model(**kwargs):
+        observed["uv_auto_detect"] = os.environ.get("MLFLOW_UV_AUTO_DETECT")
+        observed["kwargs"] = kwargs
+        return SimpleNamespace(model_uri="runs:/run-id/agent")
+
+    monkeypatch.setattr(register_agent.mlflow.pyfunc, "log_model", log_model)
+    monkeypatch.setenv("MLFLOW_UV_AUTO_DETECT", "true")
+
+    register_agent._log_agent_model({"input": []})
+
+    assert observed["uv_auto_detect"] == "false"
+    assert observed["kwargs"]["pip_requirements"] == register_agent.PIP_REQUIREMENTS
+    assert os.environ["MLFLOW_UV_AUTO_DETECT"] == "true"
 
 
 def test_registration_sets_candidate_and_never_prod(monkeypatch):

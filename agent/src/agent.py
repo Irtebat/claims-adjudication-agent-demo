@@ -48,9 +48,9 @@ from decision_record import (
     recommendation_json_schema,
     source_sha256,
 )
+from gateway_chat import MODEL_SERVICE as LLM_ENDPOINT
 from writer import write_adjudication
 
-LLM_ENDPOINT = "system.ai.gpt-5-2"
 MODEL_NAME = "fe-bar-ir.default.claims_adjudication_agent"
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
