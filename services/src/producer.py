@@ -8,13 +8,8 @@ Initial snapshot: fresh checkpoint replays all ~5000 seeded claims once; then on
 claims stream. Checkpoint advances after broker ack so re-delivery is skipped next run.
 """
 
-import sys
-from pathlib import Path
-
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config
 import producer_core

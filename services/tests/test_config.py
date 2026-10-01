@@ -35,9 +35,61 @@ def test_confluent_config_carries_ca_pem_inline():
 def test_spark_options_use_pem_truststore_and_jaas():
     opts = config.kafka_config_from_values(_VALUES).spark_kafka_options()
     assert opts["kafka.ssl.truststore.type"] == "PEM"
-    assert opts["kafka.ssl.truststore.certificates"].startswith("-----BEGIN")
-    assert "ScramLoginModule required" in opts["kafka.sasl.jaas.config"]
+    assert opts["kafka.ssl.truststore.certificates"] == _VALUES["ssl-ca-pem"]
+    assert "kafka.ssl.truststore.location" not in opts  # inline PEM, no file on serverless
+    assert opts["kafka.security.protocol"] == "SASL_SSL"
+    assert opts["kafka.sasl.mechanism"] == "SCRAM-SHA-256"
     assert 'username="avnadmin"' in opts["kafka.sasl.jaas.config"]
+    assert all(key.startswith("kafka.") for key in opts)
+
+
+def test_spark_jaas_uses_kafkashaded_login_module():
+    jaas = config.kafka_config_from_values(_VALUES).spark_kafka_options()["kafka.sasl.jaas.config"]
+    assert jaas.startswith(
+        "kafkashaded.org.apache.kafka.common.security.scram.ScramLoginModule required "
+    )
+    assert jaas.endswith(";")
+
+
+def test_spark_jaas_escapes_quotes_and_backslashes():
+    cfg = config.kafka_config_from_values({**_VALUES, "sasl-password": 'p"w\\x'})
+    jaas = cfg.spark_kafka_options()["kafka.sasl.jaas.config"]
+    assert 'password="p\\"w\\\\x";' in jaas
+
+
+def test_confluent_config_uses_librdkafka_sasl_keys_without_jaas():
+    conf = config.kafka_config_from_values(_VALUES).confluent_config()
+    assert conf == {
+        "bootstrap.servers": "host:25358",
+        "security.protocol": "SASL_SSL",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": "avnadmin",
+        "sasl.password": "pw",
+        "ssl.ca.pem": _VALUES["ssl-ca-pem"],
+    }
+
+
+@pytest.mark.parametrize("builder", ["build_producer", "build_consumer"])
+def test_kafka_io_clients_get_no_jaas(builder, monkeypatch):
+    import sys
+    import types
+
+    import kafka_io
+
+    captured = {}
+    fake = types.ModuleType("confluent_kafka")
+    fake.Producer = fake.Consumer = lambda conf: captured.update(conf)
+    monkeypatch.setitem(sys.modules, "confluent_kafka", fake)
+
+    cfg = config.kafka_config_from_values(_VALUES)
+    if builder == "build_producer":
+        kafka_io.build_producer(cfg)
+    else:
+        kafka_io.build_consumer(cfg, "g")
+    assert captured["sasl.username"] == "avnadmin"
+    assert captured["ssl.ca.pem"] == _VALUES["ssl-ca-pem"]
+    assert not [k for k in captured if "jaas" in k]
+    assert not [v for v in captured.values() if "LoginModule" in str(v)]
 
 
 def test_config_from_env(monkeypatch):

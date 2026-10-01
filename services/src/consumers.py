@@ -23,10 +23,6 @@ toggle in the resource yml for a live-demo loop.
 
 import json
 import os
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config
 import consumer_core
@@ -84,9 +80,9 @@ def _run(cur=None):
             print("Idle poll timeout reached; draining complete.")
             break
         if msg.error():
+            # Never commit a Kafka error/event message: it carries no event to handle.
             errors += 1
-            print(f"Consumer error (skipping): {msg.error()}")
-            consumer.commit(msg, asynchronous=False)
+            print(f"Consumer error (not committed): {msg.error()}")
             continue
         processed += 1
         event = deserialize(msg.value())

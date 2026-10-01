@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 # Aiven fe-bar-kafka transport constants (non-secret).
 SASL_MECHANISM = "SCRAM-SHA-256"
 SECURITY_PROTOCOL = "SASL_SSL"
+# Spark-only: the Kafka client bundled with Databricks Spark is shaded under kafkashaded.
+SPARK_SCRAM_LOGIN_MODULE = "kafkashaded.org.apache.kafka.common.security.scram.ScramLoginModule"
 
 # Secret scopes.
 KAFKA_SCOPE = "fe-bar-aiven-kafka"
@@ -32,6 +34,11 @@ SERVING_ENDPOINT = "agents_fe-bar-ir-default-claims_adjudication_agent"
 # Lakebase (Wave 5/6).
 LAKEBASE_ENDPOINT = "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
 LAKEBASE_DATABASE = "databricks_postgres"
+
+
+def _jaas_quote(value: str) -> str:
+    """Escape a value for a double-quoted JAAS option."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 @dataclass
@@ -58,10 +65,15 @@ class KafkaConfig:
         return conf
 
     def spark_kafka_options(self, prefix: str = "kafka.") -> dict:
-        """Spark structured-streaming Kafka options; CA passed inline as a PEM truststore."""
+        """Spark structured-streaming Kafka options; CA passed inline as a PEM truststore.
+
+        Databricks ships a shaded Kafka client, so the JAAS login module must be the
+        ``kafkashaded.`` class; the unshaded name fails with "No LoginModule found".
+        """
         jaas = (
-            "org.apache.kafka.common.security.scram.ScramLoginModule required "
-            f'username="{self.sasl_username}" password="{self.sasl_password}";'
+            f"{SPARK_SCRAM_LOGIN_MODULE} required "
+            f'username="{_jaas_quote(self.sasl_username)}" '
+            f'password="{_jaas_quote(self.sasl_password)}";'
         )
         return {
             f"{prefix}bootstrap.servers": self.bootstrap_servers,
