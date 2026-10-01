@@ -138,7 +138,6 @@ def build_heldout_records(reference_rows: Iterable[dict], n: int = 100) -> tuple
                         "policy_clause_id": POLICY[scenario]["clause_id"],
                         "policy_section_ref": POLICY[scenario]["section_ref"],
                         "narrative_fact": POLICY[scenario]["fact"],
-                        "structured_only_verdict": source["gold_verdict"],
                         "oracle_clause_ids": source.get("_oracle_clause_ids"),
                     },
                 }
@@ -170,28 +169,65 @@ def validate_heldout(records: list[dict]) -> None:
         expected = record["expectations"]
         if not expected.get("policy_clause_id") or not expected.get("policy_section_ref"):
             raise ValueError("each held-out row must cite its written policy")
-        treatment = expected["scenario_type"] != "neutral_control"
-        differs = expected["structured_only_verdict"] != expected["verdict"]
-        if differs != treatment:
-            raise ValueError("held-out row is not genuinely narrative-dependent")
         counts[expected["scenario_type"]] += 1
     if dict(counts) != SCENARIO_COUNTS:
         raise ValueError(f"invalid held-out stratification: {dict(counts)}")
 
 
-def create_live(profile: str, warehouse_id: str) -> tuple[Any, dict]:
+def _validate_live_narrative_dependence(records: list[dict], profile: str) -> None:
+    """Run the actual frozen structured authorities and verify every narrative contrast."""
+    from authorities_runtime import AuthorityRuntime
+    from db import connect
+    from decision_record import deterministic_outcome
+    from duplicate import check_duplicate_claim
+
+    with connect(profile=profile, autocommit=True) as connection:
+        runtime = AuthorityRuntime(connection)
+        for record in records:
+            claim = record["inputs"]["claim"]
+            frozen = runtime.freeze(claim["coil_id"])
+            conformance = frozen.conformance()
+            coverage = frozen.coverage(claim)
+            settlement = frozen.settlement(
+                {
+                    "coil_id": claim["coil_id"],
+                    "claim_type": claim["claim_type"],
+                    "claimed_tonnage": claim.get("claimed_tonnage") or 0,
+                    "claimed_freight": claim.get("claimed_freight") or 0,
+                    "proration_factor": coverage.get("proration_factor", 1.0),
+                }
+            )
+            duplicate = check_duplicate_claim(connection, claim)
+            structured = deterministic_outcome(
+                claim["claim_type"], conformance, coverage, settlement, duplicate
+            )
+            expected = record["expectations"]
+            treatment = expected["scenario_type"] != "neutral_control"
+            differs = structured["verdict"] != expected["verdict"]
+            if differs != treatment:
+                raise ValueError(
+                    "narrative-dependence validation failed for "
+                    f"{claim['claim_id']}: structured={structured['verdict']}, "
+                    f"gold={expected['verdict']}, scenario={expected['scenario_type']}"
+                )
+
+
+def create_live(profile: str, warehouse_id: str, experiment_id: str) -> tuple[Any, dict]:
     """Explicit live creation path; writes only the isolated UC evaluation dataset."""
     rows = _source_rows(_execute_sql(profile, warehouse_id, source_sql()))
     oracles = ResolverOracle(profile).resolve_rows(rows[:25])
     for row, oracle in zip(rows[:25], oracles):
         row["_oracle_clause_ids"] = oracle["oracle_clause_ids"]
     records, metadata = build_heldout_records(rows)
+    _validate_live_narrative_dependence(records, profile)
     try:
         dataset = mlflow.genai.datasets.get_dataset(name=HELDOUT_TABLE)
     except Exception as exc:
         if not any(text in str(exc).lower() for text in ("not found", "does not exist")):
             raise
-        dataset = mlflow.genai.datasets.create_dataset(uc_table_name=HELDOUT_TABLE)
+        dataset = mlflow.genai.datasets.create_dataset(
+            name=HELDOUT_TABLE, experiment_id=experiment_id
+        )
     dataset.merge_records(records)
     return dataset, metadata
 
@@ -201,13 +237,15 @@ def main() -> None:
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("--create", action="store_true")
     parser.add_argument("--profile")
-    parser.add_argument("--warehouse-id", default="38e458a09de4a055")
+    parser.add_argument("--warehouse-id")
+    parser.add_argument("--experiment", default="/Shared/claims-adjudication-ablation")
     args = parser.parse_args()
     if args.create:
-        if not args.profile:
-            parser.error("--create requires explicit --profile")
+        if not args.profile or not args.warehouse_id:
+            parser.error("--create requires explicit --profile and --warehouse-id")
         mlflow.set_tracking_uri("databricks")
-        _, metadata = create_live(args.profile, args.warehouse_id)
+        experiment = mlflow.set_experiment(args.experiment)
+        _, metadata = create_live(args.profile, args.warehouse_id, experiment.experiment_id)
         print(json.dumps(metadata, indent=2))
     elif args.describe:
         print(

@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from authorities import compute_coverage
 from decision_record import deterministic_outcome
 
+import heldout
 from build_dataset import LABEL_KEYS, LEAN_CLAIM_COLUMNS
 from heldout import HELDOUT_TABLE, NARRATIVES, POLICY, SCENARIO_COUNTS, build_heldout_records
 
@@ -99,3 +101,32 @@ def test_control_labels_must_come_from_source():
     rows[0].pop("gold_verdict")
     with pytest.raises(ValueError, match="25 approved real"):
         build_heldout_records(rows)
+
+
+def test_live_create_uses_named_mlflow_dataset(monkeypatch):
+    rows = _reference_rows()
+    monkeypatch.setattr(heldout, "_execute_sql", lambda *args: rows)
+    monkeypatch.setattr(
+        heldout,
+        "ResolverOracle",
+        lambda profile: SimpleNamespace(
+            resolve_rows=lambda values: [{"oracle_clause_ids": ["coverage"]} for _ in values]
+        ),
+    )
+    monkeypatch.setattr(heldout, "_validate_live_narrative_dependence", lambda *args: None)
+    monkeypatch.setattr(
+        heldout.mlflow.genai.datasets,
+        "get_dataset",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("does not exist")),
+    )
+    created = []
+    dataset = SimpleNamespace(merge_records=lambda records: None)
+    monkeypatch.setattr(
+        heldout.mlflow.genai.datasets,
+        "create_dataset",
+        lambda **kwargs: created.append(kwargs) or dataset,
+    )
+    result, metadata = heldout.create_live("profile", "warehouse", "experiment")
+    assert result is dataset
+    assert metadata["record_count"] == 100
+    assert created == [{"name": HELDOUT_TABLE, "experiment_id": "experiment"}]

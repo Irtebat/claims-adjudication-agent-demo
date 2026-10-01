@@ -131,7 +131,7 @@ After that branch lands, run from `eval/`:
 
 ```bash
 uv run --project . python src/ablation.py --dataset heldout --n 100 --candidates deterministic_baseline,agent@prod
-uv run --project . python src/ablation.py --dataset history --n 100 --candidates deterministic_baseline,agent@prod
+uv run --project . python src/ablation.py --dataset history --n 100 --warehouse-id <WAREHOUSE_ID> --candidates deterministic_baseline,agent@prod
 ```
 
 `history` queries the existing labeled histories through `build_dataset.py`, resolves
@@ -159,7 +159,7 @@ The only live creation path writes the isolated MLflow/UC evaluation dataset
 `adjudications` or medallion tables. It is prepared but has not been executed:
 
 ```bash
-uv run --project . python src/heldout.py --create --profile fe-bar
+uv run --project . python src/heldout.py --create --profile fe-bar --warehouse-id <WAREHOUSE_ID>
 ```
 
 Tests use synthetic fixtures and make no live calls.

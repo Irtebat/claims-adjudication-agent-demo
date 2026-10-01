@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import sys
 import tempfile
 import time
@@ -20,7 +21,7 @@ from databricks.sdk import WorkspaceClient
 
 from build_dataset import _execute_sql, make_record, source_sql, stable_holdout
 from heldout import approval_subchoice, disposition_class
-from predict import load_candidate, predict_claim
+from predict import PersistenceViolation, load_candidate, predict_claim
 from resolver_oracle import AGENT_SRC, ResolverOracle
 
 MODEL_URI = "models:/fe-bar-ir.default.claims_adjudication_agent@prod"
@@ -61,7 +62,7 @@ def standardize_output(output: Any, deterministic: bool = False) -> dict:
         "disposition_class": disposition_class(disposition, verdict),
         "approval_subchoice": approval_subchoice(disposition, verdict),
         "approved_amount": recommendation.get("approved_amount"),
-        "cited_clause_ids": data.get("cited_clause_ids"),
+        "cited_clause_ids": None if deterministic else data.get("cited_clause_ids"),
         "judge_score": judge,
         "invariant_violations": None if deterministic else data.get("invariant_violations"),
         "usage": data.get("usage") or output.get("usage"),
@@ -76,23 +77,66 @@ def _load_callable(path: str) -> Callable[[dict], dict]:
     return getattr(importlib.import_module(module_name), attribute)
 
 
-def deterministic_baseline(claim: dict) -> dict:
-    """Run the ruleset on the same frozen authority context used by the agent."""
+def _deterministic_context(connection, claim: dict) -> dict:
     if str(AGENT_SRC) not in sys.path:
         sys.path.insert(0, str(AGENT_SRC))
     try:
-        from agent import ClaimsAdjudicationAgent
-        from db import connect
+        from authorities_runtime import AuthorityRuntime
+        from decision_record import deterministic_outcome
+        from duplicate import check_duplicate_claim
+    except (ImportError, AttributeError) as exc:
+        raise ImportError("deterministic baseline requires the agent authority runtime") from exc
+    frozen = AuthorityRuntime(connection).freeze(claim["coil_id"])
+    conformance = frozen.conformance()
+    coverage = frozen.coverage(claim)
+    settlement = frozen.settlement(
+        {
+            "coil_id": claim["coil_id"],
+            "claim_type": claim.get("claim_type"),
+            "claimed_tonnage": claim.get("claimed_tonnage") or 0,
+            "claimed_freight": claim.get("claimed_freight") or 0,
+            "proration_factor": coverage.get("proration_factor", 1.0),
+        }
+    )
+    duplicate = check_duplicate_claim(connection, claim)
+    deterministic = deterministic_outcome(
+        claim.get("claim_type"), conformance, coverage, settlement, duplicate
+    )
+    return {
+        "claim_type": claim.get("claim_type"),
+        "frozen": frozen,
+        "resolved": frozen.resolved,
+        "measured": frozen.measured,
+        "conformance": conformance,
+        "coverage": coverage,
+        "settlement": settlement,
+        "duplicate": duplicate,
+        "deterministic": deterministic,
+        "clauses": [],
+        "citations": [],
+        "precedent": [],
+        "risk": {"risk_score": 0.0, "found": False, "cluster_id": None},
+    }
+
+
+def _recommend_from_context(context: dict) -> dict:
+    try:
         from decision_record import deterministic_recommendation
     except (ImportError, AttributeError) as exc:
         raise ImportError(
             "deterministic_baseline requires decision_record.deterministic_recommendation(context) "
             "from branch deterministic-ruleset; land that branch first"
         ) from exc
-    profile = __import__("os").environ.get("LAKEBASE_PROFILE") or "fe-bar"
-    with connect(profile=profile, autocommit=True) as connection:
-        context = ClaimsAdjudicationAgent()._deterministic_core(connection, claim)
     return deterministic_recommendation(context)
+
+
+def deterministic_baseline(claim: dict) -> dict:
+    """One-off baseline entry point; run adapters reuse one connection instead."""
+    from db import connect
+
+    profile = os.environ.get("LAKEBASE_PROFILE") or "fe-bar"
+    with connect(profile=profile, autocommit=True) as connection:
+        return _recommend_from_context(_deterministic_context(connection, claim))
 
 
 @dataclass
@@ -100,6 +144,7 @@ class CandidateAdapter:
     name: str
     invoke: Callable[[dict], dict]
     deterministic: bool = False
+    close: Callable[[], None] | None = None
 
     def predict(self, claim: dict) -> tuple[dict, float]:
         started = time.perf_counter()
@@ -112,6 +157,26 @@ def callable_adapter(
 ) -> CandidateAdapter:
     return CandidateAdapter(
         name, _load_callable(function) if isinstance(function, str) else function, deterministic
+    )
+
+
+def deterministic_adapter(name: str, profile: str | None = None) -> CandidateAdapter:
+    """Open one Lakebase connection and reuse it for every claim in this candidate run."""
+    from db import connect
+
+    manager = connect(
+        profile=profile or os.environ.get("LAKEBASE_PROFILE") or "fe-bar", autocommit=True
+    )
+    connection = manager.__enter__()
+
+    def close() -> None:
+        manager.__exit__(None, None, None)
+
+    return CandidateAdapter(
+        name,
+        lambda claim: _recommend_from_context(_deterministic_context(connection, claim)),
+        deterministic=True,
+        close=close,
     )
 
 
@@ -135,7 +200,7 @@ def endpoint_adapter(
             },
         )
         if _custom(response).get("write_result", {}).get("persisted") is not False:
-            raise RuntimeError(f"{name}: endpoint persistence invariant failed")
+            raise PersistenceViolation(f"{name}: endpoint persistence invariant failed")
         return response
 
     return CandidateAdapter(name, invoke)
@@ -144,7 +209,7 @@ def endpoint_adapter(
 def resolve_candidate(spec: str) -> CandidateAdapter:
     resolved = CANDIDATE_ALIASES.get(spec, spec)
     if resolved == "deterministic_baseline":
-        return callable_adapter(spec, deterministic_baseline, deterministic=True)
+        return deterministic_adapter(spec)
     if resolved.startswith("models:/"):
         return model_adapter(spec, resolved)
     if resolved.startswith("endpoint:"):
@@ -209,10 +274,23 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
                     "error": None,
                 }
             )
+        except PersistenceViolation:
+            raise
         except Exception as exc:
+            expected = normalize_expectations(record["expectations"])
             observations.append(
                 {
-                    **{key: NA for key in QUALITY_DIMENSIONS},
+                    "verdict": False,
+                    "disposition_class": False,
+                    "approval_subchoice": (
+                        False if expected.get("disposition_class") == "APPROVE" else NA
+                    ),
+                    "citation": (
+                        NA
+                        if candidate.deterministic or not expected.get("oracle_clause_ids")
+                        else False
+                    ),
+                    "judge": NA if candidate.deterministic else False,
                     "invariant_corrected": NA,
                     "claim_id": claim_id,
                     "tokens": NA,
@@ -246,18 +324,17 @@ def _trace_token_usage(run_id: str) -> dict[str, int]:
         claim_id = _recursive_claim_id(row.get("request"))
         if not claim_id:
             continue
-        for field in ("token_usage", "usage", "trace_metadata"):
-            value = row.get(field)
-            if isinstance(value, str):
-                try:
-                    value = json.loads(value)
-                except json.JSONDecodeError:
-                    continue
-            if isinstance(value, dict):
-                tokens = value.get("total_tokens") or value.get("total_token_count")
-                if tokens is not None:
-                    usage[claim_id] = int(tokens)
-                    break
+        metadata = row.get("trace_metadata")
+        if not isinstance(metadata, dict):
+            continue
+        value = metadata.get("mlflow.trace.tokenUsage")
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                continue
+        if isinstance(value, dict) and value.get("total_tokens") is not None:
+            usage[claim_id] = int(value["total_tokens"])
     return usage
 
 
@@ -332,9 +409,15 @@ def _report(candidates: list[CandidateAdapter], aggregates: dict[str, list[dict]
 def compare(records: list[dict], candidates: list[CandidateAdapter]) -> dict:
     if len(candidates) < 2:
         raise ValueError("ablation requires at least two candidates")
-    return _report(
-        candidates, {candidate.name: _observations(records, candidate) for candidate in candidates}
-    )
+    try:
+        return _report(
+            candidates,
+            {candidate.name: _observations(records, candidate) for candidate in candidates},
+        )
+    finally:
+        for candidate in candidates:
+            if candidate.close:
+                candidate.close()
 
 
 def _numeric_metrics(prefix: str, values: dict) -> dict:
@@ -359,19 +442,23 @@ def run(
     ablation_id = ablation_id or str(uuid.uuid4())
     candidate_runs, aggregates = [], {}
     for candidate in candidates:
-        with mlflow.start_run(run_name=f"ablation-{ablation_id}-{candidate.name}") as active:
-            mlflow.set_tags({"ablation_id": ablation_id, "candidate": candidate.name})
-            observations = _observations(records, candidate)
-            try:
-                trace_tokens = _trace_token_usage(active.info.run_id)
-            except Exception:
-                trace_tokens = {}
-            for observation in observations:
-                if observation["tokens"] == NA and observation["claim_id"] in trace_tokens:
-                    observation["tokens"] = trace_tokens[observation["claim_id"]]
-            aggregates[candidate.name] = observations
-            mlflow.log_metrics(_numeric_metrics("", _summary(observations)))
-            candidate_runs.append(active.info.run_id)
+        try:
+            with mlflow.start_run(run_name=f"ablation-{ablation_id}-{candidate.name}") as active:
+                mlflow.set_tags({"ablation_id": ablation_id, "candidate": candidate.name})
+                observations = _observations(records, candidate)
+                try:
+                    trace_tokens = _trace_token_usage(active.info.run_id)
+                except Exception:
+                    trace_tokens = {}
+                for observation in observations:
+                    if observation["tokens"] == NA and observation["claim_id"] in trace_tokens:
+                        observation["tokens"] = trace_tokens[observation["claim_id"]]
+                aggregates[candidate.name] = observations
+                mlflow.log_metrics(_numeric_metrics("", _summary(observations)))
+                candidate_runs.append(active.info.run_id)
+        finally:
+            if candidate.close:
+                candidate.close()
     report = _report(candidates, aggregates)
     with mlflow.start_run(run_name=f"ablation-{ablation_id}-comparison") as active:
         mlflow.set_tags({"ablation_id": ablation_id, "run_type": "paired_comparison"})
@@ -451,13 +538,15 @@ def main() -> None:
     parser.add_argument("--n", type=int, default=100)
     parser.add_argument("--candidates", required=True)
     parser.add_argument("--profile", default="fe-bar")
-    parser.add_argument("--warehouse-id", default="38e458a09de4a055")
+    parser.add_argument("--warehouse-id")
     parser.add_argument("--estimate-only", action="store_true")
     args = parser.parse_args()
     specs = [item.strip() for item in args.candidates.split(",") if item.strip()]
     if args.estimate_only:
         print(json.dumps(estimate_tokens(args.n, specs), indent=2))
         return
+    if args.dataset == "history" and not args.warehouse_id:
+        parser.error("--dataset history requires --warehouse-id")
     mlflow.set_tracking_uri("databricks")
     records = load_records(args.dataset, args.n, args.profile, args.warehouse_id)
     print(

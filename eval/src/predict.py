@@ -14,6 +14,10 @@ _MODEL = None
 _MODEL_URI = None
 
 
+class PersistenceViolation(RuntimeError):
+    """Candidate attempted to persist during a side-effect-free evaluation."""
+
+
 def _forbidden(exc: Exception) -> bool:
     return any(marker in str(exc).lower() for marker in PERSISTENT_FORBIDDEN_MARKERS)
 
@@ -54,9 +58,11 @@ def predict_claim(claim: dict, model=None, attempts: int = 3, sleep=time.sleep) 
                 dumped.get("custom_outputs", {}).get("write_result", {}).get("persisted")
                 is not False
             ):
-                raise RuntimeError("evaluation persistence invariant failed")
+                raise PersistenceViolation("evaluation persistence invariant failed")
             return dumped
         except Exception as exc:
+            if isinstance(exc, PersistenceViolation):
+                raise
             if _forbidden(exc) or attempt + 1 == attempts:
                 raise
             sleep((2**attempt) + random.random())

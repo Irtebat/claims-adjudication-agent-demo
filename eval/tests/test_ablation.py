@@ -7,8 +7,10 @@ from databricks.sdk.core import ApiClient
 import ablation
 from ablation import (
     NA,
+    PersistenceViolation,
     callable_adapter,
     compare,
+    deterministic_adapter,
     deterministic_baseline,
     endpoint_adapter,
     model_adapter,
@@ -82,7 +84,21 @@ def test_subchoice_only_applies_to_approvals_and_empty_citations_fail():
     assert scores["disposition_class"] is True
     assert scores["approval_subchoice"] == NA
     assert scores["citation"] == NA
-    assert score(denied, {"oracle_clause_ids": ["a"]})["citation"] is False
+    non_deterministic = standardize_output(_candidate("DENY", "DUPLICATE", citations=[])(None))
+    assert score(non_deterministic, {"oracle_clause_ids": ["a"]})["citation"] is False
+
+
+def test_real_deterministic_shape_always_has_na_citations():
+    output = standardize_output(
+        {
+            "recommended_verdict": "APPROVE",
+            "recommended_disposition": "CREDIT",
+            "cited_clause_ids": [],
+        },
+        deterministic=True,
+    )
+    expected = {"verdict": "APPROVE", "disposition": "CREDIT", "oracle_clause_ids": ["a"]}
+    assert score(output, expected)["citation"] == NA
 
 
 def test_history_expectations_derive_split_disposition():
@@ -93,13 +109,21 @@ def test_history_expectations_derive_split_disposition():
 
 def test_model_adapter_reuses_predict_retry_and_persist_guard():
     class Model:
+        calls = 0
+
         def predict(self, request):
+            self.calls += 1
             assert request["custom_inputs"]["persist"] is False
             return {"custom_outputs": {"write_result": {"persisted": True}}}
 
-    adapter = model_adapter("model", "models:/x@prod", loader=lambda _: Model())
-    with pytest.raises(RuntimeError, match="persistence invariant"):
-        adapter.predict({"claim_id": "c"})
+    model = Model()
+    adapter = model_adapter("model", "models:/x@prod", loader=lambda _: model)
+    with pytest.raises(PersistenceViolation, match="persistence invariant"):
+        compare(
+            [_records()[0]],
+            [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))],
+        )
+    assert model.calls == 1
 
 
 def test_endpoint_uses_invocations_rest_and_fails_closed():
@@ -142,6 +166,8 @@ def test_per_claim_failure_is_recorded_and_other_rows_continue():
     )
     assert calls == 4
     assert report["summary"]["base"]["failure_count"] == 1
+    assert report["summary"]["base"]["verdict"] == 0.5
+    assert report["per_claim"][0]["candidates"]["base"]["verdict"] is False
     assert "bad row" in report["per_claim"][0]["candidates"]["base"]["error"]
 
 
@@ -160,15 +186,60 @@ def test_standard_output_requires_dict():
 
 
 def test_missing_parallel_ruleset_has_actionable_import_error(monkeypatch):
+    class Manager:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setitem(
+        __import__("sys").modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager())
+    )
+    monkeypatch.setattr(ablation, "_deterministic_context", lambda connection, claim: {})
     monkeypatch.setitem(__import__("sys").modules, "decision_record", SimpleNamespace())
     with pytest.raises(ImportError, match="land that branch first"):
         deterministic_baseline({"claim_id": "c"})
 
 
 def test_trace_token_usage_maps_claim(monkeypatch):
-    rows = [{"request": {"claim": {"claim_id": "c"}}, "usage": {"total_tokens": 42}}]
+    rows = [
+        {
+            "request": {"claim": {"claim_id": "c"}},
+            "trace_metadata": {
+                "mlflow.trace.tokenUsage": (
+                    '{"input_tokens": 30, "output_tokens": 12, "total_tokens": 42}'
+                )
+            },
+        }
+    ]
     monkeypatch.setattr(ablation.mlflow, "search_traces", lambda run_id: _Frame(rows))
     assert ablation._trace_token_usage("run") == {"c": 42}
+
+
+def test_deterministic_adapter_reuses_one_connection(monkeypatch):
+    events = []
+
+    class Manager:
+        def __enter__(self):
+            events.append("enter")
+            return object()
+
+        def __exit__(self, *args):
+            events.append("exit")
+
+    monkeypatch.setitem(
+        __import__("sys").modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager())
+    )
+    monkeypatch.setattr(ablation, "_deterministic_context", lambda connection, claim: claim)
+    monkeypatch.setattr(
+        ablation,
+        "_recommend_from_context",
+        lambda context: _candidate("APPROVE", "CREDIT")(context),
+    )
+    adapter = deterministic_adapter("baseline")
+    compare(_records(), [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))])
+    assert events == ["enter", "exit"]
 
 
 class _Frame:
