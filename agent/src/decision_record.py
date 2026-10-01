@@ -22,6 +22,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from disposition_rules import approve_disposition, fraud_risk, supplier_attributable
+
 # Bump when the persisted payload shape or the recommendation schema changes; the
 # value is stamped on every decision record for reproducibility.
 SCHEMA_VERSION = "adjudication-decision-record/v1"
@@ -100,8 +102,9 @@ def deterministic_outcome(
 
     A material-nonconformance claim on in-spec material is DENIED; a coating
     warranty claim outside coverage is DENIED; a duplicate is DENIED as DUPLICATE.
-    Otherwise the claim is eligible and the approved amount is exactly the
-    settlement authority's output. No LLM input participates.
+    Otherwise the claim is eligible, the approved amount is exactly the settlement
+    authority's output, and the APPROVE disposition comes from the shared rules in
+    ``disposition_rules`` (REPLACEMENT / REWORK / CREDIT). No LLM input participates.
     """
     settlement_amount = float(settlement["approved_amount"])
     if duplicate.get("is_duplicate"):
@@ -140,15 +143,73 @@ def deterministic_outcome(
             "reason": reason,
             "duplicate_of_claim_id": None,
         }
+    disposition, disposition_rule = approve_disposition(claim_type, conformance, settlement)
     return {
         "verdict": "APPROVE",
-        "disposition": "CREDIT",
+        "disposition": disposition,
         "approved_amount": settlement_amount,
         "settlement_authority_amount": settlement_amount,
         "eligible": True,
         "reason": reason,
         "duplicate_of_claim_id": None,
+        "disposition_rule": disposition_rule,
     }
+
+
+def deterministic_recommendation(context: dict) -> dict:
+    """The full no-LLM recommendation from the authority outputs alone (pure, no I/O).
+
+    ``context`` carries the already-computed ``conformance``, ``coverage``,
+    ``settlement`` and ``duplicate`` results, the claim type (``claim_type`` or
+    ``claim["claim_type"]``), and optionally the advisory ``risk`` row. Applies rules
+    R1-R7 (see ``disposition_rules``) and returns ``verdict``, ``disposition``,
+    ``approved_amount`` (the settlement authority amount on APPROVE, else 0),
+    ``settlement_estimate`` (always the authority amount), ``flags``, and a
+    ``rule_trace`` of every rule evaluated up to the one that decided.
+    """
+    claim_type = context.get("claim_type") or (context.get("claim") or {}).get("claim_type")
+    conformance = context["conformance"]
+    settlement = context["settlement"]
+    duplicate = context["duplicate"]
+    risk = context.get("risk")
+    det = deterministic_outcome(claim_type, conformance, context["coverage"], settlement, duplicate)
+    authority_amount = float(det["settlement_authority_amount"])
+    trace: list[dict] = []
+
+    def decide(rule: str, verdict: str, disposition: str) -> dict:
+        trace.append({"rule": rule, "fired": True})
+        return {
+            "verdict": verdict,
+            "disposition": disposition,
+            "approved_amount": authority_amount if verdict == "APPROVE" else 0.0,
+            "settlement_estimate": authority_amount,
+            "flags": {
+                "supplier_attributable": supplier_attributable(claim_type, conformance),
+                "fraud_risk": fraud_risk(risk),
+                "over_claim": bool(settlement.get("over_claim_detected")),
+            },
+            "rule_trace": trace,
+            "deterministic": det,
+        }
+
+    if det["reason"] == "duplicate_claim":
+        return decide("R1_duplicate", "DENY", "DUPLICATE")
+    trace.append({"rule": "R1_duplicate", "fired": False})
+    if det["eligible"] is None:
+        return decide("R2_unknown_claim_type", "PEND_INVESTIGATE", "PEND_INVESTIGATE")
+    trace.append({"rule": "R2_unknown_claim_type", "fired": False})
+    if det["eligible"] is False:
+        if fraud_risk(risk):
+            return decide("R3_fraud_hold", "PEND_INVESTIGATE", "PEND_INVESTIGATE")
+        trace.append({"rule": "R3_fraud_hold", "fired": False})
+        return decide("R4_ineligible", "DENY", "DENY")
+    for rule in ("R3_fraud_hold", "R4_ineligible"):
+        trace.append({"rule": rule, "fired": False})
+    for rule in ("R5_supplier_attributable", "R6_over_claim_partial"):
+        if rule == det["disposition_rule"]:
+            break
+        trace.append({"rule": rule, "fired": False})
+    return decide(det["disposition_rule"], "APPROVE", det["disposition"])
 
 
 def _amounts_equal(a: Any, b: Any) -> bool:
@@ -172,6 +233,10 @@ def enforce_invariants(recommendation: dict, deterministic: dict) -> tuple[dict,
     when APPROVE else 0, (iii) the verdict is consistent with conformance/coverage
     eligibility — an ineligible claim can never be recommended for APPROVE, and an
     eligible claim can never be silently denied (only held as PEND_INVESTIGATE).
+    An APPROVE always carries the rule-derived disposition from the deterministic
+    outcome (the same ``disposition_rules`` the baseline uses); a valid but
+    different LLM disposition is corrected and noted in
+    ``disposition_corrected_from`` (a remedy label, not a money violation).
     Returns (corrected_recommendation, violations).
     """
     corrected = dict(recommendation)
@@ -212,12 +277,16 @@ def enforce_invariants(recommendation: dict, deterministic: dict) -> tuple[dict,
         "DUPLICATE",
     ):
         corrected["recommended_disposition"] = "DENY"
-    elif (
-        verdict == "APPROVE"
-        and corrected.get("recommended_disposition") not in APPROVE_DISPOSITIONS
-    ):
-        violations.append("invalid_approve_disposition")
-        corrected["recommended_disposition"] = "CREDIT"
+    elif verdict == "APPROVE":
+        rule_disposition = deterministic.get("disposition")
+        if rule_disposition not in APPROVE_DISPOSITIONS:
+            rule_disposition = "CREDIT"
+        proposed = corrected.get("recommended_disposition")
+        if proposed not in APPROVE_DISPOSITIONS:
+            violations.append("invalid_approve_disposition")
+        elif proposed != rule_disposition:
+            corrected["disposition_corrected_from"] = proposed
+        corrected["recommended_disposition"] = rule_disposition
 
     # (ii) settlement_estimate is the authority number, copied — never invented.
     if not _amounts_equal(corrected.get("settlement_estimate"), authority_amount):

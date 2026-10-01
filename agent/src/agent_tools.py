@@ -14,7 +14,11 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from authorities_runtime import AuthorityRuntime, FrozenAdjudicationContext
-from decision_record import clause_text_sha256, deterministic_outcome
+from decision_record import (
+    clause_text_sha256,
+    deterministic_outcome,
+    deterministic_recommendation,
+)
 from duplicate import check_duplicate_claim
 from heat_risk import get_customer_heat_risk
 from retrieval import find_similar_prior_claims, retrieve_policy_clauses
@@ -137,6 +141,7 @@ def run_deterministic_core(conn: Any, claim: dict, embed_fn: EmbedFn | None = No
         risk = {"risk_score": 0.0, "found": False, "cluster_id": None}
 
     return {
+        "claim_type": claim.get("claim_type"),
         "frozen": frozen,
         "resolved": frozen.resolved,
         "measured": frozen.measured,
@@ -157,12 +162,12 @@ def default_recommendation(core: dict) -> dict:
     """A deterministic recommendation aligned to the authorities.
 
     Used as the baseline the LLM refines and as the fallback when the LLM is
-    unreachable. Already satisfies the invariants (verdict/disposition/amount come
-    straight from the deterministic outcome), so it is always a safe recommendation.
+    unreachable. Verdict, disposition, amount and flags come from
+    ``deterministic_recommendation`` (rules R1-R7 in ``disposition_rules``), so it
+    always satisfies the invariants and is always a safe recommendation.
     """
     det = core["deterministic"]
-    settlement = core["settlement"]
-    risk = core.get("risk") or {}
+    baseline = deterministic_recommendation(core)
     precedent = [
         {
             "claim_id": p.get("claim_id"),
@@ -173,24 +178,26 @@ def default_recommendation(core: dict) -> dict:
         for p in core.get("precedent", [])
     ]
     return {
-        "recommended_verdict": det["verdict"],
-        "recommended_disposition": det["disposition"],
-        "settlement_estimate": float(det["settlement_authority_amount"]),
+        "recommended_verdict": baseline["verdict"],
+        "recommended_disposition": baseline["disposition"],
+        "settlement_estimate": baseline["settlement_estimate"],
         "cited_clause_ids": [c["citation_key"] for c in core.get("citations", [])],
         "precedent": precedent,
-        "rationale": _deterministic_rationale(det, core),
-        "flags": {
-            "supplier_attributable": False,
-            "fraud_risk": float(risk.get("risk_score") or 0.0) >= 0.5,
-            "over_claim": bool(settlement.get("over_claim_detected")),
-        },
+        "rationale": _deterministic_rationale(det, core, baseline),
+        "flags": baseline["flags"],
         "confidence": 0.6,
     }
 
 
-def _deterministic_rationale(det: dict, core: dict) -> str:
+def _deterministic_rationale(det: dict, core: dict, baseline: dict) -> str:
     reason = det["reason"]
     verdict = det["verdict"]
+    if baseline["verdict"] == "PEND_INVESTIGATE" and det["eligible"] is False:
+        return (
+            f"Not eligible ({reason}) and the customer/heat risk score "
+            f"{(core.get('risk') or {}).get('risk_score')} indicates a concentrated "
+            "cluster; held for investigation instead of denied. Pays nothing."
+        )
     if reason == "duplicate_claim":
         return (
             f"Duplicate of claim {det.get('duplicate_of_claim_id')}: same coil, defect, tonnage "
@@ -211,7 +218,8 @@ def _deterministic_rationale(det: dict, core: dict) -> str:
         return (
             f"Eligible ({reason}); settlement authority approves "
             f"{det['settlement_authority_amount']} (covered tonnage capped at shipped, "
-            "freight/proration applied)."
+            f"freight/proration applied). Disposition {det['disposition']} "
+            f"per rule {det.get('disposition_rule')}."
         )
     return f"Deterministic outcome: {verdict} ({reason})."
 

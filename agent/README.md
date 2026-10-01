@@ -63,9 +63,10 @@ a separate non-streaming call binds the recommendation JSON Schema through
 5. **Code-level invariants** (`decision_record.enforce_invariants`) — a duplicate is
    never payable (⇒ DENY/DUPLICATE); `approved_amount` equals the settlement
    authority output exactly (else 0 when not APPROVE); the verdict is consistent
-   with conformance/coverage eligibility. On any violation the recommendation is
-   corrected to the deterministic outcome (the LLM never wins) and the violation is
-   recorded.
+   with conformance/coverage eligibility, and an APPROVE carries the rule-derived
+   disposition (REPLACEMENT / REWORK / CREDIT, rules in `src/disposition_rules.py`).
+   On any violation the recommendation is corrected to the deterministic outcome
+   (the LLM never wins) and the violation is recorded.
 6. **Persist** — one psycopg transaction writes the recommendation into
    `public.adjudications` AND the canonical row into
    `public.adjudication_decision_records` (atomic, idempotent on
@@ -230,7 +231,8 @@ Lakebase, governed retrieval embedding, governed reasoning, and the atomic write
 | `src/prior_claims_corpus.py` + `src/prior_claims_corpus_job.py` | Lakehouse build of `gold.prior_claims_corpus` (FINAL adjudications, governed embeddings reused when narrative + provenance are unchanged, change-only MERGE). Served down as `reference.prior_claims_corpus`. |
 | `src/heat_risk.py` | `get_customer_heat_risk(customer_id, heat_no)` — reads the synced-down `reference.customer_heat_risk` graph score. Advisory only; never changes an amount or verdict. |
 | `src/agent_tools.py` | Resolve-once decision core + the in-process tool callables (authorities, duplicate, clause/precedent retrieval, risk) and the deterministic baseline recommendation. Pure (no LangGraph/MLflow), unit-tested with a fake connection. |
-| `src/decision_record.py` | The money-critical spine: the Pydantic recommendation schema + JSON-Schema, the deterministic outcome, `enforce_invariants` (the LLM never overrides an authority), and the canonical decision-record payload builder. |
+| `src/decision_record.py` | The money-critical spine: the Pydantic recommendation schema + JSON-Schema, the deterministic outcome, `deterministic_recommendation` (the full no-LLM baseline: verdict, disposition, amount, flags, rule trace), `enforce_invariants` (the LLM never overrides an authority), and the canonical decision-record payload builder. |
+| `src/disposition_rules.py` | Pure disposition/routing rules R1-R7 (duplicate, unknown type, fraud hold, ineligible, supplier-attributable REPLACEMENT, over-claim REWORK, CREDIT), documented in plain language and shared by the baseline and `enforce_invariants`. Reads authority outputs only; never changes an amount. |
 | `src/writer.py` | Atomic transactional writer — `adjudications` recommendation + `adjudication_decision_records` canonical row in one transaction, idempotent on `(adjudication_id, record_version)`. |
 | `src/agent.py` | The MLflow 3 `ResponsesAgent` orchestrator: LangGraph tool loop and separate structured recommendation through governed `system.ai.gpt-5-2`, MLflow tracing, invariant enforcement, and persistence. |
 | `src/register_agent.py` | Log + register + isolated-uv validation + `@candidate` alias. |
