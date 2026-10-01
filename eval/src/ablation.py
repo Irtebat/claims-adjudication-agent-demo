@@ -6,9 +6,10 @@ import argparse
 import importlib
 import json
 import os
-import signal
+import queue
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from collections import defaultdict
@@ -191,20 +192,26 @@ class CandidateAdapter:
 
     def predict(self, claim: dict) -> tuple[dict, float]:
         started = time.perf_counter()
+        result: queue.Queue = queue.Queue(maxsize=1)
 
-        def timeout_handler(signum, frame):
+        def invoke() -> None:
+            try:
+                result.put((True, self.invoke(claim)))
+            except BaseException as exc:
+                result.put((False, exc))
+
+        worker = threading.Thread(target=invoke, name=f"ablation-{self.name}", daemon=True)
+        worker.start()
+        try:
+            succeeded, value = result.get(timeout=self.timeout_seconds)
+        except queue.Empty as exc:
             raise ClaimTimeoutError(
                 f"candidate {self.name} exceeded {self.timeout_seconds}s for claim "
                 f"{claim.get('claim_id')}"
-            )
-
-        previous = signal.signal(signal.SIGALRM, timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, self.timeout_seconds)
-        try:
-            output = standardize_output(self.invoke(claim), deterministic=self.deterministic)
-        finally:
-            signal.setitimer(signal.ITIMER_REAL, 0)
-            signal.signal(signal.SIGALRM, previous)
+            ) from exc
+        if not succeeded:
+            raise value
+        output = standardize_output(value, deterministic=self.deterministic)
         return output, (time.perf_counter() - started) * 1000
 
 
