@@ -63,9 +63,11 @@ Secret scope `fe-bar-lakebase` — keys `database`, `endpoint`, `host`, `port`,
 - Synced tables use Triggered mode and are managed by `scripts/synced_tables.py`
   (via the `databricks postgres create-synced-table` surface), which has three paths
   with different grant behavior:
-  - **create** (`run.py synced-tables`): creates only the missing tables, builds the
-    corpus indexes on a new corpus table, and — only if it created something — runs
-    `scripts/regrant_synced_table_selects.py`.
+  - **create** (`run.py synced-tables`): creates only the missing tables, then waits
+    for each new one to reach `SYNCED_TABLE_ONLINE*` (the Postgres table exists only
+    after the initial sync; a FAILED state or a one-hour timeout stops the run). Only
+    then does it build the corpus indexes on a new corpus table and — only if it
+    created something — run `scripts/regrant_synced_table_selects.py`.
   - **re-sync** (`run.py resync-synced-tables`): the routine path. It runs an
     incremental update of each existing table's managed sync pipeline
     (`status.pipeline_id` from `get-synced-table`, then `databricks pipelines
@@ -75,7 +77,7 @@ Secret scope `fe-bar-lakebase` — keys `database`, `endpoint`, `host`, `port`,
     `VACUUM (ANALYZE)` so the BM25 statistics include the new rows.
   - **recreate** (`run.py recreate-synced-table --table <t>`): the schema-change
     path only. Delete + drop + create makes the table owned by a different role and
-    drops its grants, so it rebuilds indexes and re-grants.
+    drops its grants, so after the same ONLINE wait it rebuilds indexes and re-grants.
   The re-grant applies `SELECT` on the `reference.*` synced tables to the documented
   consumers — the app SP (`docs/evidence/app-deploy/grants.sql`) and the serving SP
   (`docs/evidence/serving-endpoint/README.md`) — so a create/recreate is reproducible

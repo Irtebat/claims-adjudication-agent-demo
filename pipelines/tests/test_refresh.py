@@ -34,7 +34,7 @@ _CDF_TABLES = json.dumps(
 )
 
 
-def _make_fake_run(calls):
+def _make_fake_run(calls, tables_json=None):
     """A subprocess.run stub that records each databricks argv and returns canned JSON.
 
     ``calls`` collects the parts BETWEEN 'databricks' and the trailing '--profile
@@ -48,7 +48,8 @@ def _make_fake_run(calls):
         if "list-cdf-configs" in parts:
             stdout = _ONE_CDF_CONFIG
         elif "tables" in parts and "list" in parts:
-            stdout = _CDF_TABLES
+            # Default: every CDF source present, including decision records.
+            stdout = tables_json or _CDF_TABLES_WITH_DECISION_RECORDS
         else:
             stdout = ""  # bundle deploy / run: stdout is not parsed
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
@@ -135,7 +136,7 @@ _CDF_TABLES_WITH_DECISION_RECORDS = json.dumps(
 )
 
 
-def _run_refresh_capturing_env(monkeypatch, tables_json):
+def _run_refresh_capturing_env(monkeypatch, tables_json, extra_argv=()):
     envs = []
 
     def fake_run(cmd, cwd=None, env=None, text=None, capture_output=None, check=False, **kw):
@@ -150,7 +151,7 @@ def _run_refresh_capturing_env(monkeypatch, tables_json):
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
 
     monkeypatch.setattr(run.subprocess, "run", fake_run)
-    monkeypatch.setattr(sys, "argv", ["run.py", "refresh"])
+    monkeypatch.setattr(sys, "argv", ["run.py", "refresh", *extra_argv])
     monkeypatch.delenv("BUNDLE_VAR_cdf_decision_records_table", raising=False)
     with pytest.raises(SystemExit) as exc:
         run.main()
@@ -176,8 +177,22 @@ def test_refresh_passes_all_cdf_tables_including_decision_records(monkeypatch):
     ]
 
 
-def test_refresh_tolerates_decision_records_not_yet_materialized(monkeypatch):
-    # Before the first decision record the CDF landing table does not exist; refresh
-    # still runs and leaves the bundle default (the pipeline skips that flow).
-    envs = _run_refresh_capturing_env(monkeypatch, _CDF_TABLES)
+def test_refresh_fails_loudly_when_decision_records_table_is_missing(monkeypatch):
+    # No silent fallback to the bundle default: a missing table stops before any deploy.
+    calls = []
+    monkeypatch.setattr(run.subprocess, "run", _make_fake_run(calls, _CDF_TABLES))
+    monkeypatch.setattr(sys, "argv", ["run.py", "refresh"])
+    with pytest.raises(RuntimeError, match="--allow-missing-decision-records"):
+        run.main()
+    assert not any(p[:2] == ["bundle", "deploy"] for p in calls)
+    assert not any(p[:2] == ["bundle", "run"] for p in calls)
+
+
+def test_refresh_allows_missing_decision_records_only_when_explicit(monkeypatch):
+    # Before the first decision record the CDF landing table does not exist; with the
+    # explicit flag refresh runs and leaves the bundle default (the pipeline then
+    # publishes an empty decision_records_for_fact).
+    envs = _run_refresh_capturing_env(
+        monkeypatch, _CDF_TABLES, ["--allow-missing-decision-records"]
+    )
     assert envs and all("BUNDLE_VAR_cdf_decision_records_table" not in env for _, env in envs)

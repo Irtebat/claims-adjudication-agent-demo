@@ -11,7 +11,10 @@ indexes are built on it (see ``lakebase/scripts/synced_tables.py``).
 
 Incremental by construction: an existing embedding is reused when the narrative hash
 and the embedding provenance still match, so only new or edited narratives are sent
-to the gateway. The table is written with a MERGE that updates only changed rows and
+to the gateway. The candidate set is written once to a staging Delta table and every
+later step reads that snapshot, so the embedding plan and the MERGE source cannot see
+two different reads of the gold views. Serverless rejects DataFrame caching and
+persisting, and nothing here needs either. The table is written with a MERGE that updates only changed rows and
 deletes claims that left the corpus, so its Delta CDF (required by the Triggered sync)
 carries only real changes. Advisory data only — precedent never decides money.
 """
@@ -24,13 +27,14 @@ from pyspark.sql import Window
 from pyspark.sql import functions as F
 
 from gateway_embed import PROVENANCE, embed_texts
-from prior_claims_corpus import CORPUS_TABLE, vector_literal
+from prior_claims_corpus import CORPUS_TABLE, STAGING_TABLE, vector_literal
 
 dbutils.widgets.text("catalog", "fe-bar-ir")
 catalog = dbutils.widgets.get("catalog")
 if not catalog or "`" in catalog or "/" in catalog:
     raise ValueError("Invalid catalog")
 target = f"`{catalog}`.gold.{CORPUS_TABLE}"
+staging = f"`{catalog}`.gold.{STAGING_TABLE}"
 
 # COMMAND ----------
 # Candidates: current claims x latest FINAL adjudication x deduplicated coil master.
@@ -55,7 +59,7 @@ coils = (
 )
 # Null bytes break the synced-table pipeline; strip them at the source.
 narrative = F.regexp_replace(F.col("defect_narrative"), "\u0000", "")
-candidates = (
+candidate_rows = (
     spark.table(f"`{catalog}`.gold.claims_current")
     .select("claim_id", "coil_id", "defect_code", narrative.alias("defect_narrative"), "claim_date")
     .join(final_adjudications, "claim_id")
@@ -65,7 +69,10 @@ candidates = (
         "AND defect_code IS NOT NULL AND claim_date IS NOT NULL AND verdict IS NOT NULL"
     )
     .withColumn("narrative_sha256", F.sha2(F.col("defect_narrative"), 256))
-).cache()
+)
+# Materialize the candidate snapshot once (overwritten every run, dropped on success).
+candidate_rows.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(staging)
+candidates = spark.table(staging)
 
 # COMMAND ----------
 spark.sql(
@@ -211,5 +218,6 @@ summary = {
     "provenance": PROVENANCE,
     "merge": merge.asDict() if merge is not None else None,
 }
+spark.sql(f"DROP TABLE IF EXISTS {staging}")
 print(json.dumps(summary, sort_keys=True, default=str))
 dbutils.notebook.exit(json.dumps(summary, sort_keys=True, default=str))

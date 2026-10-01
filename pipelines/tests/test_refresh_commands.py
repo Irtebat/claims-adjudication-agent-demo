@@ -100,6 +100,17 @@ def test_refresh_stops_before_resync_when_corpus_fails(monkeypatch):
     assert not any("resync-synced-tables" in c for c in calls)
 
 
+def test_allow_missing_decision_records_is_forwarded_to_both_medallion_runs(monkeypatch):
+    calls = [args for args, _ in _run(monkeypatch, ["routine", "--allow-missing-decision-records"])]
+    medallion = [a for a in calls if "pipelines/run.py" in a]
+    assert len(medallion) == 2
+    assert all(a[-1] == "--allow-missing-decision-records" for a in medallion)
+    # Default routine refresh does not pass it, so a missing table fails loudly.
+    assert "--allow-missing-decision-records" not in " ".join(
+        " ".join(a) for a, _ in _run(monkeypatch, ["routine"])
+    )
+
+
 def test_unknown_mode_is_rejected():
     with pytest.raises(SystemExit):
         refresh.main(["full"])

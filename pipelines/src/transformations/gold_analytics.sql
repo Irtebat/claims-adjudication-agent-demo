@@ -15,7 +15,10 @@ latest_decision_records AS (
         PARTITION BY adjudication_id
         ORDER BY record_version DESC, created_at DESC, idempotency_key DESC
       ) AS _rn
-    FROM `${claims.catalog}`.gold.adjudication_decision_records d
+    -- Pipeline temporary view (gold_adjudication_decision_records.py): the gold
+    -- decision records when they exist, else an empty frame with the same typed
+    -- schema, so a fresh workspace's first run does not fail on a missing table.
+    FROM decision_records_for_fact d
   )
   WHERE _rn = 1
 ),

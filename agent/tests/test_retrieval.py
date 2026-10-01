@@ -11,11 +11,13 @@ from retrieval import (
 
 
 def test_similar_claims_rank_assignments_are_distance_ascending():
-    source = (Path(__file__).parents[1] / "src" / "retrieval.py").read_text()
-    rank_assignments = source.split("SELECT claim_id, verdict, approved_amount, arm, rnk FROM (")[1]
+    import retrieval
 
-    assert rank_assignments.count("row_number() OVER (ORDER BY s ASC)") == 2
-    assert "row_number() OVER (ORDER BY s DESC)" not in rank_assignments
+    sql = retrieval.SIMILAR_CLAIMS_SQL
+    # Smaller cosine distance / BM25 score is better: both arms scan and rank ASC.
+    assert sql.count("row_number() OVER (ORDER BY s ASC, claim_id)") == 2
+    assert "DESC" not in sql
+    assert sql.count(" ASC\n  LIMIT %(k)s") == 2
 
 
 def test_rrf_fuse_orders_by_reciprocal_rank():
@@ -140,18 +142,154 @@ def test_find_similar_prior_claims_rrf_over_arms():
     assert params["grade"] == "ASTM A653 CS Type B"
 
 
-def test_similar_prior_claims_reads_the_synced_corpus_with_indexed_expressions():
+def _synced_tables():
+    import importlib.util
+    import sys
+
+    path = Path(__file__).resolve().parents[2] / "lakebase" / "scripts" / "synced_tables.py"
+    spec = importlib.util.spec_from_file_location("synced_tables_for_retrieval_test", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolve their module via sys.modules
+    spec.loader.exec_module(module)
+    return module
+
+
+def _arms(sql):
+    """Split the statement into its two arm subqueries: (arm label, inner SELECT)."""
+    import re
+
+    arms = re.findall(r"FROM \((SELECT .*?LIMIT %\(k\)s)\) (dense|fts)\b", sql, re.S)
+    return {label: inner for inner, label in arms}
+
+
+def _order_by_operand(inner):
+    """The left operand of the arm's ORDER BY distance/score (the indexed expression)."""
+    import re
+
+    match = re.search(r"ORDER BY (.+?) (<=>|<@>) ", inner)
+    return match.group(1), match.group(2)
+
+
+def _run_similar(filters=None):
     cols = ["claim_id", "verdict", "approved_amount", "arm", "rnk"]
     cursor = _MultiCursor([{"rows": [("CLM-A", "APPROVE", 10.0, "dense", 1)], "columns": cols}])
     find_similar_prior_claims(
-        _FakeConn(cursor), lambda texts: [[0.1] * 1024], text="edge", coil_id="COIL-1"
+        _FakeConn(cursor),
+        lambda texts: [[0.1] * 1024],
+        text="edge",
+        coil_id="COIL-1",
+        filters=filters,
     )
-    sql, params = cursor.calls[0]
-    # Served-down corpus, never the retired native public.prior_claims table.
-    assert "FROM reference.prior_claims_corpus" in sql
+    return cursor.calls[0]
+
+
+def test_each_arm_orders_by_exactly_the_indexed_expression():
+    import prior_claims_indexes as shared
+
+    st = _synced_tables()
+    ann_ddl, bm25_ddl = st.POST_CREATE_SQL["prior_claims_corpus"]
+    sql, _ = _run_similar()
+    arms = _arms(sql)
+    assert set(arms) == {"dense", "fts"}
+
+    dense_expr, dense_op = _order_by_operand(arms["dense"])
+    fts_expr, fts_op = _order_by_operand(arms["fts"])
+    # Character-identical to the expression inside each index definition.
+    assert dense_op == "<=>" and dense_expr == shared.PRIOR_CLAIMS_EMBEDDING_EXPR
+    assert f"(({dense_expr}) vector_cosine_ops)" in ann_ddl
+    assert "USING lakebase_ann" in ann_ddl
+    assert fts_op == "<@>" and fts_expr == shared.PRIOR_CLAIMS_TSVECTOR_EXPR
+    assert f"(({fts_expr}) tsvector_bm25_ops)" in bm25_ddl
+    assert "USING lakebase_bm25" in bm25_ddl
+    # The BM25 query uses the same text-search config as the indexed tsvector.
+    config = shared.PRIOR_CLAIMS_TEXT_SEARCH_CONFIG
+    assert f"to_tsvector('{config}', defect_narrative)" == fts_expr
+    assert f"to_bm25query(to_tsvector('{config}', %(text)s)" in arms["fts"]
+    assert f"'reference.{shared.PRIOR_CLAIMS_BM25_INDEX}'::regclass" in arms["fts"]
+    assert shared.PRIOR_CLAIMS_BM25_INDEX in bm25_ddl
+
+
+def test_synced_tables_builds_its_ddl_from_the_shared_constants_file():
+    import prior_claims_indexes as shared
+
+    st = _synced_tables()
+    assert st.PRIOR_CLAIMS_INDEXES_PATH.resolve() == Path(shared.__file__).resolve()
+    for name in (
+        "PRIOR_CLAIMS_TABLE",
+        "PRIOR_CLAIMS_EMBEDDING_EXPR",
+        "PRIOR_CLAIMS_TSVECTOR_EXPR",
+        "PRIOR_CLAIMS_ANN_INDEX",
+        "PRIOR_CLAIMS_BM25_INDEX",
+    ):
+        assert getattr(st._indexes, name) == getattr(shared, name)
+    # retrieval re-exports the very same objects, not copies.
+    import retrieval
+
+    assert retrieval.PRIOR_CLAIMS_EMBEDDING_EXPR is shared.PRIOR_CLAIMS_EMBEDDING_EXPR
+    assert f"'{shared.PRIOR_CLAIMS_TEXT_SEARCH_CONFIG}'" in shared.PRIOR_CLAIMS_TSVECTOR_EXPR
+
+
+def test_shared_constants_module_has_no_imports_and_only_string_constants():
+    import ast
+
+    import prior_claims_indexes as shared
+
+    tree = ast.parse(Path(shared.__file__).read_text())
+    body = tree.body[1:] if isinstance(tree.body[0], ast.Expr) else tree.body  # docstring
+    assert not any(isinstance(n, (ast.Import, ast.ImportFrom)) for n in ast.walk(tree))
+    for node in body:
+        assert isinstance(node, ast.Assign), ast.dump(node)
+        assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+
+
+def test_shared_constants_load_in_a_bare_interpreter_from_the_lakebase_dir():
+    # -I -S: isolated mode, no site-packages (so no agent deps), no user paths; run
+    # from lakebase/ exactly as lakebase/run.py runs synced_tables.py.
+    import subprocess
+    import sys
+
+    import prior_claims_indexes as shared
+
+    repo = Path(__file__).resolve().parents[2]
+    code = (
+        "import importlib.util, json, sys\n"
+        f"spec = importlib.util.spec_from_file_location('m', {str(Path(shared.__file__))!r})\n"
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+        "print(json.dumps({k: v for k, v in vars(m).items() if k.startswith('PRIOR_')}))\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", code],
+        cwd=repo / "lakebase",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    import json
+
+    assert json.loads(out)["PRIOR_CLAIMS_EMBEDDING_EXPR"] == shared.PRIOR_CLAIMS_EMBEDDING_EXPR
+
+
+def test_arms_query_the_table_directly_with_no_shared_cte():
+    import re
+
+    sql, params = _run_similar({"grade": "G550", "coating_class": "G90"})
+    assert not re.search(r"\bWITH\b", sql, re.I)  # no CTE at all, so none is shared
     assert "public.prior_claims" not in sql
-    # Both arms use the exact expressions the lakebase_ann / lakebase_bm25 indexes cover.
-    assert "embedding::vector(1024) AS embedding" in sql
-    assert "to_tsvector('english', defect_narrative) AS narrative_tsv" in sql
-    assert "'reference.prior_claims_corpus_lb_bm25'::regclass" in sql
-    assert params["qvec"].startswith("[") and params["coil_id"] == "COIL-1"
+    arms = _arms(sql)
+    for label, inner in arms.items():
+        # Each arm scans the corpus itself, with the metadata filter inlined.
+        assert inner.count("FROM reference.prior_claims_corpus") == 1, label
+        assert "coil_id <> %(coil_id)s" in inner
+        assert "AND grade = %(grade)s" in inner
+        assert "AND coating_class = %(coating_class)s" in inner
+        assert "FROM (" not in inner and "filtered" not in inner
+    # Bound parameters are unchanged.
+    assert set(params) == {"coil_id", "text", "k", "qvec", "grade", "coating_class"}
+    assert params["qvec"].startswith("[")
+
+
+def test_rrf_output_shape_is_unchanged():
+    sql, _ = _run_similar()
+    # One statement returns both ranked arms for Python-side RRF.
+    assert sql.count("UNION ALL") == 1
+    assert "'dense' AS arm" in sql and "'fts' AS arm" in sql

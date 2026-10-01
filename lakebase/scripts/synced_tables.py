@@ -3,9 +3,13 @@
 Three distinct paths, because they have different side effects on Postgres grants:
 
 * ``create`` — creates every synced table that does not exist yet (``databricks
-  postgres create-synced-table``, Triggered mode) and skips the ones that do. A newly
-  created table has no consumer grants, so when (and only when) something was created
-  this builds the post-create indexes and runs ``regrant_synced_table_selects.py``.
+  postgres create-synced-table``, Triggered mode) and skips the ones that do. The
+  Postgres table only exists once the initial sync completes, so it then polls
+  ``get-synced-table`` until ``status.detailed_state`` is ``SYNCED_TABLE_ONLINE*``
+  (bounded; a FAILED state or a timeout raises). A newly created table has no consumer
+  grants, so when (and only when) something was created — and only after it is
+  ONLINE — this builds the post-create indexes and runs
+  ``regrant_synced_table_selects.py``.
 * ``resync`` — the routine path. A Triggered synced table is refreshed by running an
   update of its managed sync pipeline (``status.pipeline_id`` from
   ``get-synced-table``), which is what the Catalog "Sync now" button and the Jobs
@@ -29,6 +33,7 @@ Usage (``lakebase/run.py`` wraps these with ``--profile fe-bar``):
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
@@ -87,20 +92,38 @@ BY_NAME = {table.name: table for table in TABLES}
 # Tables the routine refresh rebuilds in UC and therefore re-syncs.
 ROUTINE_RESYNC = ("customer_heat_risk", "prior_claims_corpus")
 
+
 # Postgres objects built ON a synced table (indexes are allowed on synced tables).
-# Synced tables cannot carry vector/tsvector columns, so the indexes cover the same
-# immutable expressions agent/src/retrieval.py queries.
+# Synced tables cannot carry vector/tsvector columns, so the corpus indexes are
+# expression indexes. The expressions and names come from agent/src/prior_claims_indexes.py
+# — import-free string constants that agent/src/retrieval.py also ORDERs BY — loaded by
+# file path so this script needs none of the agent's dependencies.
+PRIOR_CLAIMS_INDEXES_PATH = (
+    SCRIPTS.parents[1] / "agent" / "src" / "prior_claims_indexes.py"
+)
+
+
+def _load_prior_claims_indexes():
+    spec = importlib.util.spec_from_file_location(
+        "prior_claims_indexes", PRIOR_CLAIMS_INDEXES_PATH
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_indexes = _load_prior_claims_indexes()
 POST_CREATE_SQL = {
     "prior_claims_corpus": [
         (
-            "CREATE INDEX IF NOT EXISTS prior_claims_corpus_lb_ann "
-            "ON reference.prior_claims_corpus "
-            "USING lakebase_ann ((embedding::vector(1024)) vector_cosine_ops)"
+            f"CREATE INDEX IF NOT EXISTS {_indexes.PRIOR_CLAIMS_ANN_INDEX} "
+            f"ON {_indexes.PRIOR_CLAIMS_TABLE} "
+            f"USING lakebase_ann (({_indexes.PRIOR_CLAIMS_EMBEDDING_EXPR}) vector_cosine_ops)"
         ),
         (
-            "CREATE INDEX IF NOT EXISTS prior_claims_corpus_lb_bm25 "
-            "ON reference.prior_claims_corpus "
-            "USING lakebase_bm25 ((to_tsvector('english', defect_narrative)) tsvector_bm25_ops)"
+            f"CREATE INDEX IF NOT EXISTS {_indexes.PRIOR_CLAIMS_BM25_INDEX} "
+            f"ON {_indexes.PRIOR_CLAIMS_TABLE} "
+            f"USING lakebase_bm25 (({_indexes.PRIOR_CLAIMS_TSVECTOR_EXPR}) tsvector_bm25_ops)"
         ),
     ],
 }
@@ -110,6 +133,10 @@ POST_SYNC_SQL = {
     + ["VACUUM (ANALYZE) reference.prior_claims_corpus"],
 }
 
+ONLINE_PREFIX = "SYNCED_TABLE_ONLINE"
+# Initial-sync wait bound: ONLINE_ATTEMPTS polls, ONLINE_INTERVAL seconds apart (1 hour).
+ONLINE_ATTEMPTS = 240
+ONLINE_INTERVAL = 15.0
 TERMINAL_OK = {"COMPLETED"}
 TERMINAL_FAILED = {"FAILED", "CANCELED"}
 
@@ -235,6 +262,37 @@ def wait_for_update(
     raise RuntimeError(f"Sync pipeline {pipeline_id} update {update_id} did not finish")
 
 
+def wait_for_online(
+    table: SyncedTable,
+    runner: Runner = subprocess.run,
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int | None = None,
+    interval: float | None = None,
+) -> str:
+    """Poll until the synced table is ONLINE, i.e. its Postgres table exists and is loaded.
+
+    Raises on any FAILED detailed state and on timeout, so nothing downstream (index
+    DDL, re-grant) ever runs against a table that is not there.
+    """
+    attempts = ONLINE_ATTEMPTS if attempts is None else attempts
+    interval = ONLINE_INTERVAL if interval is None else interval
+    state = ""
+    for _ in range(attempts):
+        synced = databricks(
+            "postgres", "get-synced-table", table.resource, runner=runner
+        )
+        state = str((synced.get("status") or {}).get("detailed_state", "")).upper()
+        if state.startswith(ONLINE_PREFIX):
+            return state
+        if "FAILED" in state:
+            raise RuntimeError(f"{table.synced_name} initial sync failed: {state}")
+        sleep(interval)
+    raise RuntimeError(
+        f"{table.synced_name} did not reach {ONLINE_PREFIX} within "
+        f"{attempts * interval:.0f}s (last state: {state or 'unknown'})"
+    )
+
+
 def resync_one(
     table: SyncedTable,
     runner: Runner = subprocess.run,
@@ -257,7 +315,9 @@ def resync_one(
 
 
 def create(
-    runner: Runner = subprocess.run, pg: Callable[[list[str]], None] = pg_execute
+    runner: Runner = subprocess.run,
+    pg: Callable[[list[str]], None] = pg_execute,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict:
     created = []
     for table in TABLES:
@@ -266,6 +326,10 @@ def create(
             continue
         create_one(table, runner=runner)
         created.append(table.name)
+    # The Postgres table appears only when the initial sync completes: wait for every
+    # created table to be ONLINE before any index DDL or re-grant touches it.
+    for name in created:
+        wait_for_online(BY_NAME[name], runner=runner, sleep=sleep)
     for name in created:
         if name in POST_CREATE_SQL:
             pg(POST_CREATE_SQL[name])
@@ -295,6 +359,7 @@ def recreate(
     name: str,
     runner: Runner = subprocess.run,
     pg: Callable[[list[str]], None] = pg_execute,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict:
     table = BY_NAME[name]
     if exists(table, runner=runner):
@@ -302,6 +367,7 @@ def recreate(
     # delete-synced-table leaves the Postgres table behind; drop it so create can rebuild.
     pg([f"DROP TABLE IF EXISTS {POSTGRES_SCHEMA}.{table.name}"])
     create_one(table, runner=runner)
+    wait_for_online(table, runner=runner, sleep=sleep)
     if name in POST_CREATE_SQL:
         pg(POST_CREATE_SQL[name])
     # The recreated table is owned by a different role and has lost every grant.

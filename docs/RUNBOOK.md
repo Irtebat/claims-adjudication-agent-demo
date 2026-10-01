@@ -42,8 +42,9 @@ uv run --with pyyaml python scripts/bootstrap.py
 ```
 
 It runs: pipelines deploy -> `generate` -> `setup-and-seed` -> `create-cdf` -> agent
-deploy -> `fraud_graph` -> `pipelines/run.py refresh` -> `fraud_graph` ->
-`prior_claims_corpus` -> `pipelines/run.py refresh`.
+deploy -> `fraud_graph` -> `pipelines/run.py refresh --allow-missing-decision-records`
+-> `fraud_graph` -> `prior_claims_corpus` ->
+`pipelines/run.py refresh --allow-missing-decision-records`.
 
 The gold fact joins `gold.customer_heat_risk`, which the fraud-graph job builds from
 the medallion's own `gold.claims_current`. The first `fraud_graph` run therefore comes
@@ -59,10 +60,15 @@ Then, once the app and serving service principals exist:
 3. `uv run --with pyyaml python pipelines/run.py govern`
 4. Deploy the agent endpoint, app, dashboards, and services as their READMEs describe.
 
-Known gap: the gold fact also reads `gold.adjudication_decision_records`, which the
-pipeline defines only after the first decision record has materialized
-`cdf.lb_adjudication_decision_records_history`. On a truly empty workspace that table
-does not exist yet at the first medallion run. This has not been resolved here.
+The gold fact also joins the decision records, which exist only after the agent writes
+its first one (that write materializes `cdf.lb_adjudication_decision_records_history`).
+The fact therefore reads the pipeline view `decision_records_for_fact`, which is always
+defined: it projects `gold.adjudication_decision_records` when the CDF source exists,
+and is an empty frame with the same typed columns when it does not. On a fresh
+workspace the first medallion run succeeds with NULL agent columns; no rows are
+invented. `pipelines/run.py refresh` fails if the decision-record CDF table cannot be
+found, unless `--allow-missing-decision-records` is passed; the bootstrap passes it
+because no decision record can exist yet.
 
 ### Routine refresh
 
@@ -71,7 +77,11 @@ uv run --with pyyaml python scripts/refresh.py routine
 ```
 
 1. `pipelines/run.py refresh`: incremental medallion run, fed every CDF table name
-   (claims, adjudications, and decision records once materialized).
+   (claims, adjudications, and decision records). It stops with an error if the
+   decision-record CDF table is missing. That is expected only on a workspace where
+   no decision record has been written yet; there, run
+   `scripts/refresh.py routine --allow-missing-decision-records`, or first write
+   recommendations with the demo refresh or the services worker.
 2. Agent `bundle deploy`, then `bundle run fraud_graph`.
 3. `bundle run prior_claims_corpus` (embeds only new or edited narratives).
 4. `lakebase/run.py resync-synced-tables`: triggered re-sync of

@@ -34,6 +34,7 @@ CODE_MODULES = [
     "resolution.py",
     "duplicate.py",
     "retrieval.py",
+    "prior_claims_indexes.py",
     "heat_risk.py",
     "db.py",
     "workspace_client.py",
