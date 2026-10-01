@@ -28,6 +28,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 CODE_MODULES = [
     "agent_tools.py",
     "decision_record.py",
+    "disposition_rules.py",
     "writer.py",
     "authorities.py",
     "authorities_runtime.py",
