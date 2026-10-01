@@ -50,9 +50,16 @@ consumer = build_consumer(kafka_cfg, group_id)
 consumer.subscribe([topic])
 print(f"Worker subscribed group={group_id} topic={topic} max_messages={max_messages}")
 
-processed = adjudicated = skipped = errors = 0
+processed = errors = 0
+outcomes = {worker_core.ADJUDICATE: 0, worker_core.SKIP_FINAL: 0, worker_core.SKIP_AGENT: 0}
 # One read connection reused for the dedup pre-check (autocommit; SELECT only).
 with lakebase.connect(autocommit=True) as conn:
+
+    def lookup(claim_id):
+        with conn.cursor() as cur:
+            cur.execute(worker_core.DEDUP_SQL, worker_core.dedup_params(claim_id))
+            return cur.fetchone()
+
     while processed < max_messages:
         msg = consumer.poll(timeout=poll_timeout_s)
         if msg is None:
@@ -65,28 +72,22 @@ with lakebase.connect(autocommit=True) as conn:
             continue
 
         processed += 1
-        event = worker_core.parse_submitted(msg.value())
-        claim = worker_core.claim_from_event(event)
-        claim_id = event["claim_id"]
-
-        with conn.cursor() as cur:
-            cur.execute(worker_core.ALREADY_ADJUDICATED_SQL, worker_core.dedup_params(claim_id))
-            already = cur.fetchone() is not None
-
-        if worker_core.should_adjudicate(already):
-            serving.invoke(ws, claim, persist=True)
-            adjudicated += 1
-        else:
-            skipped += 1  # already agent-adjudicated (baseline snapshot or re-delivery)
-
-        # Commit offset only after the message is fully handled (at-least-once).
-        consumer.commit(msg, asynchronous=False)
+        # Skips (already FINAL/REVIEWED, or already agent-recommended) make no endpoint
+        # call and no write; the offset commits only after the claim is handled.
+        outcome = worker_core.handle_submitted(
+            msg.value(),
+            lookup=lookup,
+            invoke=lambda claim: serving.invoke(ws, claim, persist=True),
+            commit=lambda: consumer.commit(msg, asynchronous=False),
+        )
+        outcomes[outcome] += 1
 
 consumer.close()
 summary = {
     "processed": processed,
-    "adjudicated": adjudicated,
-    "skipped_already_adjudicated": skipped,
+    "adjudicated": outcomes[worker_core.ADJUDICATE],
+    "skipped_already_final": outcomes[worker_core.SKIP_FINAL],
+    "skipped_already_adjudicated": outcomes[worker_core.SKIP_AGENT],
     "consumer_errors": errors,
 }
 print(f"Worker summary: {summary}")

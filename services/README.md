@@ -65,7 +65,7 @@ compute is **scheduled serverless** (cheapest); every streaming job documents a
 |-----|------|--------------|
 | `fe-bar-services-migrate`   | `src/migrate.py`   | Drops `public.claims_pending`; grants the app SP the outbox/settlements/investigation/supplier-recovery privileges this layer needs. Run once. |
 | `fe-bar-services-producer`  | `src/producer.py`  | Spark structured streaming, `availableNow`. CDF inserts on `fe-bar-ir.cdf.lb_claims_history` → `claim.submitted`. Checkpointed; initial snapshot replays the ~5000 seeded claims once, then only new claims stream. |
-| `fe-bar-services-worker`    | `src/worker.py`    | Consumes `claim.submitted`; skips claims that already have an `agent_recommendation` adjudication; otherwise invokes the endpoint with `persist=true`, which writes a RECOMMENDED adjudication + decision record (no outbox row). |
+| `fe-bar-services-worker`    | `src/worker.py`    | Consumes `claim.submitted`; skips claims that already have a human decision (`decision_status` FINAL or REVIEWED) or an `agent_recommendation` adjudication; otherwise invokes the endpoint with `persist=true`, which writes a RECOMMENDED adjudication + decision record (no outbox row). |
 | `fe-bar-services-relay`     | `src/relay.py`     | Polls unpublished `outbox` rows (written only by App finalization), publishes `claim.adjudicated`, sets `published_at` only after the broker acks. Idle until an adjuster finalizes. |
 | `fe-bar-services-consumers` | `src/consumers.py` | Four parallel tasks (settlement / investigation / supplier-recovery / notification), one Kafka consumer group each. |
 
@@ -81,10 +81,19 @@ at every stage, keyed on stable, deterministic ids:
 
 - **Producer → `claim.submitted`**: key `claim_id`, stable `event_id = sub-<claim_id>`.
   Over-emission (e.g. checkpoint replay) is harmless — the worker dedups.
-- **Worker**: before invoking the endpoint, skip if an agent adjudication already
-  exists for the claim (`SELECT 1 FROM adjudications WHERE claim_id=%s AND
-  data_provenance='agent_recommendation'`). Scoped to `agent_recommendation` so the
-  seeded baseline is adjudicated once and re-delivery is skipped. The endpoint's
+- **Worker**: before invoking the endpoint, one bound-parameter lookup per claim
+  (`SELECT bool_or(decision_status = ANY(%s)), bool_or(data_provenance = %s) FROM
+  adjudications WHERE claim_id = %s`) decides the outcome:
+  - a human decision already exists (`decision_status` FINAL or REVIEWED, e.g. the
+    seeded history the producer's CDF snapshot replays): skip, counted as
+    `skipped_already_final`;
+  - an `agent_recommendation` adjudication already exists (re-delivery): skip,
+    counted as `skipped_already_adjudicated`;
+  - otherwise invoke the endpoint with `persist=true`.
+
+  A skip makes no endpoint call and no write. Either way the offset is committed
+  only after the claim is invoked or deliberately skipped; a failure before that
+  leaves it uncommitted for re-delivery. The endpoint's
   `writer.py` is the deeper guarantee: first-write-wins on the deterministic
   `adjudication_id`.
 - **`writer.py` (one transaction, recommendation only)**: the RECOMMENDED
