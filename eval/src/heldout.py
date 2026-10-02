@@ -195,6 +195,10 @@ def _narrative_record(source: dict, stratum: str, index: int) -> dict:
             + _string_array(source.get("gold_cited_clause_ids"))
         )
     )
+    deciding_clause_id = next(
+        (clause_id for clause_id in oracle if clause_id.endswith("/exclusions")),
+        policy["clause_id"],
+    )
     return {
         "inputs": {"claim": claim},
         "expectations": {
@@ -207,6 +211,7 @@ def _narrative_record(source: dict, stratum: str, index: int) -> dict:
             "stratum": stratum,
             "scenario_type": stratum,
             "policy_clause_id": policy["clause_id"],
+            "deciding_clause_id": deciding_clause_id,
             "policy_section_ref": policy["section_ref"],
             "narrative_fact": policy["fact"],
             "oracle_clause_ids": oracle,
