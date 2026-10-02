@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 from types import SimpleNamespace
@@ -43,10 +42,11 @@ def _isolated_maybe_slow(claim):
     return _candidate("APPROVE", "CREDIT")(claim)
 
 
-def _isolated_run_id(claim):
+@ablation.mlflow.trace(name="isolated_worker_prediction")
+def _isolated_traced_prediction(claim):
     return {
         "recommendation": {"recommended_verdict": "APPROVE"},
-        "worker_run_id": os.environ.get("MLFLOW_RUN_ID"),
+        "claim_id": claim["claim_id"],
     }
 
 
@@ -192,7 +192,7 @@ def test_endpoint_uses_invocations_rest_and_fails_closed():
         },
     )
     api_client.do.return_value = {"custom_outputs": {"write_result": {"persisted": True}}}
-    with pytest.raises(RuntimeError, match="persistence invariant"):
+    with pytest.raises(PersistenceViolation, match="endpoint: endpoint persistence invariant"):
         adapter.predict({"claim_id": "c"})
 
 
@@ -309,26 +309,39 @@ def test_per_claim_timeout_kills_worker_and_next_claim_restarts(monkeypatch):
     adapter.shutdown()
 
 
-def test_worker_attaches_traces_and_token_lookup_to_parent_run(monkeypatch):
-    events = []
-    monkeypatch.delenv("MLFLOW_RUN_ID", raising=False)
-    monkeypatch.setattr(
-        ablation.mlflow,
-        "search_traces",
-        lambda *, run_id: events.append(("search", run_id)) or _Frame([]),
-    )
-    adapter = CandidateAdapter(
-        "linked",
-        lambda claim: None,
-        worker_spec=WorkerSpec("callable", "test_ablation._isolated_run_id", run_id="parent-run"),
-    )
-    output, _ = adapter.predict({"claim_id": "c"})
-    ablation._trace_token_usage("parent-run")
-    adapter.shutdown()
+def test_worker_trace_is_linked_to_parent_run_without_finishing_it(monkeypatch, tmp_path):
+    previous_tracking_uri = ablation.mlflow.get_tracking_uri()
+    tracking_uri = tmp_path.as_uri()
+    monkeypatch.setenv("MLFLOW_ALLOW_FILE_STORE", "true")
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
+    ablation.mlflow.set_tracking_uri(tracking_uri)
+    experiment_id = ablation.mlflow.create_experiment("worker-trace-integration")
+    monkeypatch.setenv("MLFLOW_EXPERIMENT_ID", experiment_id)
 
-    assert events == [("search", "parent-run")]
-    assert output["verdict"] == "APPROVE"
-    assert output["raw"]["worker_run_id"] == "parent-run"
+    try:
+        with ablation.mlflow.start_run(experiment_id=experiment_id) as parent:
+            adapter = CandidateAdapter(
+                "linked",
+                lambda claim: None,
+                worker_spec=WorkerSpec(
+                    "callable",
+                    "test_ablation._isolated_traced_prediction",
+                    run_id=parent.info.run_id,
+                ),
+            )
+            output, _ = adapter.predict({"claim_id": "c"})
+            adapter.shutdown()
+
+            traces = ablation.mlflow.search_traces(run_id=parent.info.run_id)
+            run = ablation.mlflow.MlflowClient().get_run(parent.info.run_id)
+
+            assert output["verdict"] == "APPROVE"
+            assert len(traces) == 1
+            trace = ablation.mlflow.get_trace(traces.iloc[0]["trace_id"])
+            assert [span.name for span in trace.data.spans] == ["isolated_worker_prediction"]
+            assert run.info.status == "RUNNING"
+    finally:
+        ablation.mlflow.set_tracking_uri(previous_tracking_uri)
 
 
 def test_production_model_worker_loads_model_and_predicts(monkeypatch):

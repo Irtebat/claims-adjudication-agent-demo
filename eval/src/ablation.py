@@ -14,6 +14,7 @@ import time
 import traceback
 import uuid
 from collections import defaultdict
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -48,6 +49,7 @@ SUMMARY_DIMENSIONS = QUALITY_DIMENSIONS + (
     "invariant_correction_rate",
 )
 DEFAULT_CLAIM_TIMEOUT_SECONDS = 120
+WORKER_SHUTDOWN_GRACE_SECONDS = 10
 EARLY_FAILURE_LIMIT = 5
 
 
@@ -71,6 +73,7 @@ class WorkerSpec:
     value: str | None = None
     profile: str | None = None
     run_id: str | None = None
+    candidate_name: str | None = None
 
 
 def _private_module(name: str, path: Path):
@@ -123,7 +126,9 @@ def _local_baseline_functions():
                 sys.modules[name] = previous
 
 
-def _invoke_endpoint(workspace: WorkspaceClient, endpoint: str, claim: dict) -> dict:
+def _invoke_endpoint(
+    workspace: WorkspaceClient, endpoint: str, claim: dict, candidate_name: str
+) -> dict:
     response = workspace.api_client.do(
         "POST",
         f"/api/2.0/serving-endpoints/{quote(endpoint, safe='')}/invocations",
@@ -133,16 +138,24 @@ def _invoke_endpoint(workspace: WorkspaceClient, endpoint: str, claim: dict) -> 
         },
     )
     if _custom(response).get("write_result", {}).get("persisted") is not False:
-        raise PersistenceViolation("endpoint persistence invariant failed")
+        raise PersistenceViolation(f"{candidate_name}: endpoint persistence invariant failed")
     return response
+
+
+def _detach_active_run(run_id: str) -> None:
+    """Remove a resumed child run without changing its parent-owned status."""
+    from mlflow.tracking import fluent
+
+    stack = fluent._active_run_stack.get()
+    for index in range(len(stack) - 1, -1, -1):
+        if stack[index].info.run_id == run_id:
+            stack.pop(index)
+            return
 
 
 def _worker_main(spec: WorkerSpec, connection) -> None:
     close = None
-    previous_run_id = os.environ.get("MLFLOW_RUN_ID")
     try:
-        if spec.run_id:
-            os.environ["MLFLOW_RUN_ID"] = spec.run_id
         if spec.kind == "model":
             model = load_candidate(spec.value)
 
@@ -154,7 +167,9 @@ def _worker_main(spec: WorkerSpec, connection) -> None:
             workspace = WorkspaceClient(profile=spec.profile)
 
             def invoke(claim):
-                return _invoke_endpoint(workspace, spec.value, claim)
+                return _invoke_endpoint(
+                    workspace, spec.value, claim, spec.candidate_name or spec.value
+                )
 
             deterministic = False
         elif spec.kind == "deterministic":
@@ -182,22 +197,29 @@ def _worker_main(spec: WorkerSpec, connection) -> None:
         else:
             raise ValueError(f"unknown worker kind {spec.kind}")
         connection.send({"ready": True})
-        while True:
-            request = connection.recv()
-            if request is None:
-                break
+        run_context = mlflow.start_run(run_id=spec.run_id) if spec.run_id else nullcontext()
+        with run_context:
             try:
-                output = standardize_output(invoke(request), deterministic=deterministic)
-                connection.send({"output": output})
-            except BaseException as exc:
-                connection.send(
-                    {
-                        "exception_module": type(exc).__module__,
-                        "exception_type": type(exc).__name__,
-                        "message": str(exc),
-                        "traceback": traceback.format_exc(),
-                    }
-                )
+                while True:
+                    request = connection.recv()
+                    if request is None:
+                        break
+                    try:
+                        output = standardize_output(invoke(request), deterministic=deterministic)
+                        connection.send({"output": output})
+                    except BaseException as exc:
+                        connection.send(
+                            {
+                                "exception_module": type(exc).__module__,
+                                "exception_type": type(exc).__name__,
+                                "message": str(exc),
+                                "traceback": traceback.format_exc(),
+                            }
+                        )
+            finally:
+                mlflow.flush_trace_async_logging()
+                if spec.run_id:
+                    _detach_active_run(spec.run_id)
     except BaseException as exc:
         try:
             connection.send(
@@ -213,11 +235,6 @@ def _worker_main(spec: WorkerSpec, connection) -> None:
     finally:
         if close:
             close()
-        if spec.run_id:
-            if previous_run_id is None:
-                os.environ.pop("MLFLOW_RUN_ID", None)
-            else:
-                os.environ["MLFLOW_RUN_ID"] = previous_run_id
         connection.close()
 
 
@@ -374,16 +391,7 @@ class CandidateAdapter:
         context = multiprocessing.get_context("spawn")
         parent, child = context.Pipe()
         process = context.Process(target=_worker_main, args=(self.worker_spec, child), daemon=True)
-        previous_run_id = os.environ.get("MLFLOW_RUN_ID")
-        try:
-            if self.worker_spec.run_id:
-                os.environ["MLFLOW_RUN_ID"] = self.worker_spec.run_id
-            process.start()
-        finally:
-            if previous_run_id is None:
-                os.environ.pop("MLFLOW_RUN_ID", None)
-            else:
-                os.environ["MLFLOW_RUN_ID"] = previous_run_id
+        process.start()
         child.close()
         self._process, self._connection = process, parent
         if not parent.poll(self.startup_timeout_seconds):
@@ -392,6 +400,7 @@ class CandidateAdapter:
         try:
             response = parent.recv()
         except EOFError as exc:
+            process.join(timeout=0.5)
             exitcode = process.exitcode
             self._stop_worker()
             raise RuntimeError(
@@ -426,6 +435,7 @@ class CandidateAdapter:
         try:
             response = self._connection.recv()
         except EOFError as exc:
+            self._process.join(timeout=0.5)
             exitcode = self._process.exitcode
             self._stop_worker()
             raise RuntimeError(
@@ -441,7 +451,7 @@ class CandidateAdapter:
         if self._connection is not None and self._process is not None and self._process.is_alive():
             try:
                 self._connection.send(None)
-                self._process.join(timeout=5)
+                self._process.join(timeout=WORKER_SHUTDOWN_GRACE_SECONDS)
             except Exception:
                 pass
         self._stop_worker()
@@ -487,10 +497,12 @@ def endpoint_adapter(
         nonlocal workspace
         if workspace is None:
             workspace = WorkspaceClient(profile=profile)
-        return _invoke_endpoint(workspace, endpoint, claim)
+        return _invoke_endpoint(workspace, endpoint, claim, name)
 
     return CandidateAdapter(
-        name, invoke, worker_spec=WorkerSpec("endpoint", endpoint, profile=profile)
+        name,
+        invoke,
+        worker_spec=WorkerSpec("endpoint", endpoint, profile=profile, candidate_name=name),
     )
 
 
