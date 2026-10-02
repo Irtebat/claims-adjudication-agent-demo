@@ -26,8 +26,8 @@ from disposition_rules import approve_disposition, fraud_risk, supplier_attribut
 
 # Bump when the persisted payload shape or the recommendation schema changes; the
 # value is stamped on every decision record for reproducibility.
-SCHEMA_VERSION = "adjudication-decision-record/v1"
-PROMPT_VERSION = "claims-adjudication-prompt/v1"
+SCHEMA_VERSION = "adjudication-decision-record/v2"
+PROMPT_VERSION = "claims-adjudication-prompt/v2-narrative-escalation"
 
 # Recommendation verdicts (agent-facing) and the value stored on the
 # `public.adjudications.verdict` column (which the silver history contract
@@ -62,6 +62,14 @@ class Precedent(BaseModel):
     rrf_score: float | None = None
 
 
+class NarrativeConflict(BaseModel):
+    """A model-identified conflict that can only trigger a human-review hold."""
+
+    clause: str
+    narrative_quote: str
+    structured_field: str
+
+
 class Recommendation(BaseModel):
     """The LLM's structured recommendation. ``settlement_estimate`` is copied from
     the settlement authority; ``cited_clause_ids`` are natural clause keys."""
@@ -76,6 +84,7 @@ class Recommendation(BaseModel):
     rationale: str
     flags: Flags = Field(default_factory=Flags)
     confidence: float = Field(ge=0.0, le=1.0)
+    narrative_conflict: NarrativeConflict | None = None
 
 
 def recommendation_json_schema() -> dict:
@@ -86,6 +95,30 @@ def recommendation_json_schema() -> dict:
         "type": "json_schema",
         "json_schema": {"name": "adjudication_recommendation", "schema": schema, "strict": False},
     }
+
+
+def validate_narrative_conflict(
+    recommendation: dict, claim: dict, retrieved_clauses: list[dict]
+) -> dict:
+    """Drop an ungrounded narrative conflict instead of fabricating evidence."""
+    validated = dict(recommendation)
+    conflict = validated.get("narrative_conflict")
+    if not isinstance(conflict, dict):
+        validated.pop("narrative_conflict", None)
+        return validated
+    narrative = claim.get("defect_narrative")
+    quote = conflict.get("narrative_quote")
+    clause = conflict.get("clause")
+    retrieved = {item.get("citation_key") for item in retrieved_clauses}
+    if (
+        not isinstance(narrative, str)
+        or not isinstance(quote, str)
+        or not quote
+        or quote not in narrative
+        or clause not in retrieved
+    ):
+        validated.pop("narrative_conflict", None)
+    return validated
 
 
 # --------------------------------------------------------------------------- #
@@ -214,6 +247,7 @@ def deterministic_recommendation(context: dict) -> dict:
             "fraud_review_suggested": review,
         },
         "confidence": 0.6,
+        "narrative_conflict": None,
         "rule_trace": trace,
     }
 
@@ -426,6 +460,10 @@ def build_decision_record(
     )
     adj_id = adjudication_id or f"ADJ-{key[:20]}"
     precedent = recommendation.get("precedent", [])
+    narrative_conflict = recommendation.get("narrative_conflict")
+    flags = dict(recommendation.get("flags", {}))
+    if narrative_conflict:
+        flags["narrative_conflict"] = narrative_conflict
     return {
         "adjudication_id": adj_id,
         "claim_id": claim["claim_id"],
@@ -460,7 +498,8 @@ def build_decision_record(
         "recommended_disposition": recommendation["recommended_disposition"],
         "rationale": recommendation.get("rationale"),
         "confidence": _to_float(recommendation.get("confidence")),
-        "flags": recommendation.get("flags", {}),
+        "flags": flags,
+        "narrative_conflict": narrative_conflict,
         "advisory_risk": advisory_risk,
         "precedent": precedent,
         "invariant_violations": invariant_violations,
