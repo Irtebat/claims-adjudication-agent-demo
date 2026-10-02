@@ -127,6 +127,11 @@ def test_gate_requires_normal_agreement_and_narrative_disagreement_but_skips_fra
         heldout._validate_gate_result(
             normal, {"verdict": "DENY", "disposition": "DENY", "approved_amount": 0}
         )
+    with pytest.raises(ValueError, match="does not agree"):
+        heldout._validate_gate_result(
+            normal,
+            {"verdict": "APPROVE", "disposition": "CREDIT", "approved_amount": 100.01},
+        )
 
     narrative = {
         "expectations": {
@@ -158,6 +163,13 @@ def test_duplicate_rows_keep_resolvable_history_identity():
 def test_live_create_uses_new_named_mlflow_dataset(monkeypatch):
     rows = _reference_rows()
     monkeypatch.setattr(heldout, "_execute_sql", lambda *args: rows)
+    monkeypatch.setattr(
+        heldout,
+        "_select_live_sources",
+        lambda values, profile, normal, narrative: heldout._select_sources(
+            values, normal, narrative
+        ),
+    )
     monkeypatch.setattr(
         heldout,
         "ResolverOracle",

@@ -178,6 +178,42 @@ def _expectations(row: dict, group: str, stratum: str) -> dict:
     }
 
 
+def _narrative_record(source: dict, stratum: str, index: int) -> dict:
+    claim = {key: source.get(key) for key in LEAN_CLAIM_COLUMNS}
+    claim.update(
+        claim_id=_opaque_id(str(source["claim_id"]), stratum, index),
+        environment="inland",
+        installation="ventilated",
+        coast_distance_km="10.0",
+        defect_narrative=NARRATIVES[stratum][index % len(NARRATIVES[stratum])],
+    )
+    policy = POLICY[stratum]
+    oracle = list(
+        dict.fromkeys(
+            [policy["clause_id"]]
+            + _string_array(source.get("_oracle_clause_ids"))
+            + _string_array(source.get("gold_cited_clause_ids"))
+        )
+    )
+    return {
+        "inputs": {"claim": claim},
+        "expectations": {
+            "verdict": "DENY",
+            "disposition": "DENY",
+            "disposition_class": "DENY",
+            "approval_subchoice": None,
+            "approved_amount": "0.00",
+            "group": "narrative",
+            "stratum": stratum,
+            "scenario_type": stratum,
+            "policy_clause_id": policy["clause_id"],
+            "policy_section_ref": policy["section_ref"],
+            "narrative_fact": policy["fact"],
+            "oracle_clause_ids": oracle,
+        },
+    }
+
+
 def _build_from_selected(
     normal_sources: dict[str, list[dict]],
     narrative_sources: list[dict],
@@ -196,42 +232,7 @@ def _build_from_selected(
             )
     for stratum, count in narrative_counts.items():
         for index in range(count):
-            source = narrative_sources[index]
-            claim = {key: source.get(key) for key in LEAN_CLAIM_COLUMNS}
-            claim.update(
-                claim_id=_opaque_id(str(source["claim_id"]), stratum, index),
-                environment="inland",
-                installation="ventilated",
-                coast_distance_km="10.0",
-                defect_narrative=NARRATIVES[stratum][index % len(NARRATIVES[stratum])],
-            )
-            policy = POLICY[stratum]
-            oracle = list(
-                dict.fromkeys(
-                    [policy["clause_id"]]
-                    + _string_array(source.get("_oracle_clause_ids"))
-                    + _string_array(source.get("gold_cited_clause_ids"))
-                )
-            )
-            records.append(
-                {
-                    "inputs": {"claim": claim},
-                    "expectations": {
-                        "verdict": "DENY",
-                        "disposition": "DENY",
-                        "disposition_class": "DENY",
-                        "approval_subchoice": None,
-                        "approved_amount": "0.00",
-                        "group": "narrative",
-                        "stratum": stratum,
-                        "scenario_type": stratum,
-                        "policy_clause_id": policy["clause_id"],
-                        "policy_section_ref": policy["section_ref"],
-                        "narrative_fact": policy["fact"],
-                        "oracle_clause_ids": oracle,
-                    },
-                }
-            )
+            records.append(_narrative_record(narrative_sources[index], stratum, index))
     validate_heldout(records, normal_counts, narrative_counts)
     metadata = {
         "record_count": len(records),
@@ -318,35 +319,103 @@ def _validate_gate_result(record: dict, structured: dict) -> None:
         raise ValueError(f"normal row does not agree with structured rules: {actual} != {gold}")
 
 
+def _structured_outcome(runtime, connection, claim: dict) -> dict:
+    from decision_record import deterministic_outcome
+    from duplicate import check_duplicate_claim
+
+    frozen = runtime.freeze(claim["coil_id"])
+    conformance = frozen.conformance()
+    coverage = frozen.coverage(claim)
+    settlement = frozen.settlement(
+        {
+            "coil_id": claim["coil_id"],
+            "claim_type": claim["claim_type"],
+            "claimed_tonnage": claim.get("claimed_tonnage") or 0,
+            "claimed_freight": claim.get("claimed_freight") or 0,
+            "proration_factor": coverage.get("proration_factor", 1.0),
+        }
+    )
+    duplicate = check_duplicate_claim(connection, claim)
+    return deterministic_outcome(claim["claim_type"], conformance, coverage, settlement, duplicate)
+
+
+def _select_live_sources(
+    rows: list[dict],
+    profile: str,
+    normal_counts: dict[str, int],
+    narrative_counts: dict[str, int],
+) -> tuple[dict[str, list[dict]], list[dict]]:
+    """Fill quotas only with rows that pass the unchanged live structured gate."""
+    if str(AGENT_SRC) not in sys.path:
+        sys.path.insert(0, str(AGENT_SRC))
+    from authorities_runtime import AuthorityRuntime
+    from db import connect
+
+    selected = {stratum: [] for stratum in normal_counts}
+    narrative_sources = []
+    narrative_needed = max(narrative_counts.values(), default=0)
+    with connect(profile=profile, autocommit=True) as connection:
+        runtime = AuthorityRuntime(connection)
+        for stratum, count in normal_counts.items():
+            for row in _stable(item for item in rows if _normal_stratum(item) == stratum):
+                record = {
+                    "inputs": {"claim": {key: row.get(key) for key in LEAN_CLAIM_COLUMNS}},
+                    "expectations": _expectations(row, "normal", stratum),
+                }
+                try:
+                    _validate_gate_result(
+                        record, _structured_outcome(runtime, connection, record["inputs"]["claim"])
+                    )
+                except ValueError:
+                    continue
+                selected[stratum].append(row)
+                if len(selected[stratum]) == count:
+                    break
+            if len(selected[stratum]) != count:
+                raise ValueError(
+                    f"insufficient live-gate-valid rows for {stratum}: "
+                    f"{len(selected[stratum])} < {count}"
+                )
+        candidates = _stable(
+            row
+            for row in rows
+            if row.get("claim_type") == "coating_warranty"
+            and row.get("gold_verdict") == "APPROVE"
+            and row.get("gold_disposition") in {"CREDIT", "REWORK", "REPLACEMENT"}
+        )
+        for source in candidates:
+            index = len(narrative_sources)
+            try:
+                for stratum in narrative_counts:
+                    record = _narrative_record(source, stratum, index)
+                    _validate_gate_result(
+                        record, _structured_outcome(runtime, connection, record["inputs"]["claim"])
+                    )
+            except ValueError:
+                continue
+            narrative_sources.append(source)
+            if len(narrative_sources) == narrative_needed:
+                break
+    if len(narrative_sources) != narrative_needed:
+        raise ValueError(
+            f"insufficient live-gate-valid narrative sources: "
+            f"{len(narrative_sources)} < {narrative_needed}"
+        )
+    return selected, narrative_sources
+
+
 def _validate_live_narrative_dependence(records: list[dict], profile: str) -> None:
     """Run frozen structured authorities and enforce the mixed-set validity gate."""
     if str(AGENT_SRC) not in sys.path:
         sys.path.insert(0, str(AGENT_SRC))
     from authorities_runtime import AuthorityRuntime
     from db import connect
-    from decision_record import deterministic_outcome
-    from duplicate import check_duplicate_claim
 
     with connect(profile=profile, autocommit=True) as connection:
         runtime = AuthorityRuntime(connection)
         for record in records:
             claim = record["inputs"]["claim"]
-            frozen = runtime.freeze(claim["coil_id"])
-            conformance = frozen.conformance()
-            coverage = frozen.coverage(claim)
-            settlement = frozen.settlement(
-                {
-                    "coil_id": claim["coil_id"],
-                    "claim_type": claim["claim_type"],
-                    "claimed_tonnage": claim.get("claimed_tonnage") or 0,
-                    "claimed_freight": claim.get("claimed_freight") or 0,
-                    "proration_factor": coverage.get("proration_factor", 1.0),
-                }
-            )
-            duplicate = check_duplicate_claim(connection, claim)
-            structured = deterministic_outcome(
-                claim["claim_type"], conformance, coverage, settlement, duplicate
-            )
+            structured = _structured_outcome(runtime, connection, claim)
             try:
                 _validate_gate_result(record, structured)
             except ValueError as exc:
@@ -368,7 +437,9 @@ def create_live(
     normal_counts = dict(normal_counts or DEFAULT_NORMAL_COUNTS)
     narrative_counts = dict(narrative_counts or DEFAULT_NARRATIVE_COUNTS)
     rows = _execute_sql(profile, warehouse_id, source_sql())
-    selected, narrative_sources = _select_sources(rows, normal_counts, narrative_counts)
+    selected, narrative_sources = _select_live_sources(
+        rows, profile, normal_counts, narrative_counts
+    )
     source_by_id = {
         str(row["claim_id"]): row
         for row in [item for values in selected.values() for item in values] + narrative_sources
