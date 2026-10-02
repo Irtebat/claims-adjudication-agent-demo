@@ -1,0 +1,1008 @@
+{
+  "dataset": "fe-bar-ir.eval.heldout_claims_mixed",
+  "n": 100,
+  "mix": {
+    "normal": 70,
+    "narrative": 30
+  },
+  "ablation_id": "af3bf80f-ac62-4b67-9f42-9e7e3c81f587",
+  "candidate_runs": {
+    "deterministic_baseline": "5d40e1f8667d4234991ad21089c6656c",
+    "agent@prod": "7fef9952af8641399e11a5d19af8aa97"
+  },
+  "comparison_run": "af37991c2dbe4b2c91b9946a1bfc054c",
+  "overall": {
+    "deterministic_baseline": {
+      "verdict": 0.6,
+      "disposition_class": 0.6,
+      "approval_subchoice": 1.0,
+      "amount": 0.7,
+      "duplicate": 1.0,
+      "pend_routing": 0.9,
+      "citation": "N/A",
+      "verdict_n": 100,
+      "disposition_class_n": 100,
+      "approval_subchoice_n": 35,
+      "amount_n": 100,
+      "duplicate_n": 100,
+      "pend_routing_n": 100,
+      "citation_n": 0,
+      "judge_n": 0,
+      "tokens_per_claim": "N/A",
+      "latency_ms_per_claim": 1480.602442047093,
+      "invariant_correction_rate": "N/A",
+      "failure_count": 0
+    },
+    "agent@prod": {
+      "verdict": 0.6,
+      "disposition_class": 0.6,
+      "approval_subchoice": 0.42857142857142855,
+      "amount": 0.7,
+      "duplicate": 1.0,
+      "pend_routing": 0.9,
+      "citation": 1.0,
+      "verdict_n": 100,
+      "disposition_class_n": 100,
+      "approval_subchoice_n": 35,
+      "amount_n": 100,
+      "duplicate_n": 100,
+      "pend_routing_n": 100,
+      "citation_n": 100,
+      "judge_n": 0,
+      "tokens_per_claim": 4859.54,
+      "latency_ms_per_claim": 39787.910893340595,
+      "invariant_correction_rate": 0.0,
+      "failure_count": 0
+    }
+  },
+  "by_group": {
+    "narrative": {
+      "deterministic_baseline": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 30,
+        "disposition_class_n": 30,
+        "approval_subchoice_n": 0,
+        "amount_n": 30,
+        "duplicate_n": 30,
+        "pend_routing_n": 30,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1368.204962524275,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 30,
+        "disposition_class_n": 30,
+        "approval_subchoice_n": 0,
+        "amount_n": 30,
+        "duplicate_n": 30,
+        "pend_routing_n": 30,
+        "citation_n": 30,
+        "judge_n": 0,
+        "tokens_per_claim": 4671.033333333334,
+        "latency_ms_per_claim": 39684.27980843311,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "normal": {
+      "deterministic_baseline": {
+        "verdict": 0.8571428571428571,
+        "disposition_class": 0.8571428571428571,
+        "approval_subchoice": 1.0,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 0.8571428571428571,
+        "citation": "N/A",
+        "verdict_n": 70,
+        "disposition_class_n": 70,
+        "approval_subchoice_n": 35,
+        "amount_n": 70,
+        "duplicate_n": 70,
+        "pend_routing_n": 70,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1528.7727904140152,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 0.8571428571428571,
+        "disposition_class": 0.8571428571428571,
+        "approval_subchoice": 0.42857142857142855,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 0.8571428571428571,
+        "citation": 1.0,
+        "verdict_n": 70,
+        "disposition_class_n": 70,
+        "approval_subchoice_n": 35,
+        "amount_n": 70,
+        "duplicate_n": 70,
+        "pend_routing_n": 70,
+        "citation_n": 70,
+        "judge_n": 0,
+        "tokens_per_claim": 4940.328571428571,
+        "latency_ms_per_claim": 39832.324215443805,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    }
+  },
+  "by_stratum": {
+    "R1_duplicate": {
+      "deterministic_baseline": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": "N/A",
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1307.7813543146476,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": "N/A",
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 10,
+        "judge_n": 0,
+        "tokens_per_claim": 4991.4,
+        "latency_ms_per_claim": 44977.24257102236,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "R4_ineligible": {
+      "deterministic_baseline": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": "N/A",
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 15,
+        "disposition_class_n": 15,
+        "approval_subchoice_n": 0,
+        "amount_n": 15,
+        "duplicate_n": 15,
+        "pend_routing_n": 15,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1340.3279693176348,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": "N/A",
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 15,
+        "disposition_class_n": 15,
+        "approval_subchoice_n": 0,
+        "amount_n": 15,
+        "duplicate_n": 15,
+        "pend_routing_n": 15,
+        "citation_n": 15,
+        "judge_n": 0,
+        "tokens_per_claim": 4838.0,
+        "latency_ms_per_claim": 39638.96946936535,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "R5_supplier_attributable": {
+      "deterministic_baseline": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": 1.0,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 10,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1315.6262872973457,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": 0.0,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 10,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 10,
+        "judge_n": 0,
+        "tokens_per_claim": 5096.1,
+        "latency_ms_per_claim": 37338.33903330378,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "R6_over_claim_partial": {
+      "deterministic_baseline": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": 1.0,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 10,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1355.9837790904567,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": 0.0,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 10,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 10,
+        "judge_n": 0,
+        "tokens_per_claim": 5035.9,
+        "latency_ms_per_claim": 38311.098458152264,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "R7_credit": {
+      "deterministic_baseline": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": 1.0,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 15,
+        "disposition_class_n": 15,
+        "approval_subchoice_n": 15,
+        "amount_n": 15,
+        "duplicate_n": 15,
+        "pend_routing_n": 15,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 2212.259872055923,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 1.0,
+        "disposition_class": 1.0,
+        "approval_subchoice": 1.0,
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 15,
+        "disposition_class_n": 15,
+        "approval_subchoice_n": 15,
+        "amount_n": 15,
+        "duplicate_n": 15,
+        "pend_routing_n": 15,
+        "citation_n": 15,
+        "judge_n": 0,
+        "tokens_per_claim": 4840.666666666667,
+        "latency_ms_per_claim": 39564.30711949555,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "coastal_lt_2km": {
+      "deterministic_baseline": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1352.2914375644177,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 10,
+        "judge_n": 0,
+        "tokens_per_claim": 4760.3,
+        "latency_ms_per_claim": 44767.09748331923,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "excluded_environment": {
+      "deterministic_baseline": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1379.695883509703,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 10,
+        "judge_n": 0,
+        "tokens_per_claim": 4626.4,
+        "latency_ms_per_claim": 37575.77218764927,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "excluded_installation": {
+      "deterministic_baseline": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": "N/A",
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1372.6275664987043,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 0.0,
+        "duplicate": 1.0,
+        "pend_routing": 1.0,
+        "citation": 1.0,
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 10,
+        "judge_n": 0,
+        "tokens_per_claim": 4626.4,
+        "latency_ms_per_claim": 36709.969754330814,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    },
+    "fraud_ring": {
+      "deterministic_baseline": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 0.0,
+        "citation": "N/A",
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 0,
+        "judge_n": 0,
+        "tokens_per_claim": "N/A",
+        "latency_ms_per_claim": 1393.136350135319,
+        "invariant_correction_rate": "N/A",
+        "failure_count": 0
+      },
+      "agent@prod": {
+        "verdict": 0.0,
+        "disposition_class": 0.0,
+        "approval_subchoice": "N/A",
+        "amount": 1.0,
+        "duplicate": 1.0,
+        "pend_routing": 0.0,
+        "citation": 1.0,
+        "verdict_n": 10,
+        "disposition_class_n": 10,
+        "approval_subchoice_n": 0,
+        "amount_n": 10,
+        "duplicate_n": 10,
+        "pend_routing_n": 10,
+        "citation_n": 10,
+        "judge_n": 0,
+        "tokens_per_claim": 4940.9,
+        "latency_ms_per_claim": 39394.67456233688,
+        "invariant_correction_rate": 0.0,
+        "failure_count": 0
+      }
+    }
+  },
+  "paired_overall": {
+    "agent@prod": {
+      "verdict": {
+        "delta": 0.0,
+        "comparable_count": 100,
+        "both_correct": 60,
+        "baseline_only_correct": 0,
+        "challenger_only_correct": 0,
+        "both_wrong": 40
+      },
+      "disposition_class": {
+        "delta": 0.0,
+        "comparable_count": 100,
+        "both_correct": 60,
+        "baseline_only_correct": 0,
+        "challenger_only_correct": 0,
+        "both_wrong": 40
+      },
+      "approval_subchoice": {
+        "delta": -0.5714285714285714,
+        "comparable_count": 35,
+        "both_correct": 15,
+        "baseline_only_correct": 20,
+        "challenger_only_correct": 0,
+        "both_wrong": 0
+      },
+      "amount": {
+        "delta": 0.0,
+        "comparable_count": 100,
+        "both_correct": 70,
+        "baseline_only_correct": 0,
+        "challenger_only_correct": 0,
+        "both_wrong": 30
+      },
+      "duplicate": {
+        "delta": 0.0,
+        "comparable_count": 100,
+        "both_correct": 100,
+        "baseline_only_correct": 0,
+        "challenger_only_correct": 0,
+        "both_wrong": 0
+      },
+      "pend_routing": {
+        "delta": 0.0,
+        "comparable_count": 100,
+        "both_correct": 90,
+        "baseline_only_correct": 0,
+        "challenger_only_correct": 0,
+        "both_wrong": 10
+      },
+      "citation": {
+        "delta": "N/A",
+        "comparable_count": 0,
+        "both_correct": 0,
+        "baseline_only_correct": 0,
+        "challenger_only_correct": 0,
+        "both_wrong": 0
+      },
+      "judge": {
+        "delta": "N/A",
+        "comparable_count": 0,
+        "both_correct": 0,
+        "baseline_only_correct": 0,
+        "challenger_only_correct": 0,
+        "both_wrong": 0
+      },
+      "tokens_per_claim": {
+        "delta": "N/A"
+      },
+      "latency_ms_per_claim": {
+        "delta": 38307.3084512935
+      },
+      "invariant_correction_rate": {
+        "delta": "N/A"
+      }
+    }
+  },
+  "paired_by_group": {
+    "narrative": {
+      "agent@prod": {
+        "verdict": {
+          "delta": 0.0,
+          "comparable_count": 30,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 30
+        },
+        "disposition_class": {
+          "delta": 0.0,
+          "comparable_count": 30,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 30
+        },
+        "approval_subchoice": {
+          "delta": "N/A",
+          "comparable_count": 0,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "amount": {
+          "delta": 0.0,
+          "comparable_count": 30,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 30
+        },
+        "duplicate": {
+          "delta": 0.0,
+          "comparable_count": 30,
+          "both_correct": 30,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "pend_routing": {
+          "delta": 0.0,
+          "comparable_count": 30,
+          "both_correct": 30,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "citation": {
+          "delta": "N/A",
+          "comparable_count": 0,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "judge": {
+          "delta": "N/A",
+          "comparable_count": 0,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "tokens_per_claim": {
+          "delta": "N/A"
+        },
+        "latency_ms_per_claim": {
+          "delta": 38316.074845908835
+        },
+        "invariant_correction_rate": {
+          "delta": "N/A"
+        }
+      }
+    },
+    "normal": {
+      "agent@prod": {
+        "verdict": {
+          "delta": 0.0,
+          "comparable_count": 70,
+          "both_correct": 60,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 10
+        },
+        "disposition_class": {
+          "delta": 0.0,
+          "comparable_count": 70,
+          "both_correct": 60,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 10
+        },
+        "approval_subchoice": {
+          "delta": -0.5714285714285714,
+          "comparable_count": 35,
+          "both_correct": 15,
+          "baseline_only_correct": 20,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "amount": {
+          "delta": 0.0,
+          "comparable_count": 70,
+          "both_correct": 70,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "duplicate": {
+          "delta": 0.0,
+          "comparable_count": 70,
+          "both_correct": 70,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "pend_routing": {
+          "delta": 0.0,
+          "comparable_count": 70,
+          "both_correct": 60,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 10
+        },
+        "citation": {
+          "delta": "N/A",
+          "comparable_count": 0,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "judge": {
+          "delta": "N/A",
+          "comparable_count": 0,
+          "both_correct": 0,
+          "baseline_only_correct": 0,
+          "challenger_only_correct": 0,
+          "both_wrong": 0
+        },
+        "tokens_per_claim": {
+          "delta": "N/A"
+        },
+        "latency_ms_per_claim": {
+          "delta": 38303.55142502979
+        },
+        "invariant_correction_rate": {
+          "delta": "N/A"
+        }
+      }
+    }
+  },
+  "disagreement_count": 20,
+  "disagreement_breakdown": {
+    "R6_over_claim_partial": 10,
+    "R5_supplier_attributable": 10
+  },
+  "disagreement_examples": [
+    {
+      "claim_id": "CLM-0001866",
+      "group": "normal",
+      "stratum": "R6_over_claim_partial",
+      "gold": {
+        "disposition": "REWORK",
+        "oracle_clause_ids": [
+          "ASTM A653 CS Type B/NA/DEMO-1990/mechanical",
+          "ASTM A653 CS Type B/NA/DEMO-1990/dimensions",
+          "ASTM A653 CS Type B/NA/DEMO-1990/chemistry"
+        ],
+        "narrative_fact": "agrees_with_structured_fields",
+        "verdict": "APPROVE",
+        "disposition_class": "APPROVE",
+        "scenario_type": "R6_over_claim_partial",
+        "stratum": "R6_over_claim_partial",
+        "policy_clause_id": "ASTM A653 CS Type B/NA/DEMO-1990/mechanical",
+        "approved_amount": "7960.00",
+        "group": "normal",
+        "approval_subchoice": "REWORK",
+        "policy_section_ref": "ASTM A653 CS Type B/NA/DEMO-1990/mechanical"
+      },
+      "baseline": {
+        "verdict": "APPROVE",
+        "disposition": "REWORK",
+        "approved_amount": 7960.0,
+        "rationale": "Deterministic rules: APPROVE/REWORK by R6_over_claim_partial.",
+        "citations": null,
+        "error": null
+      },
+      "agent": {
+        "verdict": "APPROVE",
+        "disposition": "CREDIT",
+        "approved_amount": 7960.0,
+        "rationale": "Authoritative conformance finding is nonconforming, with tensile_mpa failing the ASTM A653 CS Type B mechanical requirement, supporting a material_nonconformance claim under ASTM A653 CS Type B/NA/DEMO-1990/mechanical. Coverage is authoritatively in scope: covered=true, elapsed_months=1, no exclusions, and proration_factor=1.0. Duplicate screening is clear: is_duplicate=false, so no duplicate denial applies. Settlement must follow the deterministic authority: approve as CREDIT for 7960.0, which is a partial settlement versus the claimed 12244.0 due to over-claim detection; covered tonnage is 10.0 and freight of 500.0 is covered. Chemistry and dimensions clauses were reviewed as background specification references, but the decisive nonconformance is mechanical tensile_mpa.",
+        "citations": [
+          "ASTM A653 CS Type B/NA/DEMO-1990/mechanical",
+          "ASTM A653 CS Type B/NA/DEMO-1990/chemistry",
+          "ASTM A653 CS Type B/NA/DEMO-1990/dimensions"
+        ],
+        "error": null
+      },
+      "right": [
+        "deterministic_baseline"
+      ]
+    },
+    {
+      "claim_id": "CLM-0004375",
+      "group": "normal",
+      "stratum": "R6_over_claim_partial",
+      "gold": {
+        "disposition": "REWORK",
+        "oracle_clause_ids": [
+          "ASTM A792 AZ50/NA/DEMO-1990/mechanical",
+          "ASTM A792 AZ50/NA/DEMO-1990/dimensions",
+          "ASTM A792 AZ50/NA/DEMO-1990/chemistry"
+        ],
+        "narrative_fact": "agrees_with_structured_fields",
+        "verdict": "APPROVE",
+        "disposition_class": "APPROVE",
+        "scenario_type": "R6_over_claim_partial",
+        "stratum": "R6_over_claim_partial",
+        "policy_clause_id": "ASTM A792 AZ50/NA/DEMO-1990/mechanical",
+        "approved_amount": "17075.00",
+        "group": "normal",
+        "approval_subchoice": "REWORK",
+        "policy_section_ref": "ASTM A792 AZ50/NA/DEMO-1990/mechanical"
+      },
+      "baseline": {
+        "verdict": "APPROVE",
+        "disposition": "REWORK",
+        "approved_amount": 17075.0,
+        "rationale": "Deterministic rules: APPROVE/REWORK by R6_over_claim_partial.",
+        "citations": null,
+        "error": null
+      },
+      "agent": {
+        "verdict": "APPROVE",
+        "disposition": "CREDIT",
+        "approved_amount": 17075.0,
+        "rationale": "Authoritative conformance finding shows the material is nonconforming, with tensile_mpa failing under ASTM A792 AZ50/NA/DEMO-1990/mechanical; chemistry and dimensions were reviewed with no cited failure. Coverage is authoritatively in force at 2 months elapsed with no exclusions and no proration reduction. The duplicate gate is clear. Under the deterministic outcome, the claim is eligible as nonconforming and the settlement authority approved 17075.0, which must control. The claimed amount exceeded the covered loss, so a partial CREDIT at the approved amount is appropriate and consistent with advisory approved nonconformance precedents.",
+        "citations": [
+          "ASTM A792 AZ50/NA/DEMO-1990/mechanical",
+          "ASTM A792 AZ50/NA/DEMO-1990/chemistry",
+          "ASTM A792 AZ50/NA/DEMO-1990/dimensions"
+        ],
+        "error": null
+      },
+      "right": [
+        "deterministic_baseline"
+      ]
+    }
+  ],
+  "complete_examples": [
+    {
+      "group": "normal",
+      "claim_id": "CLM-0001866",
+      "stratum": "R6_over_claim_partial",
+      "inputs": {
+        "claimed_tonnage": "14.000",
+        "customer_id": "CUST-0005",
+        "claimed_freight": "1800.00",
+        "defect_code": "MECH_TENSILE",
+        "claim_id": "CLM-0001866",
+        "claim_date": "2026-01-19",
+        "installation": "ventilated",
+        "coil_id": "COIL-0001866",
+        "environment": "inland",
+        "claim_type": "material_nonconformance",
+        "install_date": "2025-12-31",
+        "defect_narrative": "Tensile response during forming differs from ordered mechanical requirements.",
+        "coast_distance_km": "25.0"
+      },
+      "expectations": {
+        "disposition": "REWORK",
+        "oracle_clause_ids": [
+          "ASTM A653 CS Type B/NA/DEMO-1990/mechanical",
+          "ASTM A653 CS Type B/NA/DEMO-1990/dimensions",
+          "ASTM A653 CS Type B/NA/DEMO-1990/chemistry"
+        ],
+        "narrative_fact": "agrees_with_structured_fields",
+        "verdict": "APPROVE",
+        "disposition_class": "APPROVE",
+        "scenario_type": "R6_over_claim_partial",
+        "stratum": "R6_over_claim_partial",
+        "policy_clause_id": "ASTM A653 CS Type B/NA/DEMO-1990/mechanical",
+        "approved_amount": "7960.00",
+        "group": "normal",
+        "approval_subchoice": "REWORK",
+        "policy_section_ref": "ASTM A653 CS Type B/NA/DEMO-1990/mechanical"
+      },
+      "baseline": {
+        "verdict": "APPROVE",
+        "disposition": "REWORK",
+        "approved_amount": 7960.0,
+        "rationale": "Deterministic rules: APPROVE/REWORK by R6_over_claim_partial.",
+        "citations": null,
+        "error": null
+      },
+      "agent": {
+        "verdict": "APPROVE",
+        "disposition": "CREDIT",
+        "approved_amount": 7960.0,
+        "rationale": "Authoritative conformance finding is nonconforming, with tensile_mpa failing the ASTM A653 CS Type B mechanical requirement, supporting a material_nonconformance claim under ASTM A653 CS Type B/NA/DEMO-1990/mechanical. Coverage is authoritatively in scope: covered=true, elapsed_months=1, no exclusions, and proration_factor=1.0. Duplicate screening is clear: is_duplicate=false, so no duplicate denial applies. Settlement must follow the deterministic authority: approve as CREDIT for 7960.0, which is a partial settlement versus the claimed 12244.0 due to over-claim detection; covered tonnage is 10.0 and freight of 500.0 is covered. Chemistry and dimensions clauses were reviewed as background specification references, but the decisive nonconformance is mechanical tensile_mpa.",
+        "citations": [
+          "ASTM A653 CS Type B/NA/DEMO-1990/mechanical",
+          "ASTM A653 CS Type B/NA/DEMO-1990/chemistry",
+          "ASTM A653 CS Type B/NA/DEMO-1990/dimensions"
+        ],
+        "error": null
+      },
+      "right": [
+        "deterministic_baseline"
+      ]
+    },
+    {
+      "group": "narrative",
+      "claim_id": "34b78180-bc32-5a8f-ae7d-5d81c0fdc68e",
+      "stratum": "excluded_installation",
+      "inputs": {
+        "claimed_tonnage": "10.000",
+        "customer_id": "CUST-0046",
+        "claimed_freight": "0.00",
+        "defect_code": "RED_RUST",
+        "claim_id": "34b78180-bc32-5a8f-ae7d-5d81c0fdc68e",
+        "claim_date": "2026-01-06",
+        "installation": "ventilated",
+        "coil_id": "COIL-0000501",
+        "environment": "inland",
+        "claim_type": "coating_warranty",
+        "install_date": "2018-01-31",
+        "defect_narrative": "Drainage is blocked and water stands against the underside of the panels.",
+        "coast_distance_km": "10.0"
+      },
+      "expectations": {
+        "disposition": "DENY",
+        "oracle_clause_ids": [
+          "/warranties/coverage/excluded_installations",
+          "galvanized/NA/V2/coverage",
+          "galvanized/NA/V2/exclusions",
+          "galvanized/NA/V2/proration"
+        ],
+        "narrative_fact": "standing_water",
+        "verdict": "DENY",
+        "disposition_class": "DENY",
+        "scenario_type": "excluded_installation",
+        "stratum": "excluded_installation",
+        "policy_clause_id": "/warranties/coverage/excluded_installations",
+        "approved_amount": "0.00",
+        "group": "narrative",
+        "approval_subchoice": null,
+        "policy_section_ref": "warranties.coverage.excluded_installations"
+      },
+      "baseline": {
+        "verdict": "APPROVE",
+        "disposition": "CREDIT",
+        "approved_amount": 7810.0,
+        "rationale": "Deterministic rules: APPROVE/CREDIT by R7_credit.",
+        "citations": null,
+        "error": null
+      },
+      "agent": {
+        "verdict": "APPROVE",
+        "disposition": "CREDIT",
+        "approved_amount": 7810.0,
+        "rationale": "Approve as CREDIT because the deterministic outcome is authoritative and finds the claim eligible, covered, and payable at 7810.0. The duplicate gate is clear because the claim is not a duplicate. Coverage is satisfied under galvanized/NA/V2/coverage for this coating_warranty claim at 96 elapsed months, no exclusions were triggered under galvanized/NA/V2/exclusions, and the payment level is consistent with galvanized/NA/V2/proration with a 1.0 proration factor. The settlement estimate matches the settlement authority exactly. Although conformance indicates the material conforms, this is a covered coating warranty claim and the authoritative coverage determination governs. Advisory precedent trends to denial, but those cases do not override the authoritative covered outcome here. Elevated advisory risk supports monitoring only and does not change verdict or amount.",
+        "citations": [
+          "galvanized/NA/V2/exclusions",
+          "galvanized/NA/V2/coverage",
+          "galvanized/NA/V2/proration"
+        ],
+        "error": null
+      },
+      "right": [
+        "neither"
+      ]
+    }
+  ],
+  "guardrails": {
+    "persist": false,
+    "lakebase_public_writes": 0,
+    "errors": 0
+  }
+}
