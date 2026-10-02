@@ -66,12 +66,15 @@ class _WorkerConnection:
         self.closed = True
 
 
-def _candidate(verdict, disposition, *, citations=None, violations=None, tokens=None):
+def _candidate(
+    verdict, disposition, *, citations=None, violations=None, tokens=None, conflict=None
+):
     def invoke(claim):
         data = {
             "recommendation": {
                 "recommended_verdict": verdict,
                 "recommended_disposition": disposition,
+                "narrative_conflict": conflict,
             },
             "cited_clause_ids": citations,
             "invariant_violations": violations,
@@ -131,6 +134,36 @@ def test_subchoice_only_applies_to_approvals_and_empty_citations_fail():
     assert scores["citation"] == NA
     non_deterministic = standardize_output(_candidate("DENY", "DUPLICATE", citations=[])(None))
     assert score(non_deterministic, {"oracle_clause_ids": ["a"]})["citation"] is False
+
+
+def test_narrative_escalation_metrics_require_hold_right_clause_and_verbatim_quote():
+    claim = {"defect_narrative": "The building is 0.6 km from the shoreline."}
+    expected = {
+        "group": "narrative",
+        "verdict": "DENY",
+        "disposition": "DENY",
+        "deciding_clause_id": "galvanized/NA/V2/exclusions",
+    }
+    conflict = {
+        "clause": "galvanized/NA/V2/exclusions",
+        "narrative_quote": "0.6 km from the shoreline",
+        "structured_field": "coast_distance_km=10.0",
+    }
+    output = standardize_output(
+        _candidate(
+            "PEND_INVESTIGATE",
+            "PEND_INVESTIGATE",
+            citations=["galvanized/NA/V2/exclusions"],
+            conflict=conflict,
+        )(claim)
+    )
+    metrics = score(output, expected, claim)
+    assert metrics["narrative_escalation_rate"] is True
+    assert metrics["deciding_clause_cited"] is True
+    assert metrics["false_escalation_rate"] == NA
+
+    normal = score(output, {**expected, "group": "normal"}, claim)
+    assert normal["false_escalation_rate"] is True
 
 
 def test_real_deterministic_shape_always_has_na_citations():

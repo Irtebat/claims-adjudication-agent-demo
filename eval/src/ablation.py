@@ -41,6 +41,9 @@ QUALITY_DIMENSIONS = (
     "duplicate",
     "pend_routing",
     "citation",
+    "narrative_escalation_rate",
+    "false_escalation_rate",
+    "deciding_clause_cited",
     "judge",
 )
 SUMMARY_DIMENSIONS = QUALITY_DIMENSIONS + (
@@ -267,6 +270,7 @@ def standardize_output(output: Any, deterministic: bool = False) -> dict:
         "disposition": disposition,
         "approved_amount": recommendation.get("approved_amount"),
         "cited_clause_ids": None if deterministic else data.get("cited_clause_ids"),
+        "narrative_conflict": None if deterministic else recommendation.get("narrative_conflict"),
         "judge_score": judge,
         "invariant_violations": None if deterministic else data.get("invariant_violations"),
         "usage": data.get("usage") or output.get("usage"),
@@ -537,7 +541,7 @@ def _token_count(output: dict) -> int | str:
     return int(value) if value is not None else NA
 
 
-def score(output: dict, expectations: dict) -> dict:
+def score(output: dict, expectations: dict, claim: dict | None = None) -> dict:
     expected = normalize_expectations(expectations)
     result = {
         "verdict": output.get("verdict") == expected.get("verdict"),
@@ -571,6 +575,28 @@ def score(output: dict, expectations: dict) -> dict:
     result["citation"] = (
         NA if not oracle or citations is None else bool(citations) and set(citations) <= set(oracle)
     )
+    group = expected.get("group")
+    conflict = output.get("narrative_conflict")
+    deciding_clause = expected.get("deciding_clause_id") or expected.get("policy_clause_id")
+    narrative = (claim or {}).get("defect_narrative")
+    if group == "narrative":
+        result["narrative_escalation_rate"] = bool(
+            output.get("verdict") == "PEND"
+            and isinstance(conflict, dict)
+            and conflict.get("clause") == deciding_clause
+            and isinstance(conflict.get("narrative_quote"), str)
+            and conflict["narrative_quote"]
+            and isinstance(narrative, str)
+            and conflict["narrative_quote"] in narrative
+        )
+    else:
+        result["narrative_escalation_rate"] = NA
+    result["false_escalation_rate"] = output.get("verdict") == "PEND" if group == "normal" else NA
+    result["deciding_clause_cited"] = (
+        NA
+        if citations is None or not deciding_clause or deciding_clause == "structured_authorities"
+        else deciding_clause in citations
+    )
     result["judge"] = output.get("judge_score") if output.get("judge_score") is not None else NA
     violations = output.get("invariant_violations")
     result["invariant_corrected"] = NA if violations is None else bool(violations)
@@ -585,7 +611,7 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
             output, latency_ms = candidate.predict(record["inputs"]["claim"])
             observations.append(
                 {
-                    **score(output, record["expectations"]),
+                    **score(output, record["expectations"], record["inputs"]["claim"]),
                     "claim_id": claim_id,
                     "group": record["expectations"].get("group", "unspecified"),
                     "stratum": record["expectations"].get(
@@ -615,6 +641,20 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
                     "citation": (
                         NA
                         if candidate.deterministic or not expected.get("oracle_clause_ids")
+                        else False
+                    ),
+                    "narrative_escalation_rate": (
+                        False if expected.get("group") == "narrative" else NA
+                    ),
+                    "false_escalation_rate": (False if expected.get("group") == "normal" else NA),
+                    "deciding_clause_cited": (
+                        NA
+                        if candidate.deterministic
+                        or not (
+                            expected.get("deciding_clause_id") or expected.get("policy_clause_id")
+                        )
+                        or (expected.get("deciding_clause_id") or expected.get("policy_clause_id"))
+                        == "structured_authorities"
                         else False
                     ),
                     "judge": NA if candidate.deterministic else False,

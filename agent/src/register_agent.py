@@ -94,7 +94,16 @@ def register_validated(model_uri: str) -> dict:
     return {"model_uri": model_uri, "model_version": registered.version, "alias": "candidate"}
 
 
+def _configure_model_environment() -> None:
+    # This directory has a tooling-only pyproject/uv.lock with no runtime dependencies.
+    # If MLflow auto-logs it, isolated validation runs `uv sync` from that empty lock and
+    # cannot even import MLflow. Package the explicit PIP_REQUIREMENTS instead.
+    os.environ["MLFLOW_UV_AUTO_DETECT"] = "false"
+    os.environ["MLFLOW_LOG_UV_FILES"] = "false"
+
+
 def run(profile: str, experiment: str, validate: bool = True, register: bool = True) -> dict:
+    _configure_model_environment()
     mlflow.set_tracking_uri("databricks")
     mlflow.set_registry_uri("databricks-uc")
     # A named NON-Git experiment (standard MLflow traces), parent dir pre-created.

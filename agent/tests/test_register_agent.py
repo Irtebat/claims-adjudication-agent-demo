@@ -4,6 +4,15 @@ from unittest.mock import MagicMock
 import register_agent
 
 
+def test_registration_disables_empty_tooling_lockfile(monkeypatch):
+    monkeypatch.delenv("MLFLOW_UV_AUTO_DETECT", raising=False)
+    monkeypatch.delenv("MLFLOW_LOG_UV_FILES", raising=False)
+    register_agent._configure_model_environment()
+
+    assert register_agent.os.environ["MLFLOW_UV_AUTO_DETECT"] == "false"
+    assert register_agent.os.environ["MLFLOW_LOG_UV_FILES"] == "false"
+
+
 def test_registration_sets_candidate_and_never_prod(monkeypatch):
     client = MagicMock()
     monkeypatch.setattr(

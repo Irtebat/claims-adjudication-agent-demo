@@ -17,6 +17,7 @@ from decision_record import (
     deterministic_outcome,
     enforce_invariants,
     recommendation_json_schema,
+    validate_narrative_conflict,
 )
 
 APPROVE_SETTLEMENT = {
@@ -178,6 +179,27 @@ def test_recommendation_json_schema_is_response_format():
     assert schema["json_schema"]["name"] == "adjudication_recommendation"
 
 
+def test_narrative_conflict_requires_verbatim_quote_and_retrieved_clause():
+    claim = {"defect_narrative": "The site is 0.6 km from the shoreline."}
+    clauses = [{"citation_key": "galvanized/NA/V2/exclusions"}]
+    rec = {
+        **_rec("PEND_INVESTIGATE", "PEND_INVESTIGATE", 5000.0),
+        "narrative_conflict": {
+            "clause": "galvanized/NA/V2/exclusions",
+            "narrative_quote": "0.6 km from the shoreline",
+            "structured_field": "coast_distance_km=10.0",
+        },
+    }
+    assert (
+        validate_narrative_conflict(rec, claim, clauses)["narrative_conflict"]
+        == rec["narrative_conflict"]
+    )
+    rec["narrative_conflict"]["narrative_quote"] = "1.2 km from the shoreline"
+    assert "narrative_conflict" not in validate_narrative_conflict(rec, claim, clauses)
+    rec["narrative_conflict"]["narrative_quote"] = "0.6 km from the shoreline"
+    assert "narrative_conflict" not in validate_narrative_conflict(rec, claim, [])
+
+
 def test_verdict_mapping_to_operational_value():
     assert adjudication_verdict("PEND_INVESTIGATE") == "PEND"
     assert adjudication_verdict("APPROVE") == "APPROVE"
@@ -234,6 +256,44 @@ def test_decision_record_has_all_columns_and_derived_fields():
     # JSONB columns stay as dict/list for the writer to bind.
     for column in JSONB_COLUMNS:
         assert isinstance(record[column], (dict, list))
+
+
+def test_validated_narrative_conflict_is_persisted_in_flags():
+    rec = _rec("PEND_INVESTIGATE", "PEND_INVESTIGATE", 5000.0)
+    rec["narrative_conflict"] = {
+        "clause": "G/NA/E/mechanical",
+        "narrative_quote": "measured below minimum",
+        "structured_field": "tensile_mpa",
+    }
+    det = deterministic_outcome(
+        "material_nonconformance", NONCONFORMS, COVERED, APPROVE_SETTLEMENT, NO_DUP
+    )
+    corrected, violations = enforce_invariants(rec, det)
+    payload = _payload()
+    payload = build_decision_record(
+        claim=payload["claim_input"],
+        resolved={
+            "spec_provenance": payload["spec_provenance"],
+            "warranty_provenance": payload["warranty_provenance"],
+            "spec_params": payload["spec_params"],
+            "warranty_terms": payload["warranty_terms"],
+            "coil": payload["coil"],
+            "freight_cap": payload["freight_cap"],
+        },
+        measured=payload["mtc_measured"],
+        conformance=NONCONFORMS,
+        coverage=COVERED,
+        settlement=APPROVE_SETTLEMENT,
+        duplicate=NO_DUP,
+        deterministic=det,
+        recommendation=corrected,
+        invariant_violations=violations,
+        citations=payload["citations"],
+        advisory_risk=payload["advisory_risk"],
+        reproducibility={"authorities_source_sha256": "deadbeef"},
+    )
+    assert payload["narrative_conflict"] == rec["narrative_conflict"]
+    assert payload["flags"]["narrative_conflict"] == rec["narrative_conflict"]
 
 
 def test_idempotency_key_is_stable():

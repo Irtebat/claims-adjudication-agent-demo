@@ -47,10 +47,11 @@ from decision_record import (
     enforce_invariants,
     recommendation_json_schema,
     source_sha256,
+    validate_narrative_conflict,
 )
 from writer import write_adjudication
 
-LLM_ENDPOINT = "system.ai.gpt-5-2"
+LLM_ENDPOINT = "system.ai.gpt-5-4"
 MODEL_NAME = "fe-bar-ir.default.claims_adjudication_agent"
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -72,10 +73,17 @@ SYSTEM_PROMPT = (
     "You are a steel quality/warranty claims adjudication assistant. Deterministic "
     "tools have ALREADY decided the money and the verdict eligibility for this claim: "
     "the conformance, coverage, and settlement authorities and the duplicate gate are "
-    "AUTHORITATIVE. You must NOT change any authority's number or verdict. Your job is "
+    "AUTHORITATIVE. You must NOT change any authority's number or eligibility. Your job is "
     "to reason over the evidence, cite the applicable clauses by their natural clause "
-    "keys, note advisory precedent and risk, and produce a recommendation that AGREES "
-    "with the deterministic outcome. Rules you must follow exactly: a duplicate is "
+    "keys, note advisory precedent and risk, and produce a recommendation. If the claim "
+    "narrative contradicts a structured field OR describes a condition that triggers a "
+    "retrieved written exclusion clause (including installation misuse, an excluded "
+    "environment, or coastal distance under 2 km), recommend PEND_INVESTIGATE and set "
+    "narrative_conflict to {clause, narrative_quote, structured_field}. The quote must "
+    "be verbatim from defect_narrative and clause must be a retrieved natural clause "
+    "key. NEVER DENY on a narrative conflict/exclusion and NEVER change an amount; this "
+    "is only a flag for human review. Otherwise agree with the deterministic outcome. "
+    "Rules you must follow exactly: a duplicate is "
     "DENY/DUPLICATE and never payable; an in-spec material claim is DENY; an "
     "out-of-coverage warranty claim is DENY; the settlement_estimate MUST equal the "
     "settlement authority's approved amount; you may only escalate to PEND_INVESTIGATE "
@@ -99,6 +107,11 @@ def _evidence_block(core: dict) -> str:
     return json.dumps(
         {
             "claim_type": core.get("claim_type"),
+            "claim_narrative": (core.get("claim") or {}).get("defect_narrative"),
+            "structured_claim_fields": {
+                key: (core.get("claim") or {}).get(key)
+                for key in ("environment", "installation", "coast_distance_km")
+            },
             "conformance": core["conformance"],
             "coverage": core["coverage"],
             "settlement": core["settlement"],
@@ -108,6 +121,14 @@ def _evidence_block(core: dict) -> str:
             },
             "deterministic_outcome": det,
             "cited_clause_ids": [c["citation_key"] for c in core.get("citations", [])],
+            "retrieved_clauses": [
+                {
+                    "citation_key": clause.get("citation_key"),
+                    "section_ref": clause.get("section_ref"),
+                    "clause_text": clause.get("clause_text"),
+                }
+                for clause in core.get("clauses", [])
+            ],
             "advisory_precedent": core.get("precedent", []),
             "advisory_risk_score": (core.get("risk") or {}).get("risk_score"),
         },
@@ -179,6 +200,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             span.set_attribute("risk_score", float(risk.get("risk_score") or 0.0))
 
         return {
+            "claim": claim,
             "claim_type": claim.get("claim_type"),
             "frozen": frozen,
             "resolved": frozen.resolved,
@@ -311,7 +333,8 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                     + reasoning
                     + "\n\nEmit ONLY the structured recommendation JSON. settlement_estimate "
                     "MUST equal the settlement authority's approved amount; cite natural "
-                    "clause keys in cited_clause_ids."
+                    "clause keys in cited_clause_ids. When escalating for a narrative "
+                    "conflict, cite that deciding clause and populate narrative_conflict."
                 )
             ),
         ]
@@ -347,6 +370,9 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             with connect(profile=self.profile, autocommit=False) as conn:
                 core = self._deterministic_core(conn, claim)
                 raw_recommendation, llm_used = self._llm_recommendation(core)
+                raw_recommendation = validate_narrative_conflict(
+                    raw_recommendation, claim, core["clauses"]
+                )
                 with mlflow.start_span(name="enforce_invariants", span_type="TOOL") as span:
                     corrected, violations = enforce_invariants(
                         raw_recommendation, core["deterministic"]
