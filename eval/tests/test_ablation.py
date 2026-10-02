@@ -9,11 +9,12 @@ from databricks.sdk.core import ApiClient
 import ablation
 from ablation import (
     NA,
+    CandidateAdapter,
     PersistenceViolation,
+    WorkerSpec,
     callable_adapter,
     compare,
     deterministic_adapter,
-    deterministic_baseline,
     endpoint_adapter,
     model_adapter,
     normalize_expectations,
@@ -21,6 +22,18 @@ from ablation import (
     standardize_output,
     stratified_sample,
 )
+
+
+def _isolated_explode(claim):
+    raise ValueError(f"bad claim {claim['claim_id']}")
+
+
+def _isolated_persistence(claim):
+    raise PersistenceViolation(f"blocked write for {claim['claim_id']}")
+
+
+def _isolated_slow(claim):
+    time.sleep(10)
 
 
 def _candidate(verdict, disposition, *, citations=None, violations=None, tokens=None):
@@ -120,7 +133,6 @@ def test_model_adapter_reuses_predict_retry_and_persist_guard():
 
     model = Model()
     adapter = model_adapter("model", "models:/x@prod", loader=lambda _: model)
-    adapter.isolate_worker = False
     with pytest.raises(PersistenceViolation, match="persistence invariant"):
         compare(
             [_records()[0]],
@@ -138,7 +150,7 @@ def test_endpoint_uses_invocations_rest_and_fails_closed():
         }
     }
     adapter = endpoint_adapter("endpoint", "claims/name", SimpleNamespace(api_client=api_client))
-    adapter.isolate_worker = False
+    adapter.worker_spec = None
     output, _ = adapter.predict({"claim_id": "c"})
     assert output["verdict"] == "DENY"
     api_client.do.assert_called_once_with(
@@ -189,23 +201,6 @@ def test_standard_output_requires_dict():
         standardize_output("bad")
 
 
-def test_missing_parallel_ruleset_has_actionable_import_error(monkeypatch):
-    class Manager:
-        def __enter__(self):
-            return object()
-
-        def __exit__(self, *args):
-            return None
-
-    monkeypatch.setitem(
-        __import__("sys").modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager())
-    )
-    monkeypatch.setattr(ablation, "_deterministic_context", lambda connection, claim: {})
-    monkeypatch.setitem(__import__("sys").modules, "decision_record", SimpleNamespace())
-    with pytest.raises(ImportError, match="land that branch first"):
-        deterministic_baseline({"claim_id": "c"})
-
-
 def test_trace_token_usage_maps_claim(monkeypatch):
     rows = [
         {
@@ -221,73 +216,34 @@ def test_trace_token_usage_maps_claim(monkeypatch):
     assert ablation._trace_token_usage("run") == {"c": 42}
 
 
-def test_deterministic_adapter_reuses_one_connection(monkeypatch):
-    events = []
+def test_private_baseline_loader_ignores_preexisting_import_pollution(monkeypatch, tmp_path):
+    polluted = tmp_path / "decision_record.py"
+    polluted.write_text("raise RuntimeError('polluted module imported')\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setitem(sys.modules, "decision_record", SimpleNamespace(polluted=True))
+    monkeypatch.setitem(sys.modules, "disposition_rules", SimpleNamespace(polluted=True))
 
-    class Manager:
-        def __enter__(self):
-            events.append("enter")
-            return object()
-
-        def __exit__(self, *args):
-            events.append("exit")
-
-    monkeypatch.setitem(
-        __import__("sys").modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager())
+    _, decision, _, _ = ablation._local_baseline_functions()
+    outcome = decision.deterministic_outcome(
+        "coating_warranty",
+        {"conforms": True},
+        {"covered": False},
+        {"approved_amount": 10.0},
+        {"is_duplicate": False},
     )
-    monkeypatch.setattr(ablation, "_deterministic_context", lambda *args, **kwargs: args[1])
-    monkeypatch.setattr(
-        ablation,
-        "_recommend_from_context",
-        lambda context: _candidate("APPROVE", "CREDIT")(context),
-    )
-    adapter = deterministic_adapter("baseline")
-    compare(_records(), [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))])
-    assert events == ["enter", "exit"]
 
-
-def test_deterministic_adapter_captures_local_recommendation_before_model_path_pollution(
-    monkeypatch,
-):
-    class Manager:
-        def __enter__(self):
-            return object()
-
-        def __exit__(self, *args):
-            return None
-
-    def local_recommendation(context):
-        return _candidate("APPROVE", "CREDIT")(context)
-
-    monkeypatch.setitem(sys.modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager()))
-    monkeypatch.setitem(
-        sys.modules, "authorities_runtime", SimpleNamespace(AuthorityRuntime=object)
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "decision_record",
-        SimpleNamespace(
-            deterministic_outcome=lambda *args: {},
-            deterministic_recommendation=local_recommendation,
-        ),
-    )
-    monkeypatch.setitem(
-        sys.modules, "duplicate", SimpleNamespace(check_duplicate_claim=lambda *args: {})
-    )
-    monkeypatch.setattr(ablation, "_deterministic_context", lambda *args, **kwargs: {})
-
-    adapter = deterministic_adapter("baseline")
-    sys.modules["decision_record"] = SimpleNamespace()
-    output, _ = adapter.predict({"claim_id": "c"})
-
-    assert output["verdict"] == "APPROVE"
-    adapter.close()
+    assert outcome["verdict"] == "DENY"
+    assert decision.__name__ == "_ablation_decision_record"
+    assert deterministic_adapter("baseline").worker_spec.kind == "deterministic"
 
 
 def test_per_claim_timeout_is_recorded_as_failure():
-    adapter = callable_adapter("slow", lambda claim: time.sleep(1))
+    adapter = CandidateAdapter(
+        "slow",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_slow"),
+    )
     adapter.timeout_seconds = 0.01
-    adapter.isolate_worker = True
     report = compare(
         _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
     )
@@ -297,11 +253,11 @@ def test_per_claim_timeout_is_recorded_as_failure():
 
 
 def test_isolated_worker_propagates_traceback():
-    def explode(claim):
-        raise ValueError(f"bad claim {claim['claim_id']}")
-
-    adapter = callable_adapter("broken", explode)
-    adapter.isolate_worker = True
+    adapter = CandidateAdapter(
+        "broken",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_explode"),
+    )
     report = compare(
         _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
     )
@@ -309,6 +265,19 @@ def test_isolated_worker_propagates_traceback():
     error = report["per_claim"][0]["candidates"]["broken"]["error"]
     assert "Traceback (most recent call last)" in error
     assert "ValueError: bad claim one" in error
+
+
+def test_isolated_persistence_violation_aborts():
+    adapter = CandidateAdapter(
+        "writer",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_persistence"),
+    )
+    with pytest.raises(PersistenceViolation, match="blocked write for one"):
+        compare(
+            _records()[:1],
+            [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))],
+        )
 
 
 def test_first_five_failures_abort_and_log_diagnostics(monkeypatch):
@@ -329,6 +298,25 @@ def test_first_five_failures_abort_and_log_diagnostics(monkeypatch):
     assert logged[0][1] == "ablation-errors.json"
     assert len(logged[0][0]["per_claim"]) == 5
     assert "ValueError: boom" in logged[0][0]["per_claim"][0]["error"]
+
+
+def test_four_failures_then_success_does_not_abort():
+    calls = 0
+
+    def recover(claim):
+        nonlocal calls
+        calls += 1
+        if calls <= 4:
+            raise ValueError("temporary")
+        return _candidate("DENY", "DENY")(claim)
+
+    records = [
+        {"inputs": {"claim": {"claim_id": str(index)}}, "expectations": {"verdict": "DENY"}}
+        for index in range(5)
+    ]
+    observations = ablation._observations(records, callable_adapter("recover", recover))
+    assert len(observations) == 5
+    assert observations[-1]["error"] is None
 
 
 class _Frame:
@@ -378,7 +366,9 @@ def test_main_selects_experiment_before_starting_runs(monkeypatch, capsys):
         ablation.mlflow, "set_experiment", lambda name: events.append(("experiment", name))
     )
     monkeypatch.setattr(ablation, "load_records", lambda *args: [])
-    monkeypatch.setattr(ablation, "resolve_candidate", lambda spec: spec)
+    monkeypatch.setattr(
+        ablation, "resolve_candidate", lambda spec: callable_adapter(spec, lambda claim: {})
+    )
     monkeypatch.setattr(ablation, "run", lambda records, candidates: {"candidate_runs": []})
 
     ablation.main()

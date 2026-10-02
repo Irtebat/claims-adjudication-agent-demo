@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.util
 import json
+import multiprocessing
 import os
-import queue
 import sys
 import tempfile
-import threading
 import time
 import traceback
 import uuid
@@ -63,6 +63,132 @@ class CandidateBatchFailure(RuntimeError):
         self.observations = observations
         errors = [row["error"] for row in observations]
         super().__init__(f"{candidate} failed its first {len(observations)} rows: {errors}")
+
+
+@dataclass(frozen=True)
+class WorkerSpec:
+    kind: str
+    value: str | None = None
+    profile: str | None = None
+
+
+def _private_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _local_baseline_functions():
+    """Load money modules by file path, independent of global import pollution."""
+    agent_path = str(AGENT_SRC)
+    sys.path[:] = [item for item in sys.path if item != agent_path]
+    sys.path.insert(0, agent_path)
+    disposition = _private_module("_ablation_disposition_rules", AGENT_SRC / "disposition_rules.py")
+    previous = sys.modules.get("disposition_rules")
+    sys.modules["disposition_rules"] = disposition
+    try:
+        decision = _private_module("_ablation_decision_record", AGENT_SRC / "decision_record.py")
+    finally:
+        if previous is None:
+            sys.modules.pop("disposition_rules", None)
+        else:
+            sys.modules["disposition_rules"] = previous
+    authority_runtime = _private_module(
+        "_ablation_authorities_runtime", AGENT_SRC / "authorities_runtime.py"
+    )
+    duplicate = _private_module("_ablation_duplicate", AGENT_SRC / "duplicate.py")
+    db = _private_module("_ablation_db", AGENT_SRC / "db.py")
+    return authority_runtime, decision, duplicate, db
+
+
+def _worker_main(spec: WorkerSpec, connection) -> None:
+    close = None
+    try:
+        if spec.kind == "model":
+            model = load_candidate(spec.value)
+
+            def invoke(claim):
+                return predict_claim(claim, model=model)
+
+            deterministic = False
+        elif spec.kind == "endpoint":
+            workspace = WorkspaceClient(profile=spec.profile)
+
+            def invoke(claim):
+                response = workspace.api_client.do(
+                    "POST",
+                    f"/api/2.0/serving-endpoints/{quote(spec.value, safe='')}/invocations",
+                    body={
+                        "input": [{"role": "user", "content": json.dumps(claim, sort_keys=True)}],
+                        "custom_inputs": {"claim": claim, "persist": False},
+                    },
+                )
+                if _custom(response).get("write_result", {}).get("persisted") is not False:
+                    raise PersistenceViolation("endpoint persistence invariant failed")
+                return response
+
+            deterministic = False
+        elif spec.kind == "deterministic":
+            runtime, decision, duplicate, db = _local_baseline_functions()
+            manager = db.connect(profile=spec.profile or "fe-bar", autocommit=True)
+            lakebase = manager.__enter__()
+
+            def close():
+                manager.__exit__(None, None, None)
+
+            def invoke(claim):
+                context = _deterministic_context(
+                    lakebase,
+                    claim,
+                    authority_runtime=runtime.AuthorityRuntime,
+                    deterministic_outcome_fn=decision.deterministic_outcome,
+                    duplicate_fn=duplicate.check_duplicate_claim,
+                )
+                return decision.deterministic_recommendation(context)
+
+            deterministic = True
+        elif spec.kind == "callable":
+            invoke = _load_callable(spec.value)
+            deterministic = False
+        else:
+            raise ValueError(f"unknown worker kind {spec.kind}")
+        connection.send({"ready": True})
+        while True:
+            request = connection.recv()
+            if request is None:
+                break
+            try:
+                output = standardize_output(invoke(request), deterministic=deterministic)
+                connection.send({"output": output})
+            except BaseException as exc:
+                connection.send(
+                    {
+                        "exception_module": type(exc).__module__,
+                        "exception_type": type(exc).__name__,
+                        "message": str(exc),
+                        "traceback": traceback.format_exc(),
+                    }
+                )
+    except BaseException as exc:
+        try:
+            connection.send(
+                {
+                    "exception_module": type(exc).__module__,
+                    "exception_type": type(exc).__name__,
+                    "message": str(exc),
+                    "traceback": traceback.format_exc(),
+                }
+            )
+        except Exception:
+            pass
+    finally:
+        if close:
+            close()
+        connection.close()
 
 
 def _custom(output: dict) -> dict:
@@ -176,11 +302,17 @@ def _recommend_from_context(context: dict) -> dict:
 
 def deterministic_baseline(claim: dict) -> dict:
     """One-off baseline entry point; run adapters reuse one connection instead."""
-    from db import connect
-
+    runtime, decision, duplicate, db = _local_baseline_functions()
     profile = os.environ.get("LAKEBASE_PROFILE") or "fe-bar"
-    with connect(profile=profile, autocommit=True) as connection:
-        return _recommend_from_context(_deterministic_context(connection, claim))
+    with db.connect(profile=profile, autocommit=True) as connection:
+        context = _deterministic_context(
+            connection,
+            claim,
+            authority_runtime=runtime.AuthorityRuntime,
+            deterministic_outcome_fn=decision.deterministic_outcome,
+            duplicate_fn=duplicate.check_duplicate_claim,
+        )
+        return decision.deterministic_recommendation(context)
 
 
 @dataclass
@@ -189,38 +321,73 @@ class CandidateAdapter:
     invoke: Callable[[dict], dict]
     deterministic: bool = False
     close: Callable[[], None] | None = None
-    timeout_seconds: int = DEFAULT_CLAIM_TIMEOUT_SECONDS
-    isolate_worker: bool = False
+    timeout_seconds: float = DEFAULT_CLAIM_TIMEOUT_SECONDS
+    worker_spec: WorkerSpec | None = None
+    _process: Any = None
+    _connection: Any = None
+
+    def _stop_worker(self) -> None:
+        if self._process is not None:
+            if self._process.is_alive():
+                self._process.terminate()
+            self._process.join(timeout=5)
+        if self._connection is not None:
+            self._connection.close()
+        self._process = self._connection = None
+
+    def _start_worker(self) -> None:
+        self._stop_worker()
+        context = multiprocessing.get_context("spawn")
+        parent, child = context.Pipe()
+        process = context.Process(target=_worker_main, args=(self.worker_spec, child), daemon=True)
+        process.start()
+        child.close()
+        self._process, self._connection = process, parent
+        if not parent.poll(self.timeout_seconds):
+            self._stop_worker()
+            raise ClaimTimeoutError(f"candidate {self.name} worker startup timed out")
+        response = parent.recv()
+        if not response.get("ready"):
+            self._stop_worker()
+            self._raise_worker_error(response)
+
+    @staticmethod
+    def _raise_worker_error(response: dict) -> None:
+        detail = response.get("traceback") or response.get("message") or repr(response)
+        if response.get("exception_type") == "PersistenceViolation":
+            raise PersistenceViolation(detail)
+        raise RuntimeError(f"candidate worker failed:\n{detail}")
 
     def predict(self, claim: dict) -> tuple[dict, float]:
         started = time.perf_counter()
-        if not self.isolate_worker:
+        if self.worker_spec is None:
             output = standardize_output(self.invoke(claim), deterministic=self.deterministic)
             return output, (time.perf_counter() - started) * 1000
-
-        result: queue.Queue = queue.Queue(maxsize=1)
-
-        def invoke() -> None:
-            try:
-                result.put((True, self.invoke(claim)))
-            except BaseException:
-                result.put((False, traceback.format_exc()))
-
-        worker = threading.Thread(target=invoke, name=f"ablation-{self.name}", daemon=True)
-        worker.start()
-        try:
-            succeeded, value = result.get(timeout=self.timeout_seconds)
-        except queue.Empty as exc:
+        if self._process is None or not self._process.is_alive():
+            self._start_worker()
+        self._connection.send(claim)
+        if not self._connection.poll(self.timeout_seconds):
+            self._stop_worker()
             raise ClaimTimeoutError(
                 f"candidate {self.name} exceeded {self.timeout_seconds}s for claim "
                 f"{claim.get('claim_id')}"
-            ) from exc
-        if not succeeded:
-            if "PersistenceViolation" in value:
-                raise PersistenceViolation(value)
-            raise RuntimeError(f"candidate worker failed:\n{value}")
-        output = standardize_output(value, deterministic=self.deterministic)
+            )
+        response = self._connection.recv()
+        if "output" not in response:
+            self._raise_worker_error(response)
+        output = response["output"]
         return output, (time.perf_counter() - started) * 1000
+
+    def shutdown(self) -> None:
+        if self._connection is not None and self._process is not None and self._process.is_alive():
+            try:
+                self._connection.send(None)
+                self._process.join(timeout=5)
+            except Exception:
+                pass
+        self._stop_worker()
+        if self.close:
+            self.close()
 
 
 def callable_adapter(
@@ -232,43 +399,21 @@ def callable_adapter(
 
 
 def deterministic_adapter(name: str, profile: str | None = None) -> CandidateAdapter:
-    """Open one Lakebase connection and reuse it for every claim in this candidate run."""
-    if str(AGENT_SRC) not in sys.path:
-        sys.path.insert(0, str(AGENT_SRC))
-    from authorities_runtime import AuthorityRuntime
-    from db import connect
-    from decision_record import deterministic_outcome, deterministic_recommendation
-    from duplicate import check_duplicate_claim
-
-    manager = connect(
-        profile=profile or os.environ.get("LAKEBASE_PROFILE") or "fe-bar", autocommit=True
-    )
-    connection = manager.__enter__()
-
-    def close() -> None:
-        manager.__exit__(None, None, None)
-
     return CandidateAdapter(
         name,
-        lambda claim: deterministic_recommendation(
-            _deterministic_context(
-                connection,
-                claim,
-                authority_runtime=AuthorityRuntime,
-                deterministic_outcome_fn=deterministic_outcome,
-                duplicate_fn=check_duplicate_claim,
-            )
-        ),
+        lambda claim: deterministic_baseline(claim),
         deterministic=True,
-        close=close,
+        worker_spec=WorkerSpec(
+            "deterministic", profile=profile or os.environ.get("LAKEBASE_PROFILE") or "fe-bar"
+        ),
     )
 
 
 def model_adapter(name: str, uri: str, loader=mlflow.pyfunc.load_model) -> CandidateAdapter:
-    model = load_candidate(uri, loader=loader)
-    return CandidateAdapter(
-        name, lambda claim: predict_claim(claim, model=model), isolate_worker=True
-    )
+    if loader is not mlflow.pyfunc.load_model:
+        model = load_candidate(uri, loader=loader)
+        return CandidateAdapter(name, lambda claim: predict_claim(claim, model=model))
+    return CandidateAdapter(name, lambda claim: {}, worker_spec=WorkerSpec("model", uri))
 
 
 def endpoint_adapter(
@@ -289,7 +434,7 @@ def endpoint_adapter(
             raise PersistenceViolation(f"{name}: endpoint persistence invariant failed")
         return response
 
-    return CandidateAdapter(name, invoke, isolate_worker=True)
+    return CandidateAdapter(name, invoke, worker_spec=WorkerSpec("endpoint", endpoint))
 
 
 def resolve_candidate(spec: str) -> CandidateAdapter:
@@ -335,11 +480,14 @@ def score(output: dict, expectations: dict) -> dict:
         ),
     }
     expected_amount = expected.get("approved_amount")
+    if expected_amount is None or str(expected_amount).strip().lower() in {"", "none", "null"}:
+        expected_amount = None
     try:
         result["amount"] = (
             NA
             if expected_amount is None
-            else Decimal(str(output.get("approved_amount"))) == Decimal(str(expected_amount))
+            else Decimal(str(output.get("approved_amount"))).quantize(Decimal("0.01"))
+            == Decimal(str(expected_amount)).quantize(Decimal("0.01"))
         )
     except (InvalidOperation, TypeError):
         result["amount"] = False
@@ -535,8 +683,7 @@ def compare(records: list[dict], candidates: list[CandidateAdapter]) -> dict:
         )
     finally:
         for candidate in candidates:
-            if candidate.close:
-                candidate.close()
+            candidate.shutdown()
 
 
 def _numeric_metrics(prefix: str, values: dict) -> dict:
@@ -560,11 +707,16 @@ def run(
         raise ValueError("ablation requires at least two candidates")
     ablation_id = ablation_id or str(uuid.uuid4())
     candidate_runs, aggregates = [], {}
-    for candidate in candidates:
-        try:
+    try:
+        for candidate in candidates:
             with mlflow.start_run(run_name=f"ablation-{ablation_id}-{candidate.name}") as active:
                 mlflow.set_tags({"ablation_id": ablation_id, "candidate": candidate.name})
-                observations = _observations(records, candidate)
+                candidate_runs.append(active.info.run_id)
+                try:
+                    observations = _observations(records, candidate)
+                except Exception:
+                    mlflow.set_tag("aborted", "true")
+                    raise
                 try:
                     trace_tokens = _trace_token_usage(active.info.run_id)
                 except Exception:
@@ -574,28 +726,27 @@ def run(
                         observation["tokens"] = trace_tokens[observation["claim_id"]]
                 aggregates[candidate.name] = observations
                 mlflow.log_metrics(_numeric_metrics("", _summary(observations)))
-                candidate_runs.append(active.info.run_id)
-        finally:
-            if candidate.close:
-                candidate.close()
-    report = _report(candidates, aggregates)
-    with mlflow.start_run(run_name=f"ablation-{ablation_id}-comparison") as active:
-        mlflow.set_tags({"ablation_id": ablation_id, "run_type": "paired_comparison"})
-        for candidate, dimensions in report["paired_vs_baseline"].items():
-            for dimension, metrics in dimensions.items():
-                prefix = f"{_metric_component(candidate)}.{dimension}."
-                mlflow.log_metrics(_numeric_metrics(prefix, metrics))
-        with tempfile.TemporaryDirectory() as directory:
-            artifact = Path(directory) / "ablation-comparison.json"
-            artifact.write_text(json.dumps(report, indent=2, default=str) + "\n")
-            mlflow.log_artifact(str(artifact))
-        comparison_run = active.info.run_id
-    return {
-        **report,
-        "ablation_id": ablation_id,
-        "candidate_runs": candidate_runs,
-        "comparison_run": comparison_run,
-    }
+        report = _report(candidates, aggregates)
+        with mlflow.start_run(run_name=f"ablation-{ablation_id}-comparison") as active:
+            mlflow.set_tags({"ablation_id": ablation_id, "run_type": "paired_comparison"})
+            for candidate, dimensions in report["paired_vs_baseline"].items():
+                for dimension, metrics in dimensions.items():
+                    prefix = f"{_metric_component(candidate)}.{dimension}."
+                    mlflow.log_metrics(_numeric_metrics(prefix, metrics))
+            with tempfile.TemporaryDirectory() as directory:
+                artifact = Path(directory) / "ablation-comparison.json"
+                artifact.write_text(json.dumps(report, indent=2, default=str) + "\n")
+                mlflow.log_artifact(str(artifact))
+            comparison_run = active.info.run_id
+        return {
+            **report,
+            "ablation_id": ablation_id,
+            "candidate_runs": candidate_runs,
+            "comparison_run": comparison_run,
+        }
+    finally:
+        for candidate in candidates:
+            candidate.shutdown()
 
 
 def _stratum(record: dict) -> tuple:
@@ -670,9 +821,14 @@ def main() -> None:
     mlflow.set_tracking_uri("databricks")
     mlflow.set_experiment(args.experiment)
     records = load_records(args.dataset, args.n, args.profile, args.warehouse_id)
-    print(
-        json.dumps(run(records, [resolve_candidate(spec) for spec in specs]), indent=2, default=str)
-    )
+    candidates = []
+    try:
+        for spec in specs:
+            candidates.append(resolve_candidate(spec))
+        print(json.dumps(run(records, candidates), indent=2, default=str))
+    finally:
+        for candidate in candidates:
+            candidate.shutdown()
 
 
 if __name__ == "__main__":
