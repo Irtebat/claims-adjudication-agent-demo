@@ -226,6 +226,29 @@ def test_every_candidate_is_paired_against_first():
     assert set(compare(_records(), candidates)["paired_vs_baseline"]) == {"one", "two"}
 
 
+def test_report_breaks_metrics_and_mcnemar_cells_down_by_group_and_stratum():
+    records = _records()
+    records[0]["expectations"].update(group="normal", stratum="R7_credit")
+    records[1]["expectations"].update(group="narrative", stratum="excluded_environment")
+    report = compare(
+        records,
+        [
+            callable_adapter("baseline", _candidate("APPROVE", "CREDIT")),
+            callable_adapter("agent", _candidate("DENY", "DUPLICATE")),
+        ],
+    )
+
+    assert set(report["summary_by_group"]) == {"normal", "narrative"}
+    assert set(report["summary_by_stratum"]) == {"R7_credit", "excluded_environment"}
+    assert report["summary_by_group"]["normal"]["baseline"]["verdict"] == 1.0
+    assert report["summary_by_group"]["narrative"]["agent"]["verdict"] == 1.0
+    normal_cells = report["paired_by_group"]["normal"]["agent"]["verdict"]
+    narrative_cells = report["paired_by_group"]["narrative"]["agent"]["verdict"]
+    assert normal_cells["baseline_only_correct"] == 1
+    assert narrative_cells["challenger_only_correct"] == 1
+    assert report["per_claim"][0]["expectations"]["verdict"] == "APPROVE"
+
+
 def test_standard_output_requires_dict():
     with pytest.raises(TypeError, match="return a dict"):
         standardize_output("bad")

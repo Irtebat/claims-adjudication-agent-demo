@@ -587,6 +587,11 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
                 {
                     **score(output, record["expectations"]),
                     "claim_id": claim_id,
+                    "group": record["expectations"].get("group", "unspecified"),
+                    "stratum": record["expectations"].get(
+                        "stratum", record["expectations"].get("scenario_type", "unspecified")
+                    ),
+                    "expectations": normalize_expectations(record["expectations"]),
                     "tokens": _token_count(output),
                     "latency_ms": latency_ms,
                     "error": None,
@@ -615,6 +620,11 @@ def _observations(records: list[dict], candidate: CandidateAdapter) -> list[dict
                     "judge": NA if candidate.deterministic else False,
                     "invariant_corrected": NA,
                     "claim_id": claim_id,
+                    "group": record["expectations"].get("group", "unspecified"),
+                    "stratum": record["expectations"].get(
+                        "stratum", record["expectations"].get("scenario_type", "unspecified")
+                    ),
+                    "expectations": expected,
                     "tokens": NA,
                     "latency_ms": NA,
                     "error": f"{type(exc).__name__}: {exc}",
@@ -720,13 +730,21 @@ def _paired(baseline: list[dict], challenger: list[dict], summaries: tuple[dict,
 def _report(candidates: list[CandidateAdapter], aggregates: dict[str, list[dict]]) -> dict:
     rows = []
     for index, first in enumerate(aggregates[candidates[0].name]):
-        row = {"claim_id": first["claim_id"], "candidates": {}}
+        row = {
+            "claim_id": first["claim_id"],
+            "group": first["group"],
+            "stratum": first["stratum"],
+            "expectations": first["expectations"],
+            "candidates": {},
+        }
         for candidate in candidates:
             observation = aggregates[candidate.name][index]
             if observation["claim_id"] != first["claim_id"]:
                 raise ValueError("candidate observations are not claim-aligned")
             row["candidates"][candidate.name] = {
-                key: value for key, value in observation.items() if key != "claim_id"
+                key: value
+                for key, value in observation.items()
+                if key not in {"claim_id", "group", "stratum", "expectations"}
             }
         rows.append(row)
     summary = {name: _summary(observations) for name, observations in aggregates.items()}
@@ -739,7 +757,38 @@ def _report(candidates: list[CandidateAdapter], aggregates: dict[str, list[dict]
         )
         for candidate in candidates[1:]
     }
-    return {"per_claim": rows, "summary": summary, "paired_vs_baseline": paired}
+    groups = sorted({row["group"] for row in aggregates[baseline]})
+    strata = sorted({row["stratum"] for row in aggregates[baseline]})
+
+    def filtered_summary(field: str, value: str) -> dict:
+        return {
+            candidate.name: _summary(
+                [row for row in aggregates[candidate.name] if row[field] == value]
+            )
+            for candidate in candidates
+        }
+
+    summary_by_group = {group: filtered_summary("group", group) for group in groups}
+    summary_by_stratum = {stratum: filtered_summary("stratum", stratum) for stratum in strata}
+    paired_by_group = {}
+    for group in groups:
+        base_rows = [row for row in aggregates[baseline] if row["group"] == group]
+        paired_by_group[group] = {}
+        for candidate in candidates[1:]:
+            other_rows = [row for row in aggregates[candidate.name] if row["group"] == group]
+            paired_by_group[group][candidate.name] = _paired(
+                base_rows,
+                other_rows,
+                (summary_by_group[group][baseline], summary_by_group[group][candidate.name]),
+            )
+    return {
+        "per_claim": rows,
+        "summary": summary,
+        "summary_by_group": summary_by_group,
+        "summary_by_stratum": summary_by_stratum,
+        "paired_vs_baseline": paired,
+        "paired_by_group": paired_by_group,
+    }
 
 
 def compare(records: list[dict], candidates: list[CandidateAdapter]) -> dict:
@@ -857,10 +906,14 @@ def build_history_records(profile: str, warehouse_id: str, n: int) -> list[dict]
 def load_records(dataset: str, n: int, profile: str, warehouse_id: str) -> list[dict]:
     if dataset == "history":
         return build_history_records(profile, warehouse_id, n)
-    name = "fe-bar-ir.eval.heldout_claims" if dataset == "heldout" else dataset
+    names = {
+        "heldout": "fe-bar-ir.eval.heldout_claims",
+        "heldout_mixed": "fe-bar-ir.eval.heldout_claims_mixed",
+    }
+    name = names.get(dataset, dataset)
     records = mlflow.genai.datasets.get_dataset(name=name).to_df().to_dict("records")
-    if dataset == "heldout" and n != 100:
-        raise ValueError("heldout comparison must use its complete 100-row stratification")
+    if dataset in names and n != 100:
+        raise ValueError(f"{dataset} comparison must use its complete 100-row stratification")
     return stratified_sample(records, n)
 
 
