@@ -181,7 +181,8 @@ registered version:
 
 ```bash
 cd agent
-DATABRICKS_CONFIG_PROFILE=fe-bar uv run python src/register_agent.py --profile fe-bar
+DATABRICKS_CONFIG_PROFILE=fe-bar uv run --project ../eval \
+  python src/register_agent.py --profile fe-bar
 
 cd ../eval
 DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar \
