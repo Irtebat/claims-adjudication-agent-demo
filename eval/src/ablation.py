@@ -14,7 +14,7 @@ import time
 import traceback
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
@@ -70,6 +70,7 @@ class WorkerSpec:
     kind: str
     value: str | None = None
     profile: str | None = None
+    run_id: str | None = None
 
 
 def _private_module(name: str, path: Path):
@@ -85,29 +86,63 @@ def _private_module(name: str, path: Path):
 def _local_baseline_functions():
     """Load money modules by file path, independent of global import pollution."""
     agent_path = str(AGENT_SRC)
-    sys.path[:] = [item for item in sys.path if item != agent_path]
-    sys.path.insert(0, agent_path)
-    disposition = _private_module("_ablation_disposition_rules", AGENT_SRC / "disposition_rules.py")
-    previous = sys.modules.get("disposition_rules")
-    sys.modules["disposition_rules"] = disposition
+    private_names = (
+        "_ablation_disposition_rules",
+        "_ablation_decision_record",
+        "_ablation_authorities_runtime",
+        "_ablation_duplicate",
+        "_ablation_db",
+    )
+    original_path = list(sys.path)
+    previous_modules = {name: sys.modules.get(name) for name in private_names}
+    previous_disposition = sys.modules.get("disposition_rules")
     try:
+        sys.path[:] = [item for item in sys.path if item != agent_path]
+        sys.path.insert(0, agent_path)
+        disposition = _private_module(
+            "_ablation_disposition_rules", AGENT_SRC / "disposition_rules.py"
+        )
+        sys.modules["disposition_rules"] = disposition
         decision = _private_module("_ablation_decision_record", AGENT_SRC / "decision_record.py")
+        authority_runtime = _private_module(
+            "_ablation_authorities_runtime", AGENT_SRC / "authorities_runtime.py"
+        )
+        duplicate = _private_module("_ablation_duplicate", AGENT_SRC / "duplicate.py")
+        db = _private_module("_ablation_db", AGENT_SRC / "db.py")
+        return authority_runtime, decision, duplicate, db
     finally:
-        if previous is None:
+        sys.path[:] = original_path
+        if previous_disposition is None:
             sys.modules.pop("disposition_rules", None)
         else:
-            sys.modules["disposition_rules"] = previous
-    authority_runtime = _private_module(
-        "_ablation_authorities_runtime", AGENT_SRC / "authorities_runtime.py"
+            sys.modules["disposition_rules"] = previous_disposition
+        for name, previous in previous_modules.items():
+            if previous is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
+
+
+def _invoke_endpoint(workspace: WorkspaceClient, endpoint: str, claim: dict) -> dict:
+    response = workspace.api_client.do(
+        "POST",
+        f"/api/2.0/serving-endpoints/{quote(endpoint, safe='')}/invocations",
+        body={
+            "input": [{"role": "user", "content": json.dumps(claim, sort_keys=True)}],
+            "custom_inputs": {"claim": claim, "persist": False},
+        },
     )
-    duplicate = _private_module("_ablation_duplicate", AGENT_SRC / "duplicate.py")
-    db = _private_module("_ablation_db", AGENT_SRC / "db.py")
-    return authority_runtime, decision, duplicate, db
+    if _custom(response).get("write_result", {}).get("persisted") is not False:
+        raise PersistenceViolation("endpoint persistence invariant failed")
+    return response
 
 
 def _worker_main(spec: WorkerSpec, connection) -> None:
     close = None
+    previous_run_id = os.environ.get("MLFLOW_RUN_ID")
     try:
+        if spec.run_id:
+            os.environ["MLFLOW_RUN_ID"] = spec.run_id
         if spec.kind == "model":
             model = load_candidate(spec.value)
 
@@ -119,17 +154,7 @@ def _worker_main(spec: WorkerSpec, connection) -> None:
             workspace = WorkspaceClient(profile=spec.profile)
 
             def invoke(claim):
-                response = workspace.api_client.do(
-                    "POST",
-                    f"/api/2.0/serving-endpoints/{quote(spec.value, safe='')}/invocations",
-                    body={
-                        "input": [{"role": "user", "content": json.dumps(claim, sort_keys=True)}],
-                        "custom_inputs": {"claim": claim, "persist": False},
-                    },
-                )
-                if _custom(response).get("write_result", {}).get("persisted") is not False:
-                    raise PersistenceViolation("endpoint persistence invariant failed")
-                return response
+                return _invoke_endpoint(workspace, spec.value, claim)
 
             deterministic = False
         elif spec.kind == "deterministic":
@@ -188,6 +213,11 @@ def _worker_main(spec: WorkerSpec, connection) -> None:
     finally:
         if close:
             close()
+        if spec.run_id:
+            if previous_run_id is None:
+                os.environ.pop("MLFLOW_RUN_ID", None)
+            else:
+                os.environ["MLFLOW_RUN_ID"] = previous_run_id
         connection.close()
 
 
@@ -322,6 +352,7 @@ class CandidateAdapter:
     deterministic: bool = False
     close: Callable[[], None] | None = None
     timeout_seconds: float = DEFAULT_CLAIM_TIMEOUT_SECONDS
+    startup_timeout_seconds: float = DEFAULT_CLAIM_TIMEOUT_SECONDS
     worker_spec: WorkerSpec | None = None
     _process: Any = None
     _connection: Any = None
@@ -331,6 +362,9 @@ class CandidateAdapter:
             if self._process.is_alive():
                 self._process.terminate()
             self._process.join(timeout=5)
+            if self._process.is_alive():
+                self._process.kill()
+                self._process.join()
         if self._connection is not None:
             self._connection.close()
         self._process = self._connection = None
@@ -340,13 +374,29 @@ class CandidateAdapter:
         context = multiprocessing.get_context("spawn")
         parent, child = context.Pipe()
         process = context.Process(target=_worker_main, args=(self.worker_spec, child), daemon=True)
-        process.start()
+        previous_run_id = os.environ.get("MLFLOW_RUN_ID")
+        try:
+            if self.worker_spec.run_id:
+                os.environ["MLFLOW_RUN_ID"] = self.worker_spec.run_id
+            process.start()
+        finally:
+            if previous_run_id is None:
+                os.environ.pop("MLFLOW_RUN_ID", None)
+            else:
+                os.environ["MLFLOW_RUN_ID"] = previous_run_id
         child.close()
         self._process, self._connection = process, parent
-        if not parent.poll(self.timeout_seconds):
+        if not parent.poll(self.startup_timeout_seconds):
             self._stop_worker()
             raise ClaimTimeoutError(f"candidate {self.name} worker startup timed out")
-        response = parent.recv()
+        try:
+            response = parent.recv()
+        except EOFError as exc:
+            exitcode = process.exitcode
+            self._stop_worker()
+            raise RuntimeError(
+                f"candidate {self.name} worker exited during startup (exitcode={exitcode})"
+            ) from exc
         if not response.get("ready"):
             self._stop_worker()
             self._raise_worker_error(response)
@@ -359,12 +409,13 @@ class CandidateAdapter:
         raise RuntimeError(f"candidate worker failed:\n{detail}")
 
     def predict(self, claim: dict) -> tuple[dict, float]:
-        started = time.perf_counter()
         if self.worker_spec is None:
+            started = time.perf_counter()
             output = standardize_output(self.invoke(claim), deterministic=self.deterministic)
             return output, (time.perf_counter() - started) * 1000
         if self._process is None or not self._process.is_alive():
             self._start_worker()
+        started = time.perf_counter()
         self._connection.send(claim)
         if not self._connection.poll(self.timeout_seconds):
             self._stop_worker()
@@ -372,7 +423,15 @@ class CandidateAdapter:
                 f"candidate {self.name} exceeded {self.timeout_seconds}s for claim "
                 f"{claim.get('claim_id')}"
             )
-        response = self._connection.recv()
+        try:
+            response = self._connection.recv()
+        except EOFError as exc:
+            exitcode = self._process.exitcode
+            self._stop_worker()
+            raise RuntimeError(
+                f"candidate {self.name} worker exited while handling claim "
+                f"{claim.get('claim_id')} (exitcode={exitcode})"
+            ) from exc
         if "output" not in response:
             self._raise_worker_error(response)
         output = response["output"]
@@ -417,34 +476,32 @@ def model_adapter(name: str, uri: str, loader=mlflow.pyfunc.load_model) -> Candi
 
 
 def endpoint_adapter(
-    name: str, endpoint: str, client: WorkspaceClient | None = None
+    name: str,
+    endpoint: str,
+    client: WorkspaceClient | None = None,
+    profile: str | None = None,
 ) -> CandidateAdapter:
-    workspace = client or WorkspaceClient()
+    workspace = client
 
     def invoke(claim: dict) -> dict:
-        response = workspace.api_client.do(
-            "POST",
-            f"/api/2.0/serving-endpoints/{quote(endpoint, safe='')}/invocations",
-            body={
-                "input": [{"role": "user", "content": json.dumps(claim, sort_keys=True)}],
-                "custom_inputs": {"claim": claim, "persist": False},
-            },
-        )
-        if _custom(response).get("write_result", {}).get("persisted") is not False:
-            raise PersistenceViolation(f"{name}: endpoint persistence invariant failed")
-        return response
+        nonlocal workspace
+        if workspace is None:
+            workspace = WorkspaceClient(profile=profile)
+        return _invoke_endpoint(workspace, endpoint, claim)
 
-    return CandidateAdapter(name, invoke, worker_spec=WorkerSpec("endpoint", endpoint))
+    return CandidateAdapter(
+        name, invoke, worker_spec=WorkerSpec("endpoint", endpoint, profile=profile)
+    )
 
 
-def resolve_candidate(spec: str) -> CandidateAdapter:
+def resolve_candidate(spec: str, profile: str | None = None) -> CandidateAdapter:
     resolved = CANDIDATE_ALIASES.get(spec, spec)
     if resolved == "deterministic_baseline":
-        return deterministic_adapter(spec)
+        return deterministic_adapter(spec, profile=profile)
     if resolved.startswith("models:/"):
         return model_adapter(spec, resolved)
     if resolved.startswith("endpoint:"):
-        return endpoint_adapter(spec, resolved.removeprefix("endpoint:"))
+        return endpoint_adapter(spec, resolved.removeprefix("endpoint:"), profile=profile)
     return callable_adapter(spec, resolved.removeprefix("callable:"))
 
 
@@ -712,11 +769,16 @@ def run(
             with mlflow.start_run(run_name=f"ablation-{ablation_id}-{candidate.name}") as active:
                 mlflow.set_tags({"ablation_id": ablation_id, "candidate": candidate.name})
                 candidate_runs.append(active.info.run_id)
+                if candidate.worker_spec is not None:
+                    candidate.worker_spec = replace(
+                        candidate.worker_spec, run_id=active.info.run_id
+                    )
                 try:
                     observations = _observations(records, candidate)
                 except Exception:
                     mlflow.set_tag("aborted", "true")
                     raise
+                candidate.shutdown()
                 try:
                     trace_tokens = _trace_token_usage(active.info.run_id)
                 except Exception:
@@ -824,7 +886,7 @@ def main() -> None:
     candidates = []
     try:
         for spec in specs:
-            candidates.append(resolve_candidate(spec))
+            candidates.append(resolve_candidate(spec, profile=args.profile))
         print(json.dumps(run(records, candidates), indent=2, default=str))
     finally:
         for candidate in candidates:

@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from types import SimpleNamespace
@@ -34,6 +35,35 @@ def _isolated_persistence(claim):
 
 def _isolated_slow(claim):
     time.sleep(10)
+
+
+def _isolated_maybe_slow(claim):
+    if claim.get("slow"):
+        time.sleep(10)
+    return _candidate("APPROVE", "CREDIT")(claim)
+
+
+def _isolated_run_id(claim):
+    return {
+        "recommendation": {"recommended_verdict": "APPROVE"},
+        "worker_run_id": os.environ.get("MLFLOW_RUN_ID"),
+    }
+
+
+class _WorkerConnection:
+    def __init__(self, requests):
+        self.requests = iter(requests)
+        self.responses = []
+        self.closed = False
+
+    def recv(self):
+        return next(self.requests)
+
+    def send(self, response):
+        self.responses.append(response)
+
+    def close(self):
+        self.closed = True
 
 
 def _candidate(verdict, disposition, *, citations=None, violations=None, tokens=None):
@@ -223,6 +253,17 @@ def test_private_baseline_loader_ignores_preexisting_import_pollution(monkeypatc
     monkeypatch.setitem(sys.modules, "decision_record", SimpleNamespace(polluted=True))
     monkeypatch.setitem(sys.modules, "disposition_rules", SimpleNamespace(polluted=True))
 
+    path_before = list(sys.path)
+    modules_before = {
+        name: sys.modules.get(name)
+        for name in (
+            "_ablation_disposition_rules",
+            "_ablation_decision_record",
+            "_ablation_authorities_runtime",
+            "_ablation_duplicate",
+            "_ablation_db",
+        )
+    }
     _, decision, _, _ = ablation._local_baseline_functions()
     outcome = decision.deterministic_outcome(
         "coating_warranty",
@@ -235,21 +276,100 @@ def test_private_baseline_loader_ignores_preexisting_import_pollution(monkeypatc
     assert outcome["verdict"] == "DENY"
     assert decision.__name__ == "_ablation_decision_record"
     assert deterministic_adapter("baseline").worker_spec.kind == "deterministic"
+    assert sys.path == path_before
+    assert all(sys.modules.get(name) is value for name, value in modules_before.items())
 
 
-def test_per_claim_timeout_is_recorded_as_failure():
+def test_per_claim_timeout_kills_worker_and_next_claim_restarts(monkeypatch):
     adapter = CandidateAdapter(
         "slow",
         lambda claim: None,
-        worker_spec=WorkerSpec("callable", "test_ablation._isolated_slow"),
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_maybe_slow"),
     )
-    adapter.timeout_seconds = 0.01
-    report = compare(
-        _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
+    adapter.startup_timeout_seconds = 5
+    adapter.timeout_seconds = 0.05
+    processes = []
+    original_start = adapter._start_worker
+
+    def record_start():
+        original_start()
+        processes.append(adapter._process)
+
+    monkeypatch.setattr(adapter, "_start_worker", record_start)
+    with pytest.raises(ablation.ClaimTimeoutError, match="exceeded"):
+        adapter.predict({"claim_id": "slow", "slow": True})
+    assert len(processes) == 1
+    assert not processes[0].is_alive()
+    assert adapter._process is None
+
+    output, _ = adapter.predict({"claim_id": "fast", "slow": False})
+    assert output["verdict"] == "APPROVE"
+    assert len(processes) == 2
+    assert processes[1].pid != processes[0].pid
+    adapter.shutdown()
+
+
+def test_worker_attaches_traces_and_token_lookup_to_parent_run(monkeypatch):
+    events = []
+    monkeypatch.delenv("MLFLOW_RUN_ID", raising=False)
+    monkeypatch.setattr(
+        ablation.mlflow,
+        "search_traces",
+        lambda *, run_id: events.append(("search", run_id)) or _Frame([]),
     )
-    row = report["per_claim"][0]["candidates"]["slow"]
-    assert row["verdict"] is False
-    assert "ClaimTimeoutError" in row["error"]
+    adapter = CandidateAdapter(
+        "linked",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_run_id", run_id="parent-run"),
+    )
+    output, _ = adapter.predict({"claim_id": "c"})
+    ablation._trace_token_usage("parent-run")
+    adapter.shutdown()
+
+    assert events == [("search", "parent-run")]
+    assert output["verdict"] == "APPROVE"
+    assert output["raw"]["worker_run_id"] == "parent-run"
+
+
+def test_production_model_worker_loads_model_and_predicts(monkeypatch):
+    model = object()
+    connection = _WorkerConnection([{"claim_id": "c"}, None])
+    monkeypatch.setattr(ablation, "load_candidate", lambda uri: model)
+    monkeypatch.setattr(
+        ablation,
+        "predict_claim",
+        lambda claim, *, model: _candidate("DENY", "DUPLICATE")(claim),
+    )
+
+    adapter = model_adapter("model", "models:/catalog.schema.model@prod")
+    assert adapter.worker_spec.kind == "model"
+    ablation._worker_main(adapter.worker_spec, connection)
+
+    assert connection.responses[1]["output"]["verdict"] == "DENY"
+
+
+def test_endpoint_worker_uses_profile_and_shared_request_path(monkeypatch):
+    api_client = MagicMock(spec=ApiClient)
+    api_client.do.return_value = {
+        "custom_outputs": {
+            "write_result": {"persisted": False},
+            "recommendation": {"recommended_verdict": "DENY"},
+        }
+    }
+    clients = []
+    monkeypatch.setattr(
+        ablation,
+        "WorkspaceClient",
+        lambda *, profile: clients.append(profile) or SimpleNamespace(api_client=api_client),
+    )
+    connection = _WorkerConnection([{"claim_id": "c"}, None])
+    adapter = endpoint_adapter("endpoint", "claims/name", profile="fe-bar")
+
+    assert adapter.worker_spec.profile == "fe-bar"
+    ablation._worker_main(adapter.worker_spec, connection)
+
+    assert clients == ["fe-bar"]
+    assert connection.responses[1]["output"]["verdict"] == "DENY"
 
 
 def test_isolated_worker_propagates_traceback():
@@ -367,7 +487,9 @@ def test_main_selects_experiment_before_starting_runs(monkeypatch, capsys):
     )
     monkeypatch.setattr(ablation, "load_records", lambda *args: [])
     monkeypatch.setattr(
-        ablation, "resolve_candidate", lambda spec: callable_adapter(spec, lambda claim: {})
+        ablation,
+        "resolve_candidate",
+        lambda spec, profile=None: callable_adapter(spec, lambda claim: {}),
     )
     monkeypatch.setattr(ablation, "run", lambda records, candidates: {"candidate_runs": []})
 
