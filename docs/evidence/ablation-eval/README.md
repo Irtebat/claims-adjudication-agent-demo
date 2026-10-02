@@ -1,45 +1,50 @@
-# Ablation live run — 2026-10-02
+# Ablation live results — 2026-10-02
 
-The deterministic baseline defect is fixed, but the final held-out retry failed during isolated `agent@prod` invocation. Per the stop-on-repeat instruction, history was not started and no paired result is claimed.
+Both 100-claim comparisons completed with zero errors and `persist=false`. This is a null ablation: `agent@prod` made exactly the same verdict, disposition, and amount decisions as the deterministic baseline on all 200 claims.
 
-## Root cause and fix
+## Runs
 
-Loading `agent@prod` prepended its temporary model artifact to `sys.path`. The baseline subsequently imported the artifact's older `decision_record.py`, which did not contain `deterministic_recommendation`; all 100 rows were therefore recorded as failures. The deterministic adapter now captures repository-local authority functions before model loading. Reproducing the same model-load sequence now returns a valid baseline prediction.
+| Dataset | Baseline | Agent | Comparison |
+|---|---|---|---|
+| Held-out | `b61e6218ee1c49e48aa46d3f6c81c03a` | `6f8508fad03e4b2daf9175d1d974a849` | `ac3b4c6c38e84dba9de3385c0327c598` |
+| History | `c7199561fdb1498c91fcb19c6c832f12` | `18bb010b9b1e408694959c8d5a396a01` | `58d567923c834414a3e272574b2c480b` |
 
-Per-row errors and predictions are included in report rows, the first five consecutive failures abort the candidate, and the active MLflow run receives `ablation-errors.json`. Amount, duplicate, PEND-routing, and per-dimension applicable counts were added to the comparison report. Held-out expectations now include approved amount.
+## Metrics
 
-## Verification
+| Dataset/metric | Baseline | Agent | Applicable N | Delta |
+|---|---:|---:|---:|---:|
+| Held-out verdict | .25 | .25 | 100 | 0 |
+| Held-out disposition class | .25 | .25 | 100 | 0 |
+| Held-out approval sub-choice | 1.00 | 1.00 | 25 | 0 |
+| Held-out amount | .18 | .18 | 100 | 0 |
+| Held-out duplicate / PEND | 1.00 / 1.00 | 1.00 / 1.00 | 100 | 0 |
+| History verdict / disposition | .95 / .95 | .95 / .95 | 100 | 0 |
+| History approval sub-choice | 1.00 | 1.00 | 50 | 0 |
+| History amount / duplicate | 1.00 / 1.00 | 1.00 / 1.00 | 100 | 0 |
+| History PEND routing | .95 | .95 | 100 | 0 |
 
-- `uv run --project eval pytest -q eval/tests`: 70 passed.
-- `uv run --project eval ruff check eval/src eval/tests`: passed.
-- `uv run --project eval ruff format --check eval/src eval/tests`: passed.
-- `PYTHONPATH=agent/src uv run --project eval pytest -q agent/tests`: 175 passed, 3 skipped.
+Agent citation was 1.00 (N=100) in both runs; baseline citation is N/A. Agent invariant-correction rate was 0.00 held-out and .01 history; baseline is N/A. Both arms had zero errors.
 
-## Final held-out attempt
+Held-out latency: baseline 1,334.61 ms/claim, agent 35,203.35 ms/claim; agent tokens 4,715.25/claim. History latency: baseline 1,274.38 ms/claim, agent 36,465.15 ms/claim; agent tokens 5,023.22/claim. Monetary cost was not emitted.
 
-Command:
+Held-out McNemar cells (both-correct/baseline-only/agent-only/both-wrong): verdict and disposition 25/0/0/75; approval 25/0/0/0; amount 18/0/0/82; duplicate and PEND 100/0/0/0. History: verdict, disposition, PEND 95/0/0/5; approval 50/0/0/0; amount and duplicate 100/0/0/0. There are zero discordant pairs and therefore no significant difference.
 
-```text
-uv run --project eval python eval/src/ablation.py --dataset heldout --n 100 --profile fe-bar --candidates deterministic_baseline,agent@prod
-```
+## Disagreements
 
-Log: `.live-ablation-logs/08-heldout-comparison.log` (local and uncommitted).
+There were **zero candidate-output disagreements** in either run, so two disagreement examples do not exist. On held-out treatments both candidates were wrong together; on controls both agreed with gold. The agent adds grounded citations and rationale but does not adjudicate narrative-only exclusions.
 
-- Ablation ID: `848fae67-5628-4e34-8bd2-3303f8c9e0c7`
-- Baseline run: `c42dca0a6d0e4805acb6eecc9300dc30` (`FINISHED`, zero errors)
-- Agent run: `eee45d7a5ae844628f2dd15f37434d30` (`FAILED`)
-- Comparison run: none
+## Complete held-out treatment example
 
-Exact terminal error:
+Input: claim `c1956233-b628-5bf4-8310-9c7f161b5bf4`; coil `COIL-0003003`; customer `CUST-0028`; type `coating_warranty`; claim/install dates `2026-01-31` / `2018-01-31`; environment `inland`; installation `ventilated`; coast distance `10.0`; defect `RED_RUST`; narrative “The panels face open sea and receive airborne salt during onshore winds.”; tonnage `10.000`; freight `0.00`.
 
-```text
-CandidateBatchFailure: agent@prod failed its first 5 rows: ['EOFError: ', 'EOFError: ', 'EOFError: ', 'EOFError: ', 'EOFError: ']
-```
+Hidden labels: treatment `narrative_excluded_environment`; `DENY/DENY`; amount `0.00`; fact `marine`; clause `/warranties/coverage/excluded_environments` (`warranties.coverage.excluded_environments`).
 
-The baseline scored verdict 0.25 (N=100), disposition class 0.25 (N=100), approval sub-choice 1.0 (N=25), amount 0.18 (N=100), duplicate 1.0 (N=100), and PEND routing 1.0 (N=100), with zero errors and mean latency 1335.98 ms/claim. Citation is N/A for the deterministic baseline.
+Baseline: `APPROVE/CREDIT`, amount `7930.0`, no citations; `R7_credit` fired. Verdict, disposition, and amount scorers: false; citation N/A.
 
-The failed agent run emitted no aggregate metrics. Consequently no truthful disagreement counts, McNemar counts, agent costs/latencies, examples, or complete paired sample can be supplied.
+Agent: `APPROVE/CREDIT`, amount `7930.0`; citations `galvanized/NA/V2/coverage`, `galvanized/NA/V2/exclusions`, `galvanized/NA/V2/proration`; no invariant correction. Its rationale says authoritative coverage controls and no exclusion triggered. Verdict, disposition, and amount scorers: false; citation true.
 
-## Safety
+## Read and caveats
 
-All calls used profile `fe-bar` and `persist=false`. No Lakebase public-table writes occurred. `authorities.py` and money logic were not modified.
+Rules are sufficient for history and controls and roughly 27x faster. AI adds explanation and citations but no quality lift. The held-out set shows that both arms ignore narrative-only exclusion facts. Amount exact-match was only 18/25 on controls, but that does not alter the treatment conclusion. This covers one registered version and two stratified 100-claim samples.
+
+The baseline import bug was fixed by capturing repository-local functions before model loading. Worker errors now preserve tracebacks; calls have a 120-second wall timeout; five initial failures abort loudly. Verification: eval `71 passed`; agent `175 passed, 3 skipped`; Ruff passed. No Lakebase public writes occurred; `authorities.py` was untouched.

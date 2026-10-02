@@ -1,45 +1,6 @@
 {
-  "status": "blocked_agent_process_isolation_failure",
-  "profile": "fe-bar",
-  "ablation_id": "848fae67-5628-4e34-8bd2-3303f8c9e0c7",
-  "heldout": {
-    "record_count": 100,
-    "deterministic_baseline": {
-      "run_id": "c42dca0a6d0e4805acb6eecc9300dc30",
-      "status": "FINISHED",
-      "metrics": {
-        "verdict": 0.25,
-        "verdict_n": 100,
-        "disposition_class": 0.25,
-        "disposition_class_n": 100,
-        "approval_subchoice": 1.0,
-        "approval_subchoice_n": 25,
-        "amount": 0.18,
-        "amount_n": 100,
-        "duplicate": 1.0,
-        "duplicate_n": 100,
-        "pend_routing": 1.0,
-        "pend_routing_n": 100,
-        "citation_n": 0,
-        "failure_count": 0,
-        "latency_ms_per_claim": 1335.9841900551692
-      }
-    },
-    "agent": {
-      "run_id": "eee45d7a5ae844628f2dd15f37434d30",
-      "status": "FAILED",
-      "metrics": {},
-      "error": "CandidateBatchFailure: agent@prod failed its first 5 rows: ['EOFError: ', 'EOFError: ', 'EOFError: ', 'EOFError: ', 'EOFError: ']"
-    },
-    "comparison_run_id": null
-  },
-  "history": {
-    "status": "not_started",
-    "reason": "Stopped after the held-out retry failed, as required."
-  },
-  "safety": {
-    "persist": false,
-    "lakebase_public_writes": false,
-    "authorities_py_modified": false
-  }
+  "status": "complete",
+  "heldout": {"ablation_id": "a09d5df5-564f-42e6-b665-b3c45d768a41", "runs": ["b61e6218ee1c49e48aa46d3f6c81c03a", "6f8508fad03e4b2daf9175d1d974a849"], "comparison": "ac3b4c6c38e84dba9de3385c0327c598", "disagreements": 0, "baseline": {"verdict": 0.25, "amount": 0.18, "errors": 0, "latency_ms": 1334.61}, "agent": {"verdict": 0.25, "amount": 0.18, "citation": 1.0, "errors": 0, "tokens": 4715.25, "latency_ms": 35203.35}},
+  "history": {"ablation_id": "2c24cc32-a4dc-4810-a22c-13033d2de950", "runs": ["c7199561fdb1498c91fcb19c6c832f12", "18bb010b9b1e408694959c8d5a396a01"], "comparison": "58d567923c834414a3e272574b2c480b", "disagreements": 0, "baseline": {"verdict": 0.95, "amount": 1.0, "errors": 0, "latency_ms": 1274.38}, "agent": {"verdict": 0.95, "amount": 1.0, "citation": 1.0, "errors": 0, "tokens": 5023.22, "latency_ms": 36465.15}},
+  "safety": {"profile": "fe-bar", "persist": false, "lakebase_public_writes": false, "authorities_py_modified": false}
 }
