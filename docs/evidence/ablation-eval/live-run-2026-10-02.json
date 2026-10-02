@@ -1,0 +1,23 @@
+{
+  "status": "complete",
+  "amount_recomputed_offline": true,
+  "heldout": {
+    "ablation_id": "a09d5df5-564f-42e6-b665-b3c45d768a41",
+    "runs": ["b61e6218ee1c49e48aa46d3f6c81c03a", "6f8508fad03e4b2daf9175d1d974a849"],
+    "comparison": "ac3b4c6c38e84dba9de3385c0327c598",
+    "disagreements": 0,
+    "baseline": {"verdict": 0.25, "verdict_n": 100, "disposition_class": 0.25, "disposition_class_n": 100, "approval_subchoice": 1.0, "approval_subchoice_n": 25, "amount": 0.18, "amount_n": 100, "duplicate": 1.0, "duplicate_n": 100, "pend_routing": 1.0, "pend_routing_n": 100, "citation": "N/A", "citation_n": 0, "errors": 0, "latency_ms": 1334.61},
+    "agent": {"verdict": 0.25, "verdict_n": 100, "disposition_class": 0.25, "disposition_class_n": 100, "approval_subchoice": 1.0, "approval_subchoice_n": 25, "amount": 0.18, "amount_n": 100, "duplicate": 1.0, "duplicate_n": 100, "pend_routing": 1.0, "pend_routing_n": 100, "citation": 1.0, "citation_n": 100, "invariant_correction_rate": 0.0, "errors": 0, "tokens": 4715.25, "latency_ms": 35203.35},
+    "mcnemar": {"verdict": [25, 0, 0, 75], "disposition_class": [25, 0, 0, 75], "approval_subchoice": [25, 0, 0, 0], "amount": [18, 0, 0, 82], "duplicate": [100, 0, 0, 0], "pend_routing": [100, 0, 0, 0]}
+  },
+  "history": {
+    "ablation_id": "2c24cc32-a4dc-4810-a22c-13033d2de950",
+    "runs": ["c7199561fdb1498c91fcb19c6c832f12", "18bb010b9b1e408694959c8d5a396a01"],
+    "comparison": "58d567923c834414a3e272574b2c480b",
+    "disagreements": 0,
+    "baseline": {"verdict": 0.95, "verdict_n": 100, "disposition_class": 0.95, "disposition_class_n": 100, "approval_subchoice": 1.0, "approval_subchoice_n": 50, "amount": 1.0, "amount_n": 100, "duplicate": 1.0, "duplicate_n": 100, "pend_routing": 0.95, "pend_routing_n": 100, "citation": "N/A", "citation_n": 0, "errors": 0, "latency_ms": 1274.38},
+    "agent": {"verdict": 0.95, "verdict_n": 100, "disposition_class": 0.95, "disposition_class_n": 100, "approval_subchoice": 1.0, "approval_subchoice_n": 50, "amount": 1.0, "amount_n": 100, "duplicate": 1.0, "duplicate_n": 100, "pend_routing": 0.95, "pend_routing_n": 100, "citation": 1.0, "citation_n": 100, "invariant_correction_rate": 0.01, "errors": 0, "tokens": 5023.22, "latency_ms": 36465.15},
+    "mcnemar": {"verdict": [95, 0, 0, 5], "disposition_class": [95, 0, 0, 5], "approval_subchoice": [50, 0, 0, 0], "amount": [100, 0, 0, 0], "duplicate": [100, 0, 0, 0], "pend_routing": [95, 0, 0, 5]}
+  },
+  "safety": {"profile": "fe-bar", "persist": false, "lakebase_public_writes": false, "authorities_py_modified": false}
+}

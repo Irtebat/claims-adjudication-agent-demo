@@ -1,4 +1,5 @@
 import sys
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -8,11 +9,12 @@ from databricks.sdk.core import ApiClient
 import ablation
 from ablation import (
     NA,
+    CandidateAdapter,
     PersistenceViolation,
+    WorkerSpec,
     callable_adapter,
     compare,
     deterministic_adapter,
-    deterministic_baseline,
     endpoint_adapter,
     model_adapter,
     normalize_expectations,
@@ -20,6 +22,48 @@ from ablation import (
     standardize_output,
     stratified_sample,
 )
+
+
+def _isolated_explode(claim):
+    raise ValueError(f"bad claim {claim['claim_id']}")
+
+
+def _isolated_persistence(claim):
+    raise PersistenceViolation(f"blocked write for {claim['claim_id']}")
+
+
+def _isolated_slow(claim):
+    time.sleep(10)
+
+
+def _isolated_maybe_slow(claim):
+    if claim.get("slow"):
+        time.sleep(10)
+    return _candidate("APPROVE", "CREDIT")(claim)
+
+
+@ablation.mlflow.trace(name="isolated_worker_prediction")
+def _isolated_traced_prediction(claim):
+    return {
+        "recommendation": {"recommended_verdict": "APPROVE"},
+        "claim_id": claim["claim_id"],
+    }
+
+
+class _WorkerConnection:
+    def __init__(self, requests):
+        self.requests = iter(requests)
+        self.responses = []
+        self.closed = False
+
+    def recv(self):
+        return next(self.requests)
+
+    def send(self, response):
+        self.responses.append(response)
+
+    def close(self):
+        self.closed = True
 
 
 def _candidate(verdict, disposition, *, citations=None, violations=None, tokens=None):
@@ -136,6 +180,7 @@ def test_endpoint_uses_invocations_rest_and_fails_closed():
         }
     }
     adapter = endpoint_adapter("endpoint", "claims/name", SimpleNamespace(api_client=api_client))
+    adapter.worker_spec = None
     output, _ = adapter.predict({"claim_id": "c"})
     assert output["verdict"] == "DENY"
     api_client.do.assert_called_once_with(
@@ -147,7 +192,7 @@ def test_endpoint_uses_invocations_rest_and_fails_closed():
         },
     )
     api_client.do.return_value = {"custom_outputs": {"write_result": {"persisted": True}}}
-    with pytest.raises(RuntimeError, match="persistence invariant"):
+    with pytest.raises(PersistenceViolation, match="endpoint: endpoint persistence invariant"):
         adapter.predict({"claim_id": "c"})
 
 
@@ -186,23 +231,6 @@ def test_standard_output_requires_dict():
         standardize_output("bad")
 
 
-def test_missing_parallel_ruleset_has_actionable_import_error(monkeypatch):
-    class Manager:
-        def __enter__(self):
-            return object()
-
-        def __exit__(self, *args):
-            return None
-
-    monkeypatch.setitem(
-        __import__("sys").modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager())
-    )
-    monkeypatch.setattr(ablation, "_deterministic_context", lambda connection, claim: {})
-    monkeypatch.setitem(__import__("sys").modules, "decision_record", SimpleNamespace())
-    with pytest.raises(ImportError, match="land that branch first"):
-        deterministic_baseline({"claim_id": "c"})
-
-
 def test_trace_token_usage_maps_claim(monkeypatch):
     rows = [
         {
@@ -218,29 +246,210 @@ def test_trace_token_usage_maps_claim(monkeypatch):
     assert ablation._trace_token_usage("run") == {"c": 42}
 
 
-def test_deterministic_adapter_reuses_one_connection(monkeypatch):
-    events = []
+def test_private_baseline_loader_ignores_preexisting_import_pollution(monkeypatch, tmp_path):
+    polluted = tmp_path / "decision_record.py"
+    polluted.write_text("raise RuntimeError('polluted module imported')\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setitem(sys.modules, "decision_record", SimpleNamespace(polluted=True))
+    monkeypatch.setitem(sys.modules, "disposition_rules", SimpleNamespace(polluted=True))
 
-    class Manager:
-        def __enter__(self):
-            events.append("enter")
-            return object()
-
-        def __exit__(self, *args):
-            events.append("exit")
-
-    monkeypatch.setitem(
-        __import__("sys").modules, "db", SimpleNamespace(connect=lambda **kwargs: Manager())
+    path_before = list(sys.path)
+    modules_before = {
+        name: sys.modules.get(name)
+        for name in (
+            "_ablation_disposition_rules",
+            "_ablation_decision_record",
+            "_ablation_authorities_runtime",
+            "_ablation_duplicate",
+            "_ablation_db",
+        )
+    }
+    _, decision, _, _ = ablation._local_baseline_functions()
+    outcome = decision.deterministic_outcome(
+        "coating_warranty",
+        {"conforms": True},
+        {"covered": False},
+        {"approved_amount": 10.0},
+        {"is_duplicate": False},
     )
-    monkeypatch.setattr(ablation, "_deterministic_context", lambda connection, claim: claim)
+
+    assert outcome["verdict"] == "DENY"
+    assert decision.__name__ == "_ablation_decision_record"
+    assert deterministic_adapter("baseline").worker_spec.kind == "deterministic"
+    assert sys.path == path_before
+    assert all(sys.modules.get(name) is value for name, value in modules_before.items())
+
+
+def test_per_claim_timeout_kills_worker_and_next_claim_restarts(monkeypatch):
+    adapter = CandidateAdapter(
+        "slow",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_maybe_slow"),
+    )
+    adapter.startup_timeout_seconds = 5
+    adapter.timeout_seconds = 0.05
+    processes = []
+    original_start = adapter._start_worker
+
+    def record_start():
+        original_start()
+        processes.append(adapter._process)
+
+    monkeypatch.setattr(adapter, "_start_worker", record_start)
+    with pytest.raises(ablation.ClaimTimeoutError, match="exceeded"):
+        adapter.predict({"claim_id": "slow", "slow": True})
+    assert len(processes) == 1
+    assert not processes[0].is_alive()
+    assert adapter._process is None
+
+    output, _ = adapter.predict({"claim_id": "fast", "slow": False})
+    assert output["verdict"] == "APPROVE"
+    assert len(processes) == 2
+    assert processes[1].pid != processes[0].pid
+    adapter.shutdown()
+
+
+def test_worker_trace_is_linked_to_parent_run_without_finishing_it(monkeypatch, tmp_path):
+    previous_tracking_uri = ablation.mlflow.get_tracking_uri()
+    tracking_uri = tmp_path.as_uri()
+    monkeypatch.setenv("MLFLOW_ALLOW_FILE_STORE", "true")
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
+    ablation.mlflow.set_tracking_uri(tracking_uri)
+    experiment_id = ablation.mlflow.create_experiment("worker-trace-integration")
+    monkeypatch.setenv("MLFLOW_EXPERIMENT_ID", experiment_id)
+
+    try:
+        with ablation.mlflow.start_run(experiment_id=experiment_id) as parent:
+            adapter = CandidateAdapter(
+                "linked",
+                lambda claim: None,
+                worker_spec=WorkerSpec(
+                    "callable",
+                    "test_ablation._isolated_traced_prediction",
+                    run_id=parent.info.run_id,
+                ),
+            )
+            output, _ = adapter.predict({"claim_id": "c"})
+            adapter.shutdown()
+
+            traces = ablation.mlflow.search_traces(run_id=parent.info.run_id)
+            run = ablation.mlflow.MlflowClient().get_run(parent.info.run_id)
+
+            assert output["verdict"] == "APPROVE"
+            assert len(traces) == 1
+            trace = ablation.mlflow.get_trace(traces.iloc[0]["trace_id"])
+            assert [span.name for span in trace.data.spans] == ["isolated_worker_prediction"]
+            assert run.info.status == "RUNNING"
+    finally:
+        ablation.mlflow.set_tracking_uri(previous_tracking_uri)
+
+
+def test_production_model_worker_loads_model_and_predicts(monkeypatch):
+    model = object()
+    connection = _WorkerConnection([{"claim_id": "c"}, None])
+    monkeypatch.setattr(ablation, "load_candidate", lambda uri: model)
     monkeypatch.setattr(
         ablation,
-        "_recommend_from_context",
-        lambda context: _candidate("APPROVE", "CREDIT")(context),
+        "predict_claim",
+        lambda claim, *, model: _candidate("DENY", "DUPLICATE")(claim),
     )
-    adapter = deterministic_adapter("baseline")
-    compare(_records(), [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))])
-    assert events == ["enter", "exit"]
+
+    adapter = model_adapter("model", "models:/catalog.schema.model@prod")
+    assert adapter.worker_spec.kind == "model"
+    ablation._worker_main(adapter.worker_spec, connection)
+
+    assert connection.responses[1]["output"]["verdict"] == "DENY"
+
+
+def test_endpoint_worker_uses_profile_and_shared_request_path(monkeypatch):
+    api_client = MagicMock(spec=ApiClient)
+    api_client.do.return_value = {
+        "custom_outputs": {
+            "write_result": {"persisted": False},
+            "recommendation": {"recommended_verdict": "DENY"},
+        }
+    }
+    clients = []
+    monkeypatch.setattr(
+        ablation,
+        "WorkspaceClient",
+        lambda *, profile: clients.append(profile) or SimpleNamespace(api_client=api_client),
+    )
+    connection = _WorkerConnection([{"claim_id": "c"}, None])
+    adapter = endpoint_adapter("endpoint", "claims/name", profile="fe-bar")
+
+    assert adapter.worker_spec.profile == "fe-bar"
+    ablation._worker_main(adapter.worker_spec, connection)
+
+    assert clients == ["fe-bar"]
+    assert connection.responses[1]["output"]["verdict"] == "DENY"
+
+
+def test_isolated_worker_propagates_traceback():
+    adapter = CandidateAdapter(
+        "broken",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_explode"),
+    )
+    report = compare(
+        _records()[:1], [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))]
+    )
+
+    error = report["per_claim"][0]["candidates"]["broken"]["error"]
+    assert "Traceback (most recent call last)" in error
+    assert "ValueError: bad claim one" in error
+
+
+def test_isolated_persistence_violation_aborts():
+    adapter = CandidateAdapter(
+        "writer",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_persistence"),
+    )
+    with pytest.raises(PersistenceViolation, match="blocked write for one"):
+        compare(
+            _records()[:1],
+            [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))],
+        )
+
+
+def test_first_five_failures_abort_and_log_diagnostics(monkeypatch):
+    records = [
+        {"inputs": {"claim": {"claim_id": str(index)}}, "expectations": {"verdict": "DENY"}}
+        for index in range(6)
+    ]
+    logged = []
+    monkeypatch.setattr(ablation.mlflow, "active_run", lambda: object())
+    monkeypatch.setattr(
+        ablation.mlflow, "log_dict", lambda value, path: logged.append((value, path))
+    )
+    adapter = callable_adapter("broken", lambda claim: (_ for _ in ()).throw(ValueError("boom")))
+
+    with pytest.raises(ablation.CandidateBatchFailure, match="first 5 rows"):
+        ablation._observations(records, adapter)
+
+    assert logged[0][1] == "ablation-errors.json"
+    assert len(logged[0][0]["per_claim"]) == 5
+    assert "ValueError: boom" in logged[0][0]["per_claim"][0]["error"]
+
+
+def test_four_failures_then_success_does_not_abort():
+    calls = 0
+
+    def recover(claim):
+        nonlocal calls
+        calls += 1
+        if calls <= 4:
+            raise ValueError("temporary")
+        return _candidate("DENY", "DENY")(claim)
+
+    records = [
+        {"inputs": {"claim": {"claim_id": str(index)}}, "expectations": {"verdict": "DENY"}}
+        for index in range(5)
+    ]
+    observations = ablation._observations(records, callable_adapter("recover", recover))
+    assert len(observations) == 5
+    assert observations[-1]["error"] is None
 
 
 class _Frame:
@@ -290,7 +499,11 @@ def test_main_selects_experiment_before_starting_runs(monkeypatch, capsys):
         ablation.mlflow, "set_experiment", lambda name: events.append(("experiment", name))
     )
     monkeypatch.setattr(ablation, "load_records", lambda *args: [])
-    monkeypatch.setattr(ablation, "resolve_candidate", lambda spec: spec)
+    monkeypatch.setattr(
+        ablation,
+        "resolve_candidate",
+        lambda spec, profile=None: callable_adapter(spec, lambda claim: {}),
+    )
     monkeypatch.setattr(ablation, "run", lambda records, candidates: {"candidate_runs": []})
 
     ablation.main()
