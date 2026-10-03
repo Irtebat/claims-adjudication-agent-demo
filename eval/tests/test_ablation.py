@@ -365,6 +365,29 @@ def test_per_claim_timeout_kills_worker_and_next_claim_restarts(monkeypatch):
     adapter.shutdown()
 
 
+def test_never_returning_endpoint_claim_is_killed_and_recorded_as_wrong():
+    adapter = CandidateAdapter(
+        "endpoint",
+        lambda claim: None,
+        worker_spec=WorkerSpec("callable", "test_ablation._isolated_slow"),
+        timeout_seconds=0.05,
+        startup_timeout_seconds=5,
+    )
+
+    started = time.monotonic()
+    report = compare(
+        _records()[:1],
+        [adapter, callable_adapter("other", _candidate("APPROVE", "CREDIT"))],
+    )
+
+    observation = report["per_claim"][0]["candidates"]["endpoint"]
+    assert time.monotonic() - started < 5
+    assert observation["verdict"] is False
+    assert observation["prediction"] is None
+    assert "ClaimTimeoutError" in observation["error"]
+    assert adapter._process is None
+
+
 def test_worker_trace_is_linked_to_parent_run_without_finishing_it(monkeypatch, tmp_path):
     previous_tracking_uri = ablation.mlflow.get_tracking_uri()
     tracking_uri = tmp_path.as_uri()
@@ -426,10 +449,15 @@ def test_endpoint_worker_uses_profile_and_shared_request_path(monkeypatch):
         }
     }
     clients = []
+
+    def workspace_client(*, config):
+        clients.append(config)
+        return SimpleNamespace(api_client=api_client)
+
     monkeypatch.setattr(
         ablation,
         "WorkspaceClient",
-        lambda *, profile: clients.append(profile) or SimpleNamespace(api_client=api_client),
+        workspace_client,
     )
     connection = _WorkerConnection([{"claim_id": "c"}, None])
     adapter = endpoint_adapter("endpoint", "claims/name", profile="fe-bar")
@@ -437,7 +465,10 @@ def test_endpoint_worker_uses_profile_and_shared_request_path(monkeypatch):
     assert adapter.worker_spec.profile == "fe-bar"
     ablation._worker_main(adapter.worker_spec, connection)
 
-    assert clients == ["fe-bar"]
+    assert len(clients) == 1
+    assert clients[0].profile == "fe-bar"
+    assert clients[0].http_timeout_seconds == ablation.DEFAULT_REQUEST_TIMEOUT_SECONDS
+    assert clients[0].retry_timeout_seconds == ablation.DEFAULT_REQUEST_TIMEOUT_SECONDS
     assert connection.responses[1]["output"]["verdict"] == "DENY"
 
 
