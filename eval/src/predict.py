@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import time
 
@@ -10,6 +11,7 @@ import mlflow
 from mlflow.types.responses import ResponsesAgentRequest
 
 PERSISTENT_FORBIDDEN_MARKERS = ("403", "forbidden", "ip acl", "ip_acl")
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 _MODEL = None
 _MODEL_URI = None
 
@@ -29,10 +31,18 @@ def response_request(claim: dict) -> ResponsesAgentRequest:
     )
 
 
-def load_candidate(model_uri: str, loader=mlflow.pyfunc.load_model):
+def load_candidate(
+    model_uri: str,
+    loader=mlflow.pyfunc.load_model,
+    request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+):
     """Load and cache the packaged candidate pinned by ``evaluate.py``."""
     global _MODEL, _MODEL_URI
     if _MODEL is None or _MODEL_URI != model_uri:
+        # The packaged agent lazily creates Databricks SDK clients. Ensure those
+        # clients bound both connect and response reads instead of inheriting the
+        # SDK's otherwise-unbounded HTTP timeout.
+        os.environ["DATABRICKS_HTTP_TIMEOUT_SECONDS"] = str(request_timeout_seconds)
         _MODEL = loader(model_uri)
         _MODEL_URI = model_uri
     return _MODEL
