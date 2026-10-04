@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -39,10 +40,17 @@ def test_403_stops_without_retry():
     assert model.calls == 1
 
 
-def test_loads_packaged_candidate_by_pinned_model_uri():
+def test_loads_packaged_candidate_with_sdk_request_timeout(monkeypatch):
     loaded = FakeModel()
     calls = []
     uri = "models:/fe-bar-ir.default.claims_adjudication_agent/7"
+    monkeypatch.delenv("DATABRICKS_HTTP_TIMEOUT_SECONDS", raising=False)
 
-    assert load_candidate(uri, loader=lambda value: calls.append(value) or loaded) is loaded
+    assert (
+        load_candidate(
+            uri, loader=lambda value: calls.append(value) or loaded, request_timeout_seconds=7
+        )
+        is loaded
+    )
     assert calls == [uri]
+    assert os.environ["DATABRICKS_HTTP_TIMEOUT_SECONDS"] == "7"

@@ -1,6 +1,16 @@
-# Ablation live results — 2026-10-02
+# Ablation live results — 2026-10-04 (current): rules vs. agent v3 (narrative escalation)
 
-Both 100-claim comparisons completed with zero errors and `persist=false`. This is a null ablation: `agent@prod` made exactly the same verdict, disposition, and amount decisions as the deterministic baseline on all 200 claims.
+**Latest and authoritative run.** First comparison on the **corrected** deterministic rules (R5→REPLACEMENT, R6→REWORK) and the **narrative-escalation agent (v3, `gpt-5-4`)**, on the mixed 100-claim held-out set. See `mixed-v3-vs-baseline-2026-10-04.md` (+ `.json`). Enabled by the endpoint-timeout fix in this PR (every prior v3/agent arm hung on half-closed sockets).
+
+Headline: v3 **escalates 30/30 narrative-trap claims to a human** (`PEND_INVESTIGATE` + `narrative_conflict`) where the rules **auto-approve all 30** — with **0 false escalations** on the 70 normal claims. On structured/normal claims the two tie on the decision (0.857 verdict; shared fraud-ring miss); v3 adds 100% citation coverage but does **not** pinpoint the exact deciding sub-clause (0/30). Money path untouched; 0 invariant corrections; ~39 s + ~5.9k tokens/claim vs free ~1.8 s rules.
+
+**This supersedes the "no AI decision lift" read below**, which was measured on the *pre-escalation* agent (v2) and the uncorrected baseline. With escalation, the AI's value — narrative/document-contradiction detection — is real and measurable.
+
+---
+
+# Ablation live results — 2026-10-02 (prior: v2, pre-escalation)
+
+Both 100-claim comparisons completed with zero errors and `persist=false`. This is a null ablation: `agent@prod` (then v2, no escalation) made exactly the same verdict, disposition, and amount decisions as the deterministic baseline on all 200 claims.
 
 ## Runs
 

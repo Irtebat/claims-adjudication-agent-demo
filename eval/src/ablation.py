@@ -23,6 +23,7 @@ from urllib.parse import quote
 
 import mlflow
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.config import Config
 
 from build_dataset import _execute_sql, make_record, source_sql, stable_holdout
 from heldout import approval_subchoice, disposition_class
@@ -52,7 +53,9 @@ SUMMARY_DIMENSIONS = QUALITY_DIMENSIONS + (
     "invariant_correction_rate",
 )
 DEFAULT_CLAIM_TIMEOUT_SECONDS = 120
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 WORKER_SHUTDOWN_GRACE_SECONDS = 10
+WORKER_KILL_GRACE_SECONDS = 2
 EARLY_FAILURE_LIMIT = 5
 
 
@@ -77,6 +80,7 @@ class WorkerSpec:
     profile: str | None = None
     run_id: str | None = None
     candidate_name: str | None = None
+    request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
 
 
 def _private_module(name: str, path: Path):
@@ -159,6 +163,9 @@ def _detach_active_run(run_id: str) -> None:
 def _worker_main(spec: WorkerSpec, connection) -> None:
     close = None
     try:
+        # Packaged models construct their own Databricks SDK clients. Config reads
+        # this setting, giving every such client a bounded connect/read timeout.
+        os.environ["DATABRICKS_HTTP_TIMEOUT_SECONDS"] = str(spec.request_timeout_seconds)
         if spec.kind == "model":
             model = load_candidate(spec.value)
 
@@ -167,7 +174,13 @@ def _worker_main(spec: WorkerSpec, connection) -> None:
 
             deterministic = False
         elif spec.kind == "endpoint":
-            workspace = WorkspaceClient(profile=spec.profile)
+            workspace = WorkspaceClient(
+                config=Config(
+                    profile=spec.profile,
+                    http_timeout_seconds=spec.request_timeout_seconds,
+                    retry_timeout_seconds=spec.request_timeout_seconds,
+                )
+            )
 
             def invoke(claim):
                 return _invoke_endpoint(
@@ -382,10 +395,12 @@ class CandidateAdapter:
         if self._process is not None:
             if self._process.is_alive():
                 self._process.terminate()
-            self._process.join(timeout=5)
+            self._process.join(timeout=WORKER_KILL_GRACE_SECONDS)
             if self._process.is_alive():
                 self._process.kill()
-                self._process.join()
+                self._process.join(timeout=WORKER_KILL_GRACE_SECONDS)
+            if self._process.is_alive():
+                raise RuntimeError(f"candidate {self.name} worker survived SIGKILL")
         if self._connection is not None:
             self._connection.close()
         self._process = self._connection = None
