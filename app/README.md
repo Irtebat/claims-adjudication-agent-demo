@@ -1,9 +1,9 @@
-# Steel Claims Cockpit — AppKit app (Wave 7, Stage A: BACKEND, headless)
+# Steel Claims Cockpit — AppKit app
 
 The Databricks App (AppKit — Node/TS/React) that adjusters and business users use to
-review, finalize, and analyze steel warranty/quality claims. **Stage A is the
-backend contract + headless logic + tests only — no UI.** Stage B builds the UI on
-this contract (Databricks brand tokens, Linear-style dense command layout).
+review, finalize, and analyze steel warranty/quality claims. It ships four screens —
+Work Queue, Claim Cockpit, Claims History, and the Business Leader Dashboard — over
+the backend contract below, in a light Databricks theme with a dense command layout.
 
 ## Roles & server-side authorization (`server/authz.ts`)
 
@@ -100,26 +100,22 @@ recomputation); the final decision is validated internally money-consistent so i
 cannot violate the silver/gold medallion invariants. Re-finalizing an already-FINAL
 adjudication is a no-op (no double outbox, no new version).
 
-## Gates (all green, offline)
+## Gates
 
 ```
-npm run test           # vitest — 52 tests (authz matrix + finalize contract + identity/group resolver + RoleCache)
+npm run test                      # vitest — authz matrix + finalize contract + identity/group resolver + RoleCache + UI
 npx tsc -b tsconfig.server.json   # server typecheck — clean
-npx appkit lint        # ast-grep (no-double-type-assertion, etc.) — clean
+npx tsc -b tsconfig.client.json   # client typecheck — clean
+npx appkit lint                   # ast-grep (no-double-type-assertion, etc.) — clean
 databricks bundle validate --profile fe-bar   # Validation OK
 ```
 
-`server/**` (the backend contract) is eslint- and prettier-clean. Note: repo-wide
-`npm run lint` / `npm run format` also surface pre-existing warnings confined to the
-`databricks apps init` UI scaffold (`client/src/**`) and auto-generated appkit type
-stubs (`shared/appkit-types/*.d.ts`, the offline `hello_world` query stub) — untouched
-by this headless backend stage and cleaned up when the Stage-B UI + a warehouse-backed
-`generate-types` run land.
+`server/**` and `client/**` are eslint- and prettier-clean.
 
-## Deploy runbook (LIVE — Stage A stops before these; several need the app SP)
+## Deploy
 
-`databricks apps init` created the app SP is NOT done here. Deploying provisions the
-app's own service principal, whose id is needed to grant Lakebase. Order:
+Deploying provisions the app's own service principal, whose id the Lakebase grants
+need. Order:
 
 1. `databricks bundle deploy -t default --profile fe-bar` — creates the app + its SP,
    injects `PGHOST`/`PGDATABASE`/`PGPORT`/`PGSSLMODE` + the resource envs.
@@ -150,5 +146,5 @@ app's own service principal, whose id is needed to grant Lakebase. Order:
    request. The `/Me` endpoint + body shape are confirmed with a full user token; the
    scoped-token case is the only bit that can only be verified live.
 
-Steps 1–4 need the deployed app SP id and may need account-admin — they are the
-Stage-A STOP-AND-REPORT items (see `docs/evidence/copilot-app-backend/`).
+Steps 2–4 need the deployed app SP id (step 1 creates it); some sub-steps need
+account-admin (see `docs/evidence/copilot-app-backend/`).

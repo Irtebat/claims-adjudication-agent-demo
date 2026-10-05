@@ -77,7 +77,7 @@ README indexing its files and what they demonstrate.
 | `synthetic-data/` | Dataset generation, governance grants/masks, integrity checks, samples |
 | `lakebase-serve-down/` | Lakebase provisioning and Triggered serve-down parity |
 | `policy-intake-and-retrieval/` | Policy intake, resolution, in-process authorities, retrieval |
-| `cdf-incremental-history/` | Native CDF SCD Type 2 cutover and incremental proof |
+| `cdf-incremental-history/` | Native CDF SCD Type 2 history and incremental proof |
 | `correctness-debt-fixes/` | Fraud-graph heat resolution, transactional policy-intake upsert, `heats_coils` dedup |
 | `pipelines-lakebase-cleanup/` | Resource rename, `run.py` separation, policy files relocated to `lakebase/` |
 | `claims-adjudication-agent/` | ResponsesAgent build, money-safety invariant enforcement, decision records |

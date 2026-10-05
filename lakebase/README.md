@@ -131,9 +131,7 @@ were given `REPLICA IDENTITY FULL` and stream normally. The policy tables
 not transactional history — so they are not given `REPLICA IDENTITY FULL` and the
 connector skips them (surfaced as "Error"/skipped in the CDF UI). This is expected:
 those tables are populated directly by the policy intake, not fed up through CDF.
-Two of them also carry `tsvector` columns that CDF cannot serialize. (The legacy
-native `public.prior_claims` table, if still present in an existing workspace, is in
-the same skipped category until it is dropped; fresh setups no longer create it.) Do not add
+Two of them also carry `tsvector` columns that CDF cannot serialize. Do not add
 `REPLICA IDENTITY FULL` to them — that would opt them into CDF, which is the
 opposite of intent.
 
@@ -145,10 +143,9 @@ to `CDF_STATE_STREAMING` and materializes `cdf.lb_adjudication_decision_records_
 
 ## Execution model
 
-Two mechanisms only (see the repo-root README). Unlike other layers, `lakebase`
-keeps its `run.py` wrapper because every action it exposes is **guarded
-orchestration or a non-bundle step a plain `bundle run` cannot express**; it has no
-pure `bundle` passthroughs:
+Two mechanisms only (see the repo-root README). The `lakebase` `run.py` wrapper
+exposes only actions that add guarded orchestration around `bundle run` or run a
+non-bundle step:
 
 - **`setup-and-seed`** refuses to run if a native CDF config already exists (a
   re-seed's fixture delete/upsert would emit artificial deletes/inserts and create

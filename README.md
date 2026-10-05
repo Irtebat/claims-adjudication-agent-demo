@@ -53,8 +53,8 @@ Every layer uses the **same two execution mechanisms — and only these two**:
    - **(a) the human-gated MLflow model lifecycle** — `agent`'s
      `register → evaluate → promote`, an interactive operator loop with a human
      decision at promotion, not a scheduled job; and
-   - **(b) thin wrappers that add real orchestration or guards a plain `bundle run`
-     cannot express** — sourcing the authored warranty schedule into the generator,
+   - **(b) thin `uv run python` wrappers that add orchestration around `bundle run`** —
+     sourcing the authored warranty schedule into the generator,
      the Lakebase reseed/CDF-exists guards, and resolving the dynamic native-CDF
      table names before a medallion run.
 

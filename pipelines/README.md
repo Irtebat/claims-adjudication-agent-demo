@@ -89,9 +89,9 @@ Two mechanisms only (see the repo-root README):
 - **DABs bundle for compute** — the medallion pipeline and all four jobs
   (`validate_generator`, `generate_raw`, `refresh_medallion`, `deploy_metric_views`).
   Plain bundle operations are run directly (below); they are never wrapped.
-- **Direct `uv run python pipelines/run.py <action>` only for orchestration a plain
-  `bundle run` cannot express.** `pipelines/run.py` holds *only* those actions; the
-  pure `bundle validate`/`deploy`/`summary` passthroughs were removed.
+- **`uv run python pipelines/run.py <action>`** for the actions that wrap `bundle run`
+  with extra orchestration (parameter injection, dynamic CDF-table resolution, group
+  creation). Plain `bundle validate`/`deploy`/`summary` are run directly (below).
 
 ## Deploy and run on the workspace
 
@@ -112,7 +112,7 @@ databricks bundle deploy            --target prod --profile fe-bar
 databricks bundle summary           --target prod --profile fe-bar
 ```
 
-**`run.py` actions — each adds orchestration a plain `bundle run` cannot express:**
+**`run.py` actions** (DABs job run plus the orchestration each needs):
 
 ```bash
 uv run --with pyyaml python pipelines/run.py generate         # bundle run generate_raw + inject warranty schedule
@@ -124,7 +124,7 @@ uv run --with pyyaml python pipelines/run.py govern           # create account g
 uv run --with pyyaml python pipelines/run.py evidence         # capture SQL evidence snapshots
 ```
 
-Why each `run.py` action is not a plain `bundle run`:
+What each `run.py` action adds on top of `bundle run`:
 
 - **`generate` / `check-generator`** pass `catalog`, `claim_count`, `seed`, and
   `warranty_schedule` as explicit `bundle run --params` job-parameter overrides. The
