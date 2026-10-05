@@ -1,6 +1,8 @@
 """Configuration-driven CLI entry point. Always passes an explicit profile."""
 
 import argparse
+import csv
+import io
 import json
 import os
 import re
@@ -17,6 +19,15 @@ DECISION_RECORDS = "adjudication_decision_records"
 # backticks, quotes, semicolons and whitespace/newlines so a principal can never break
 # out of the backticked identifier it is substituted into.
 _PRINCIPAL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]*$")
+
+
+def _job_params(**values):
+    """Encode Databricks job parameter overrides as one CSV argument."""
+    output = io.StringIO()
+    csv.writer(output, lineterminator="").writerow(
+        f"{name}={value}" for name, value in values.items() if value is not None
+    )
+    return output.getvalue()
 
 
 def _validate_principal(value):
@@ -116,7 +127,7 @@ def main():
             for v in policy_source["warranties"]["versions"]
         ]
     )
-    env = dict(
+    bundle_var_env = dict(
         os.environ,
         BUNDLE_VAR_catalog=catalog,
         BUNDLE_VAR_claim_count=str(args.claim_count or config["synthetic"]["claim_count"]),
@@ -124,11 +135,11 @@ def main():
         BUNDLE_VAR_warranty_schedule=warranty_schedule,
     )
 
-    def cli(*parts, cwd=ROOT, allow_failure=False):
+    def cli(*parts, cwd=ROOT, allow_failure=False, env=None):
         result = subprocess.run(
             ["databricks", *parts, "--profile", profile],
             cwd=cwd,
-            env=env,
+            env=os.environ if env is None else env,
             text=True,
             capture_output=True,
             check=False,
@@ -138,16 +149,33 @@ def main():
         return result
 
     if args.action in {"generate", "check-generator"}:
-        # These are `bundle run`s that stay wrapped ONLY because they inject
-        # BUNDLE_VAR_warranty_schedule (sourced from policy_source.json above) as a
+        # These are `bundle run`s that stay wrapped ONLY because they pass
+        # warranty_schedule (sourced from policy_source.json above) as an explicit
         # run-time job-parameter override, so the generator applies the authored
         # warranty schedule and no policy numerics are hardcoded in the bundle. A
         # plain `databricks bundle run` would use the bundle's empty-list default.
         job = "generate_raw" if args.action == "generate" else "validate_generator"
+        params = _job_params(
+            catalog=catalog,
+            claim_count=str(args.claim_count or config["synthetic"]["claim_count"]),
+            seed=str(config["synthetic"]["seed"]),
+            warranty_schedule=warranty_schedule,
+        )
         result = subprocess.run(
-            ["databricks", "bundle", "run", job, "--target", "prod", "--profile", profile],
+            [
+                "databricks",
+                "bundle",
+                "run",
+                job,
+                "--params",
+                params,
+                "--target",
+                "prod",
+                "--profile",
+                profile,
+            ],
             cwd=ROOT,
-            env=env,
+            env=os.environ,
             check=False,
         )
         raise SystemExit(result.returncode)
@@ -216,11 +244,11 @@ def main():
         # (--allow-missing-decision-records, used by scripts/bootstrap.py): that is only
         # legitimate before the first decision record materializes the CDF landing
         # table, and the pipeline then publishes an empty decision_records_for_fact.
-        env["BUNDLE_VAR_cdf_claims_table"] = cdf_table(tables, "claims")
-        env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table(tables, "adjudications")
+        bundle_var_env["BUNDLE_VAR_cdf_claims_table"] = cdf_table(tables, "claims")
+        bundle_var_env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table(tables, "adjudications")
         decision_records = cdf_table(tables, DECISION_RECORDS, required=False)
         if decision_records:
-            env["BUNDLE_VAR_cdf_decision_records_table"] = decision_records
+            bundle_var_env["BUNDLE_VAR_cdf_decision_records_table"] = decision_records
         elif not args.allow_missing_decision_records:
             raise RuntimeError(
                 f"No CDF landing table lb_{DECISION_RECORDS}_history* in "
@@ -234,14 +262,16 @@ def main():
                 "(--allow-missing-decision-records)",
                 flush=True,
             )
-        cli("bundle", "deploy", "--target", "prod")
+        # These values configure the deployed pipeline, so bundle variables belong on
+        # deploy. They are intentionally not passed to the already-deployed job run.
+        cli("bundle", "deploy", "--target", "prod", env=bundle_var_env)
         cli("bundle", "run", "refresh_medallion", "--target", "prod")
         print(
             json.dumps(
                 {
                     "cdf_config": created,
-                    "claims_table": env["BUNDLE_VAR_cdf_claims_table"],
-                    "adjudications_table": env["BUNDLE_VAR_cdf_adjudications_table"],
+                    "claims_table": bundle_var_env["BUNDLE_VAR_cdf_claims_table"],
+                    "adjudications_table": bundle_var_env["BUNDLE_VAR_cdf_adjudications_table"],
                     "decision_records_table": decision_records,
                 },
                 sort_keys=True,
@@ -287,17 +317,19 @@ def main():
             )
 
         tables = cdf_tables(cdf_schema)
-        env["BUNDLE_VAR_cdf_claims_table"] = cdf_table(tables, "claims")
-        env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table(tables, "adjudications")
-        env["BUNDLE_VAR_cdf_decision_records_table"] = cdf_table(tables, source)
-        cli("bundle", "deploy", "--target", "prod")
+        bundle_var_env["BUNDLE_VAR_cdf_claims_table"] = cdf_table(tables, "claims")
+        bundle_var_env["BUNDLE_VAR_cdf_adjudications_table"] = cdf_table(tables, "adjudications")
+        bundle_var_env["BUNDLE_VAR_cdf_decision_records_table"] = cdf_table(tables, source)
+        cli("bundle", "deploy", "--target", "prod", env=bundle_var_env)
         cli("bundle", "run", "refresh_medallion", "--target", "prod")
         print(
             json.dumps(
                 {
                     "cdf_config": cdf_config_name,
                     "decision_records_state": "STREAMING",
-                    "decision_records_table": env["BUNDLE_VAR_cdf_decision_records_table"],
+                    "decision_records_table": bundle_var_env[
+                        "BUNDLE_VAR_cdf_decision_records_table"
+                    ],
                     "gold_table": f"{catalog}.gold.adjudication_decision_records",
                 },
                 sort_keys=True,

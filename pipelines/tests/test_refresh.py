@@ -96,14 +96,13 @@ def test_refresh_runs_incremental_medallion_with_no_drop_or_query(monkeypatch):
     assert "--full-refresh" not in all_text and "--refresh-all" not in all_text
 
 
-def test_refresh_feeds_current_cdf_table_names_to_the_pipeline(monkeypatch):
+def test_refresh_resolves_current_cdf_table_names_before_deploy(monkeypatch):
     calls = []
     monkeypatch.setattr(run.subprocess, "run", _make_fake_run(calls))
     monkeypatch.setattr(sys, "argv", ["run.py", "refresh"])
     with pytest.raises(SystemExit):
         run.main()
-    # The bundle run inherits the resolved CDF table names via BUNDLE_VAR_* env.
-    # (Resolution happening at all proves the tables.list read drove the run.)
+    # Resolution happening proves the tables.list read drove the deploy configuration.
     assert any("tables" in p and "list" in p for p in calls)
 
 
@@ -152,7 +151,12 @@ def _run_refresh_capturing_env(monkeypatch, tables_json, extra_argv=()):
 
     monkeypatch.setattr(run.subprocess, "run", fake_run)
     monkeypatch.setattr(sys, "argv", ["run.py", "refresh", *extra_argv])
-    monkeypatch.delenv("BUNDLE_VAR_cdf_decision_records_table", raising=False)
+    for name in (
+        "BUNDLE_VAR_cdf_claims_table",
+        "BUNDLE_VAR_cdf_adjudications_table",
+        "BUNDLE_VAR_cdf_decision_records_table",
+    ):
+        monkeypatch.delenv(name, raising=False)
     with pytest.raises(SystemExit) as exc:
         run.main()
     assert exc.value.code == 0
@@ -161,16 +165,17 @@ def _run_refresh_capturing_env(monkeypatch, tables_json, extra_argv=()):
 
 def test_refresh_passes_all_cdf_tables_including_decision_records(monkeypatch):
     envs = _run_refresh_capturing_env(monkeypatch, _CDF_TABLES_WITH_DECISION_RECORDS)
-    for parts, env in envs:  # both the deploy and the refresh_medallion run
-        assert env["BUNDLE_VAR_cdf_claims_table"] == "fe-bar-ir.cdf.lb_claims_history_abc"
-        assert (
-            env["BUNDLE_VAR_cdf_adjudications_table"]
-            == "fe-bar-ir.cdf.lb_adjudications_history_def"
-        )
-        assert (
-            env["BUNDLE_VAR_cdf_decision_records_table"]
-            == "fe-bar-ir.cdf.lb_adjudication_decision_records_history_ghi"
-        )
+    deploy_env = envs[0][1]
+    assert deploy_env["BUNDLE_VAR_cdf_claims_table"] == "fe-bar-ir.cdf.lb_claims_history_abc"
+    assert (
+        deploy_env["BUNDLE_VAR_cdf_adjudications_table"]
+        == "fe-bar-ir.cdf.lb_adjudications_history_def"
+    )
+    assert (
+        deploy_env["BUNDLE_VAR_cdf_decision_records_table"]
+        == "fe-bar-ir.cdf.lb_adjudication_decision_records_history_ghi"
+    )
+    assert not any(key.startswith("BUNDLE_VAR_") for key in envs[1][1])
     assert [p[:3] for p, _ in envs] == [
         ["bundle", "deploy", "--target"],
         ["bundle", "run", "refresh_medallion"],
@@ -195,4 +200,5 @@ def test_refresh_allows_missing_decision_records_only_when_explicit(monkeypatch)
     envs = _run_refresh_capturing_env(
         monkeypatch, _CDF_TABLES, ["--allow-missing-decision-records"]
     )
-    assert envs and all("BUNDLE_VAR_cdf_decision_records_table" not in env for _, env in envs)
+    assert "BUNDLE_VAR_cdf_decision_records_table" not in envs[0][1]
+    assert not any(key.startswith("BUNDLE_VAR_") for key in envs[1][1])

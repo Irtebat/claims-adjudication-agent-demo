@@ -126,12 +126,13 @@ uv run --with pyyaml python pipelines/run.py evidence         # capture SQL evid
 
 Why each `run.py` action is not a plain `bundle run`:
 
-- **`generate` / `check-generator`** inject `BUNDLE_VAR_warranty_schedule`, sourced
-  from `lakebase/src/policy_source.json`, as a run-time job-parameter override — so a
-  policy edit propagates into the generated history and no policy numerics are
-  hardcoded in the bundle (which defaults the schedule to `[]`).
+- **`generate` / `check-generator`** pass `catalog`, `claim_count`, `seed`, and
+  `warranty_schedule` as explicit `bundle run --params` job-parameter overrides. The
+  schedule is sourced from `lakebase/src/policy_source.json`, so a policy edit
+  propagates into the generated history and no policy numerics are hardcoded in the
+  bundle (which defaults the schedule to `[]`).
 - **`refresh` / `decision-records`** discover the hash-suffixed native-CDF landing
-  table names at runtime and pass them as `BUNDLE_VAR_cdf_*`; the pipeline and
+  table names at runtime and pass them as deploy-time `BUNDLE_VAR_cdf_*`; the pipeline and
   `refresh_medallion` cannot resolve those names themselves. `refresh` passes every
   CDF-fed source — claims, adjudications, and decision records — so a routine run
   lands new decision records too. A missing decision-record table is an error unless
