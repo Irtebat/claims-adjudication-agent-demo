@@ -47,7 +47,7 @@ The CDF-exists guard lives in the Lakebase steps, so it is checked only after th
 pipelines `bundle deploy` and `generate` steps have already run. If a CDF config
 already exists, `setup-and-seed` refuses before the Lakebase bundle deploy and before
 any seed, and the bootstrap stops there, because replacing the fixture would emit
-artificial deletes/inserts and create spurious SCD2 versions. The earlier pipelines
+artificial deletes/inserts and create spurious SCD2 versions. The preceding pipelines
 deploy and `generate` are not rolled back. Do not run the bootstrap against live
 data.
 

@@ -64,7 +64,7 @@ Or run with all defaults (500 claims, seed 42, serving endpoint):
 databricks bundle run demo_backlog -t prod --profile fe-bar
 ```
 
-## Recommendation Contract (Wave 7)
+## Recommendation contract
 
 The adjudications produced are **RECOMMENDED** (not yet FINAL):
 
@@ -151,4 +151,4 @@ When deployed and run, the job produces a JSON summary:
 - **"IP-ACL error" from serving endpoint**: The job runs serverless and may hit IP-ACL restrictions. Contact your workspace admin.
 - **"In-process mode: cannot import agent"**: The agent module may not be installed or on the path. Use serving_endpoint mode instead.
 - **Blank adjudications**: Verify the serving endpoint is deployed and accepts `custom_inputs.claim`.
-- **403 errors on outbox**: This is expected — the recommendation write does NOT create outbox rows per Wave 7 contract.
+- **403 errors on outbox**: Expected — the recommendation write does NOT create outbox rows; the app finalization writes them.

@@ -123,7 +123,7 @@ at every stage, keyed on stable, deterministic ids:
 
 ## Auth model
 
-Jobs read Kafka creds from secret scope `fe-bar-aiven-kafka` and the Wave 6 app-SP
+Jobs read Kafka creds from secret scope `fe-bar-aiven-kafka` and the app-SP
 creds from scope `claims-agent`, then authenticate to the endpoint **and** Lakebase
 **as that service principal** (mirrors `agent/src/db.py` + `workspace_client.py`).
 The SP therefore carries the grants that gate every write (see `src/migrate.py`).
@@ -142,7 +142,7 @@ No secret is ever inlined or committed.
    databricks secrets put-secret fe-bar-aiven-kafka sasl-password --profile fe-bar   # Aiven SASL password
    databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem   --profile fe-bar    # Aiven CA cert (PEM)
    ```
-2. The Wave 6 `claims-agent` scope (`app-sp-client-id`, `app-sp-client-secret`,
+2. The `claims-agent` scope (`app-sp-client-id`, `app-sp-client-secret`,
    `lakebase-db-user`) and the serving endpoint must already exist (they do).
 
 **Deploy the bundle:**
