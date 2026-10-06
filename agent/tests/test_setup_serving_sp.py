@@ -51,6 +51,7 @@ def _expected_lakebase(role):
         f'GRANT SELECT ON "reference"."heats_coils" TO "{role}"',
         f'GRANT SELECT ON "reference"."mill_test_certs" TO "{role}"',
         f'GRANT SELECT ON "reference"."customer_heat_risk" TO "{role}"',
+        f'GRANT SELECT ON "reference"."prior_claims_corpus" TO "{role}"',
         f'GRANT SELECT, INSERT, UPDATE ON "public"."adjudications" TO "{role}"',
         f'GRANT SELECT, INSERT ON "public"."adjudication_decision_records" TO "{role}"',
     ]
@@ -75,6 +76,14 @@ def test_apply_lakebase_grants_is_idempotent_statement_sequence():
     setup.apply_lakebase_grants(first, APP_ID)
     setup.apply_lakebase_grants(second, APP_ID)
     assert first.statements == second.statements
+
+
+def test_lakebase_grants_cover_the_synced_precedent_corpus():
+    # find_similar_prior_claims reads reference.prior_claims_corpus, so the serving SP
+    # must be granted SELECT on it (same read set as regrant SERVING_TABLES).
+    cur = FakeCursor()
+    setup.apply_lakebase_grants(cur, APP_ID)
+    assert f'GRANT SELECT ON "reference"."prior_claims_corpus" TO "{APP_ID}"' in cur.statements
 
 
 # --- Unity Catalog EXECUTE grants: exact statements, backtick-quoted ---------------
@@ -158,15 +167,50 @@ def test_ensure_service_principal_creates_when_absent():
 # --- Lakebase OAuth role: detect-and-skip -----------------------------------------
 
 
-def test_ensure_lakebase_role_skips_when_present():
-    created = []
-    workspace = SimpleNamespace(
+def _existing_role(
+    role_id, postgres_role, identity=setup.ROLE_IDENTITY_TYPE, auth=setup.ROLE_AUTH_METHOD
+):
+    return SimpleNamespace(
+        role_id=role_id,
+        spec=SimpleNamespace(postgres_role=postgres_role, identity_type=identity, auth_method=auth),
+    )
+
+
+def _role_workspace(roles, created):
+    return SimpleNamespace(
         postgres=SimpleNamespace(
-            list_roles=lambda parent: [SimpleNamespace(role_id=setup.ROLE_ID)],
+            list_roles=lambda parent: roles,
             create_role=lambda **kw: created.append(kw),
         )
     )
+
+
+def test_ensure_lakebase_role_skips_when_present_and_matching():
+    created = []
+    workspace = _role_workspace([_existing_role(setup.ROLE_ID, APP_ID)], created)
     assert setup.ensure_lakebase_role(workspace, setup.BRANCH, setup.ROLE_ID, APP_ID) is False
+    assert created == []
+
+
+def test_ensure_lakebase_role_fails_loud_on_mismatch():
+    # A role with the right id but a different postgres_role must NOT be reused: grants
+    # would land on the wrong/unprovisioned principal.
+    created = []
+    workspace = _role_workspace(
+        [_existing_role(setup.ROLE_ID, "99999999-0000-0000-0000-000000000000")], created
+    )
+    with pytest.raises(ValueError, match="does not match the serving"):
+        setup.ensure_lakebase_role(workspace, setup.BRANCH, setup.ROLE_ID, APP_ID)
+    assert created == []  # never creates and never falls through to grants
+
+
+def test_ensure_lakebase_role_fails_loud_on_wrong_auth_method():
+    created = []
+    workspace = _role_workspace(
+        [_existing_role(setup.ROLE_ID, APP_ID, auth="PG_PASSWORD_SCRAM_SHA_256")], created
+    )
+    with pytest.raises(ValueError, match="auth_method"):
+        setup.ensure_lakebase_role(workspace, setup.BRANCH, setup.ROLE_ID, APP_ID)
     assert created == []
 
 

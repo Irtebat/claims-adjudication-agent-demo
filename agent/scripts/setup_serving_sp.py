@@ -64,10 +64,17 @@ SECRET_DB_USER_KEY = "lakebase-db-user"
 UC_REASONING_FUNCTION = "databricks-gpt-5-4"
 UC_EMBEDDING_FUNCTION = "gte_large_en_v1_5"
 
-# The serving SP Lakebase grant set, in the order of
-# docs/evidence/serving-endpoint/README.md. Each entry is (privileges, target)
-# where target is one of ("database", <db>), ("schema", <schema>), or
-# ("table", <schema>, <table>).
+# The Lakebase role's expected identity, matched when the role already exists so grants
+# never land on a role backed by a different principal or auth method.
+ROLE_IDENTITY_TYPE = "SERVICE_PRINCIPAL"
+ROLE_AUTH_METHOD = "LAKEBASE_OAUTH_V1"
+
+# The serving SP Lakebase grant set, following docs/evidence/serving-endpoint/README.md
+# for the public reads and writes and the serving read set in
+# lakebase/scripts/regrant_synced_table_selects.py (SERVING_TABLES) for the reference.*
+# synced tables, which includes the precedent corpus prior_claims_corpus that
+# find_similar_prior_claims reads. Each entry is (privileges, target) where target is
+# one of ("database", <db>), ("schema", <schema>), or ("table", <schema>, <table>).
 GRANTS: list[tuple[str, tuple]] = [
     ("CONNECT", ("database", DATABASE)),
     ("USAGE", ("schema", "public")),
@@ -81,6 +88,7 @@ GRANTS: list[tuple[str, tuple]] = [
     ("SELECT", ("table", "reference", "heats_coils")),
     ("SELECT", ("table", "reference", "mill_test_certs")),
     ("SELECT", ("table", "reference", "customer_heat_risk")),
+    ("SELECT", ("table", "reference", "prior_claims_corpus")),
     ("SELECT, INSERT, UPDATE", ("table", "public", "adjudications")),
     ("SELECT, INSERT", ("table", "public", "adjudication_decision_records")),
 ]
@@ -193,11 +201,42 @@ def ensure_workspace_assignment(account, workspace_id: int, sp_id: str) -> None:
 # --- Lakebase OAuth role ----------------------------------------------------------
 
 
+def _enum_value(value):
+    # SDK enums carry the Postgres string in ``.value``; a plain string passes through.
+    return getattr(value, "value", value)
+
+
 def ensure_lakebase_role(workspace, branch: str, role_id: str, postgres_role: str) -> bool:
-    """Create the SP's Lakebase OAuth role if absent. Return True when created."""
+    """Create the SP's Lakebase OAuth role if absent. Return True when created.
+
+    When a role with ``role_id`` already exists, its spec must match the serving SP:
+    ``postgres_role`` equals the SP application UUID, SERVICE_PRINCIPAL identity, and
+    LAKEBASE_OAUTH_V1 auth. A match is skipped; a mismatch raises, so grants are never
+    applied to a role backed by a different or unprovisioned principal.
+    """
     for role in workspace.postgres.list_roles(parent=branch):
-        if role.role_id == role_id:
-            return False
+        if role.role_id != role_id:
+            continue
+        spec = role.spec
+        mismatches = []
+        if spec.postgres_role != postgres_role:
+            mismatches.append(f"postgres_role={spec.postgres_role!r} (expected {postgres_role!r})")
+        if _enum_value(spec.identity_type) != ROLE_IDENTITY_TYPE:
+            mismatches.append(
+                f"identity_type={_enum_value(spec.identity_type)!r} "
+                f"(expected {ROLE_IDENTITY_TYPE!r})"
+            )
+        if _enum_value(spec.auth_method) != ROLE_AUTH_METHOD:
+            mismatches.append(
+                f"auth_method={_enum_value(spec.auth_method)!r} (expected {ROLE_AUTH_METHOD!r})"
+            )
+        if mismatches:
+            raise ValueError(
+                f"Lakebase role {role_id!r} already exists but does not match the serving "
+                f"service principal: {'; '.join(mismatches)}. Refusing to apply grants to "
+                "a mismatched role."
+            )
+        return False
     from databricks.sdk.service.postgres import (
         Role,
         RoleAuthMethod,

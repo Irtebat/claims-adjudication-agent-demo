@@ -20,6 +20,18 @@ st = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = st  # dataclasses resolve their module via sys.modules
 SPEC.loader.exec_module(st)
 
+# The regrant subprocess now requires both principals; the create/recreate paths read
+# them from the environment, so set them for every test (overridden where a test
+# exercises the missing-principal failure).
+APP_SP = "app-sp-uuid"
+SERVING_SP = "serving-sp-uuid"
+
+
+@pytest.fixture(autouse=True)
+def _principals_env(monkeypatch):
+    monkeypatch.setenv("APP_SP_PRINCIPAL", APP_SP)
+    monkeypatch.setenv("SERVING_SP_PRINCIPAL", SERVING_SP)
+
 
 class FakeCli:
     """Records every argv; answers get-synced-table / start-update / get-update."""
@@ -71,7 +83,8 @@ class FakeCli:
 
     def regranted(self):
         return any(
-            c[0] == "uv" and "regrant_synced_table_selects.py" in c[-3]
+            c[0] == "uv"
+            and any("regrant_synced_table_selects.py" in str(part) for part in c)
             for c in self.calls
         )
 
@@ -153,6 +166,31 @@ def test_create_new_corpus_builds_indexes_then_regrants():
     assert spec["primary_key_columns"] == ["claim_id"]
     assert spec["scheduling_policy"] == "TRIGGERED"
     assert statements == st.POST_CREATE_SQL["prior_claims_corpus"]
+
+
+def test_create_regrant_invocation_passes_both_principals():
+    # The create path's auto-regrant must supply both principals (and the profile) so the
+    # regrant script, which has no default ids, targets the app and serving SPs.
+    existing = [t.name for t in st.TABLES if t.name != "prior_claims_corpus"]
+    cli = FakeCli(existing=existing)
+    st.create(runner=cli, pg=lambda s: None, sleep=lambda seconds: None)
+    regrant_call = next(c for c in cli.calls if c[0] == "uv")
+    assert any("regrant_synced_table_selects.py" in str(p) for p in regrant_call)
+    assert regrant_call[regrant_call.index("--app-principal") + 1] == APP_SP
+    assert regrant_call[regrant_call.index("--serving-principal") + 1] == SERVING_SP
+    assert regrant_call[regrant_call.index("--profile") + 1] == "fe-bar"
+
+
+def test_create_regrant_fails_loud_when_principals_unset(monkeypatch):
+    # Without the principal env vars the create path's regrant must fail loudly and never
+    # invoke the regrant subprocess with a missing principal.
+    monkeypatch.delenv("APP_SP_PRINCIPAL", raising=False)
+    monkeypatch.delenv("SERVING_SP_PRINCIPAL", raising=False)
+    existing = [t.name for t in st.TABLES if t.name != "prior_claims_corpus"]
+    cli = FakeCli(existing=existing)
+    with pytest.raises(RuntimeError, match="APP_SP_PRINCIPAL"):
+        st.create(runner=cli, pg=lambda s: None, sleep=lambda seconds: None)
+    assert not cli.regranted()
 
 
 def test_recreate_deletes_drops_creates_indexes_and_regrants_in_order():
