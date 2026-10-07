@@ -47,7 +47,7 @@ def bundle(*parts, cwd):
         "--target",
         "prod",
         "--profile",
-        "fe-bar",
+        "fe-bar-ir-2026",
         cwd=cwd,
     )
 

@@ -49,19 +49,19 @@ Deploy to Databricks:
 
 ```bash
 cd demo/
-databricks bundle deploy -t prod --profile fe-bar
+databricks bundle deploy -t prod --profile fe-bar-ir-2026
 ```
 
 Run the job with custom parameters:
 
 ```bash
-databricks bundle run demo_backlog -t prod --profile fe-bar -- --count 1000 --seed 123 --mode serving_endpoint
+databricks bundle run demo_backlog -t prod --profile fe-bar-ir-2026 -- --count 1000 --seed 123 --mode serving_endpoint
 ```
 
 Or run with all defaults (500 claims, seed 42, serving endpoint):
 
 ```bash
-databricks bundle run demo_backlog -t prod --profile fe-bar
+databricks bundle run demo_backlog -t prod --profile fe-bar-ir-2026
 ```
 
 ## Recommendation contract

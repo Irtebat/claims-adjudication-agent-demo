@@ -13,8 +13,8 @@ to Lakebase. Persisting here would seed stray ``RECOMMENDED`` rows against the s
 FINAL sample claims and pollute the adjuster queue, so the proof is taken purely from
 the in-process outcome; nothing is read back from the database.
 
-Run with the reasoning endpoint reachable and ``DATABRICKS_CONFIG_PROFILE=fe-bar``;
-``LAKEBASE_PROFILE=fe-bar`` selects the Lakebase workspace for the agent.
+Run with the reasoning endpoint reachable and ``DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026``;
+``LAKEBASE_PROFILE=fe-bar-ir-2026`` selects the Lakebase workspace for the agent.
 """
 
 from __future__ import annotations
@@ -167,7 +167,9 @@ def run(profile: str, experiment: str, destination: Path) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", default=os.environ.get("DATABRICKS_CONFIG_PROFILE", "fe-bar"))
+    parser.add_argument(
+        "--profile", default=os.environ.get("DATABRICKS_CONFIG_PROFILE", "fe-bar-ir-2026")
+    )
     parser.add_argument(
         "--experiment",
         default="/Users/irtebat.shaukat@databricks.com/claims_adjudication_agent",

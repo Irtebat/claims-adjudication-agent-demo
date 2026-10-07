@@ -23,7 +23,7 @@ resources:
               pause_status: UNPAUSED
         - Raise poll_timeout_s (e.g. 30) so the consumer waits for new events instead
           of exiting when idle, and raise max_messages so a run drains a long burst.
-        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar`.
+        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar-ir-2026`.
 
       environments:
         - environment_key: services

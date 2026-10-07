@@ -24,9 +24,9 @@ the one legitimate direct-python exception: an operator runs it, reads the gate,
 decides promotion.
 
 A DABs job is deliberately not provided. `evaluate.py` enforces the explicit local
-`fe-bar` CLI profile as a money-safety guard, and a serverless job runtime carries no
+`fe-bar-ir-2026` CLI profile as a money-safety guard, and a serverless job runtime carries no
 local CLI profile, so a bundle job running `evaluate.py` could not pass that guard.
-The guard is intentionally kept; evaluation therefore runs locally where the `fe-bar`
+The guard is intentionally kept; evaluation therefore runs locally where the `fe-bar-ir-2026`
 profile resolves.
 
 ## Ordered register → evaluate → promote lifecycle
@@ -37,20 +37,20 @@ evaluation and promotion:
 ```bash
 # 1. Log, isolated-validate, register version N, and set @candidate (never @prod).
 cd agent
-DATABRICKS_CONFIG_PROFILE=fe-bar uv run python src/register_agent.py --profile fe-bar
+DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026 uv run python src/register_agent.py --profile fe-bar-ir-2026
 
 # 2. Independently score the packaged version N in version-named MLflow runs.
 cd ../eval
-DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar \
+DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026 LAKEBASE_PROFILE=fe-bar-ir-2026 \
   MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py \
-  --profile fe-bar --experiment /Shared/claims-adjudication-offline-evaluation \
+  --profile fe-bar-ir-2026 --experiment /Shared/claims-adjudication-offline-evaluation \
   --candidate-version N
 
 # 3a. Gate-only dry run: bootstrap if @prod is absent, otherwise compare against @prod.
-uv run python src/promote.py --profile fe-bar --candidate-version N
+uv run python src/promote.py --profile fe-bar-ir-2026 --candidate-version N
 
 # 3b. After approval, make promote.py—the sole @prod owner—apply the passing decision.
-uv run python src/promote.py --profile fe-bar --candidate-version N --promote
+uv run python src/promote.py --profile fe-bar-ir-2026 --candidate-version N --promote
 ```
 
 Each invocation of `evaluate.py` is independent: skipped tiers are absent, and no
@@ -78,10 +78,10 @@ Evaluation is a versioned, comparable, governed process, not a local-JSON record
 
   ```bash
   # Dry-run report (default): compare candidate vs current @prod, move nothing.
-  uv run python src/promote.py --profile fe-bar --candidate-version 3
+  uv run python src/promote.py --profile fe-bar-ir-2026 --candidate-version 3
 
   # Actually move @prod to the candidate — only if it wins the gate.
-  uv run python src/promote.py --profile fe-bar --candidate-version 3 --promote
+  uv run python src/promote.py --profile fe-bar-ir-2026 --candidate-version 3 --promote
   ```
 
   `promote_if_beats_prod` resolves the current `@prod` version when present
@@ -159,7 +159,7 @@ The only live creation path writes the isolated MLflow/UC evaluation dataset
 `adjudications` or medallion tables. It is prepared but has not been executed:
 
 ```bash
-uv run --project . python src/heldout.py --create --profile fe-bar --warehouse-id <WAREHOUSE_ID>
+uv run --project . python src/heldout.py --create --profile fe-bar-ir-2026 --warehouse-id <WAREHOUSE_ID>
 ```
 
 Tests use synthetic fixtures and make no live calls.
@@ -167,8 +167,8 @@ Tests use synthetic fixtures and make no live calls.
 ## Live evaluation
 
 ```bash
-export DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar
-uv run python src/evaluate.py --profile fe-bar \
+export DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026 LAKEBASE_PROFILE=fe-bar-ir-2026
+uv run python src/evaluate.py --profile fe-bar-ir-2026 \
   --experiment /Shared/claims-adjudication-offline-evaluation \
   --candidate-version 3
 ```

@@ -316,10 +316,10 @@ def test_live_written_recommendation_has_non_null_recommended_at():
     record["idempotency_key"] = adjudication_id
 
     try:
-        cm = connect(profile="fe-bar")
+        cm = connect(profile="fe-bar-ir-2026")
         conn = cm.__enter__()
     except Exception as exc:  # no creds / Lakebase unreachable -> skip
-        pytest.skip(f"fe-bar Lakebase not reachable: {exc}")
+        pytest.skip(f"fe-bar-ir-2026 Lakebase not reachable: {exc}")
     try:
         # Outer transaction so write_adjudication's own transaction() nests as a
         # savepoint (visible to our read-back) rather than committing immediately.

@@ -191,7 +191,7 @@ def test_every_cli_call_carries_the_explicit_profile():
         list(st.ROUTINE_RESYNC), runner=cli, pg=lambda s: None, sleep=lambda s: None
     )
     for cmd in cli.calls:
-        assert cmd[cmd.index("--profile") + 1] == "fe-bar"
+        assert cmd[cmd.index("--profile") + 1] == "fe-bar-ir-2026"
 
 
 def _record_events(cli, events):

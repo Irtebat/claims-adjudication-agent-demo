@@ -20,7 +20,7 @@ resources:
             continuous:
               pause_status: UNPAUSED
         - Raise max_events so a run drains a long burst of outbox rows.
-        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar`.
+        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar-ir-2026`.
 
       environments:
         - environment_key: services

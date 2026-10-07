@@ -460,13 +460,13 @@ def test_endpoint_worker_uses_profile_and_shared_request_path(monkeypatch):
         workspace_client,
     )
     connection = _WorkerConnection([{"claim_id": "c"}, None])
-    adapter = endpoint_adapter("endpoint", "claims/name", profile="fe-bar")
+    adapter = endpoint_adapter("endpoint", "claims/name", profile="fe-bar-ir-2026")
 
-    assert adapter.worker_spec.profile == "fe-bar"
+    assert adapter.worker_spec.profile == "fe-bar-ir-2026"
     ablation._worker_main(adapter.worker_spec, connection)
 
     assert len(clients) == 1
-    assert clients[0].profile == "fe-bar"
+    assert clients[0].profile == "fe-bar-ir-2026"
     assert clients[0].http_timeout_seconds == ablation.DEFAULT_REQUEST_TIMEOUT_SECONDS
     assert clients[0].retry_timeout_seconds == ablation.DEFAULT_REQUEST_TIMEOUT_SECONDS
     assert connection.responses[1]["output"]["verdict"] == "DENY"

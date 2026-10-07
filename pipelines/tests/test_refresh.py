@@ -110,7 +110,7 @@ def test_refresh_resolves_current_cdf_table_names_before_deploy(monkeypatch):
 def test_collapsed_passthrough_actions_are_removed(monkeypatch, action):
     # These were pure `databricks bundle <cmd>` shims. They were collapsed: the README
     # now documents them as direct `databricks bundle ... --target prod --profile
-    # fe-bar` commands, and the wrapper's parser rejects them (argparse exits 2 on an
+    # fe-bar-ir-2026` commands, and the wrapper's parser rejects them (argparse exits 2 on an
     # invalid choice). The genuine-orchestration actions stay.
     monkeypatch.setattr(run.subprocess, "run", _make_fake_run([]))
     monkeypatch.setattr(sys, "argv", ["run.py", action])

@@ -24,7 +24,7 @@ Three distinct paths, because they have different side effects on Postgres grant
   re-grants, because the recreated table is owned by a different role and has lost
   every prior grant.
 
-Usage (``lakebase/run.py`` wraps these with ``--profile fe-bar``):
+Usage (``lakebase/run.py`` wraps these with ``--profile fe-bar-ir-2026``):
     python lakebase/scripts/synced_tables.py create
     python lakebase/scripts/synced_tables.py resync --tables customer_heat_risk prior_claims_corpus
     python lakebase/scripts/synced_tables.py recreate --table prior_claims_corpus
@@ -42,7 +42,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-PROFILE = "fe-bar"
+PROFILE = "fe-bar-ir-2026"
 PROJECT = "fe-bar-operational-plane"
 BRANCH = f"projects/{PROJECT}/branches/production"
 ENDPOINT = f"{BRANCH}/endpoints/primary"

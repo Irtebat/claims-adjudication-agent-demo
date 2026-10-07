@@ -69,7 +69,7 @@ def main():
         "action",
         # Only genuinely-non-bundle orchestration lives here. Pure `databricks bundle`
         # passthroughs (validate/deploy/summary) were collapsed — run them directly as
-        # `databricks bundle <validate|deploy|summary> --target prod --profile fe-bar`
+        # `databricks bundle <validate|deploy|summary> --target prod --profile fe-bar-ir-2026`
         # (see pipelines/README.md). What remains adds real logic a plain `bundle run`
         # cannot express: warranty-schedule sourcing (generate/check-generator),
         # dynamic native-CDF table resolution (refresh/decision-records), the preview

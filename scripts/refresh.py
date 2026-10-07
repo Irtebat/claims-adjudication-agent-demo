@@ -31,7 +31,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PROFILE = ("--profile", "fe-bar")
+PROFILE = ("--profile", "fe-bar-ir-2026")
 WRAPPER = ("uv", "run", "--with", "pyyaml", "python")
 
 

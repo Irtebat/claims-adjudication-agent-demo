@@ -135,7 +135,7 @@ legitimate direct-`uv run python` exception**:
   `eval/src/evaluate.py`, `eval/src/promote.py`). It is an interactive operator loop
   — a human reviews the evaluation gate and decides promotion — **not a scheduled
   job**; running it as a bundle job would misrepresent an attended human decision as
-  automation, and `evaluate.py` additionally enforces the explicit `fe-bar` profile
+  automation, and `evaluate.py` additionally enforces the explicit `fe-bar-ir-2026` profile
   as a money-safety guard.
 - **Everything that runs on Databricks compute uses DABs.** `fraud_graph` (builds
   `gold.customer_heat_risk`), `prior_claims_corpus` (builds
@@ -146,7 +146,7 @@ legitimate direct-`uv run python` exception**:
 
 ## Release and deployment
 
-Use the `fe-bar` workspace profile for every command. The release order is fixed:
+Use the `fe-bar-ir-2026` workspace profile for every command. The release order is fixed:
 
 1. `agent/src/register_agent.py` logs and isolated-validates a new model version,
    registers it, and assigns `@candidate`.
@@ -181,20 +181,20 @@ registered version:
 
 ```bash
 cd agent
-DATABRICKS_CONFIG_PROFILE=fe-bar uv run --project ../eval \
-  python src/register_agent.py --profile fe-bar
+DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026 uv run --project ../eval \
+  python src/register_agent.py --profile fe-bar-ir-2026
 
 cd ../eval
-DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar \
+DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026 LAKEBASE_PROFILE=fe-bar-ir-2026 \
   MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py \
-  --profile fe-bar --experiment /Shared/claims-adjudication-offline-evaluation \
+  --profile fe-bar-ir-2026 --experiment /Shared/claims-adjudication-offline-evaluation \
   --candidate-version N
-uv run python src/promote.py --profile fe-bar --candidate-version N --promote
+uv run python src/promote.py --profile fe-bar-ir-2026 --candidate-version N --promote
 
 cd ../agent
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy -t prod --profile fe-bar
-databricks bundle run deploy_claims_agent -t prod --profile fe-bar
+databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
+databricks bundle deploy -t prod --profile fe-bar-ir-2026
+databricks bundle run deploy_claims_agent -t prod --profile fe-bar-ir-2026
 ```
 
 The deployment is idempotent. It serves the `@prod` version at
@@ -242,7 +242,7 @@ Lakebase, governed retrieval embedding, governed reasoning, and the atomic write
 | `src/offline_validation.py` | Runs the agent on a labeled sample spanning every injected pattern and captures the evidence (recommendation vs authority, decision records, no override). |
 | `src/fraud_graph.py` + `src/fraud_graph_job.py` | Connected-components cluster risk over shared heats, scored by customer concentration, written to `gold.customer_heat_risk`. |
 | `src/db.py` | Lakebase psycopg connection using an SDK OAuth credential. |
-| `src/workspace_client.py` | Shared workspace client: dedicated application-service-principal OAuth in served mode and the explicit `fe-bar` profile for local runs. |
+| `src/workspace_client.py` | Shared workspace client: dedicated application-service-principal OAuth in served mode and the explicit `fe-bar-ir-2026` profile for local runs. |
 
 ## Data flow
 
@@ -275,9 +275,9 @@ always with an explicit profile:
 
 ```bash
 uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
-  python lakebase/src/policy_intake.py --profile fe-bar       # idempotent; owns the 4 tables
-databricks bundle run fraud_graph -t prod --profile fe-bar          # gold.customer_heat_risk
-databricks bundle run prior_claims_corpus -t prod --profile fe-bar  # gold.prior_claims_corpus
+  python lakebase/src/policy_intake.py --profile fe-bar-ir-2026       # idempotent; owns the 4 tables
+databricks bundle run fraud_graph -t prod --profile fe-bar-ir-2026          # gold.customer_heat_risk
+databricks bundle run prior_claims_corpus -t prod --profile fe-bar-ir-2026  # gold.prior_claims_corpus
 ```
 
 On a fresh workspace `fraud_graph` runs once before the first medallion refresh: with

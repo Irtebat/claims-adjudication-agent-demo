@@ -1,7 +1,7 @@
 # Runbook
 
 What runs in this repository, what triggers it, and the order to run things in. All
-commands use `--profile fe-bar`; bundles use `--target prod` (`-t prod`), except the
+commands use `--profile fe-bar-ir-2026`; bundles use `--target prod` (`-t prod`), except the
 app bundle, which uses `-t default`. Run commands from the repository root unless a
 directory is named.
 
@@ -56,7 +56,7 @@ Then, once the app and serving service principals exist:
 
 1. `uv run --with pyyaml python lakebase/run.py synced-tables` (creates all seven
    synced tables, builds the corpus indexes, grants SELECT to both principals).
-2. `cd pipelines && databricks bundle run deploy_metric_views -t prod --profile fe-bar`
+2. `cd pipelines && databricks bundle run deploy_metric_views -t prod --profile fe-bar-ir-2026`
 3. `uv run --with pyyaml python pipelines/run.py govern`
 4. Deploy the agent endpoint, app, dashboards, and services as their READMEs describe.
 
@@ -111,10 +111,10 @@ Lakebase operational table (for example a new column on `public.adjudications`):
 1. Add the column to `lakebase/src/setup_and_seed.py` (the `CREATE TABLE` for fresh
    setups, plus an `ADD COLUMN IF NOT EXISTS` if existing workspaces need it). Do not
    rerun `setup-and-seed` on a live workspace; apply the `ALTER` once over psql
-   (`databricks psql --project fe-bar-operational-plane --profile fe-bar`).
+   (`databricks psql --project fe-bar-operational-plane --profile fe-bar-ir-2026`).
 2. Native CDF re-snapshots the table. The next medallion run fails by design (see
    below). Run one full refresh of the medallion:
-   `cd pipelines && databricks bundle run medallion --full-refresh-all -t prod --profile fe-bar`
+   `cd pipelines && databricks bundle run medallion --full-refresh-all -t prod --profile fe-bar-ir-2026`
 3. Run the routine refresh.
 
 UC source of a synced table:
@@ -129,8 +129,8 @@ UC source of a synced table:
 ### Event backbone
 
 1. Put the four Kafka secrets into scope `fe-bar-aiven-kafka` (`services/README.md`).
-2. `cd services && databricks bundle deploy -t prod --profile fe-bar`
-3. `databricks bundle run migrate -t prod --profile fe-bar` (once).
+2. `cd services && databricks bundle deploy -t prod --profile fe-bar-ir-2026`
+3. `databricks bundle run migrate -t prod --profile fe-bar-ir-2026` (once).
 4. The hourly schedules then run producer -> worker -> relay -> consumers. To drive it
    by hand, `bundle run` them in that order.
 

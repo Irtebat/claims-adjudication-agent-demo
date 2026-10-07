@@ -23,7 +23,7 @@ database — it never reports success for a principal it skipped. Pass the expli
 
 Usage:
     uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
-        python lakebase/scripts/regrant_synced_table_selects.py --profile fe-bar
+        python lakebase/scripts/regrant_synced_table_selects.py --profile fe-bar-ir-2026
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def _resolve_consumers(app_principal, serving_principal, allow_single=False):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", default="fe-bar")
+    parser.add_argument("--profile", default="fe-bar-ir-2026")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--database", default=DEFAULT_DATABASE)
     parser.add_argument(

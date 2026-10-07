@@ -10,7 +10,7 @@ def test_workspace_client_uses_profile_without_service_principal(monkeypatch):
     monkeypatch.delenv("APP_SP_CLIENT_SECRET", raising=False)
     with patch("databricks.sdk.WorkspaceClient") as constructor:
         workspace_client(None)
-    constructor.assert_called_once_with(profile="fe-bar")
+    constructor.assert_called_once_with(profile="fe-bar-ir-2026")
 
 
 def test_workspace_client_uses_service_principal_environment(monkeypatch):

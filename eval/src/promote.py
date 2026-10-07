@@ -14,7 +14,7 @@ the candidate wins:
 If the candidate does not win, the alias is left unchanged and the reason is
 reported. Moving the alias is an explicit, gated, logged action: the CLI defaults
 to a dry-run report and only mutates the registry when invoked with ``--promote``
-against the ``fe-bar`` profile.
+against the ``fe-bar-ir-2026`` profile.
 
 Grounded against MLflow 3.16.1:
   - ``mlflow.search_runs(experiment_ids=..., filter_string=..., order_by=..., max_results=...)``
@@ -288,7 +288,7 @@ def promote_if_beats_prod(
         if dry_run:
             decision["reason"] = (
                 "candidate passes the bootstrap gate; dry-run so @prod remains unset. "
-                "Re-run with --promote (profile fe-bar) to set the alias."
+                "Re-run with --promote (profile fe-bar-ir-2026) to set the alias."
             )
             return decision
         client.set_registered_model_alias(model_name, PROD_ALIAS, candidate_version)
@@ -315,7 +315,7 @@ def promote_if_beats_prod(
     if dry_run:
         decision["reason"] = (
             "candidate wins the gate; dry-run so @prod is unchanged. "
-            "Re-run with --promote (profile fe-bar) to move the alias."
+            "Re-run with --promote (profile fe-bar-ir-2026) to move the alias."
         )
         return decision
 
@@ -347,10 +347,10 @@ def main() -> None:
         help="Actually move the @prod alias if the candidate wins (default: dry-run report only).",
     )
     args = parser.parse_args()
-    # Moving the LIVE alias is only ever approved for the explicit fe-bar profile.
-    if args.promote and args.profile != "fe-bar":
+    # Moving the LIVE alias is only approved for the configured production profile.
+    if args.promote and args.profile != "fe-bar-ir-2026":
         raise ValueError(
-            "moving the live @prod alias is approved only for the explicit fe-bar profile"
+            "moving the live @prod alias is approved only for the explicit fe-bar-ir-2026 profile"
         )
     if args.profile:
         os.environ["DATABRICKS_CONFIG_PROFILE"] = args.profile

@@ -68,7 +68,7 @@ def test_run_uses_persist_false_and_never_reads_back(monkeypatch, tmp_path):
     monkeypatch.setattr(db_module, "connect", fake_connect)
     monkeypatch.setattr(ov, "_select_sample", lambda conn: sample)
 
-    summary = ov.run("fe-bar", "/exp/offline", tmp_path)
+    summary = ov.run("fe-bar-ir-2026", "/exp/offline", tmp_path)
 
     # Every adjudication ran with persist=False — validation writes nothing to Lakebase.
     assert persist_calls, "adjudicate was never called"

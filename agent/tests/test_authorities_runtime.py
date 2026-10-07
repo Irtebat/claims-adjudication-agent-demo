@@ -273,10 +273,10 @@ def test_live_lakebase_path_matches_reference(kind):
     except Exception as exc:  # pragma: no cover
         pytest.skip(f"db module unavailable: {exc}")
     try:
-        cm = connect(profile="fe-bar")
+        cm = connect(profile="fe-bar-ir-2026")
         conn = cm.__enter__()
     except Exception as exc:  # no creds / Lakebase unreachable -> skip
-        pytest.skip(f"fe-bar Lakebase not reachable: {exc}")
+        pytest.skip(f"fe-bar-ir-2026 Lakebase not reachable: {exc}")
     try:
         rt = AuthorityRuntime(conn)
         if kind == "conformance":

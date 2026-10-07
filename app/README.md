@@ -63,7 +63,7 @@ route hard-denies.
 
 - **Lakebase (operational OLTP):** all reads/writes run as the **App service
   principal** via the platform-injected identity (`appkit.lakebase` pool; the
-  platform mints the DB credential, `sslmode=require`). No `fe-bar` profile fallback.
+  platform mints the DB credential, `sslmode=require`). No local CLI profile fallback.
 - **OBO (on-behalf-of the signed-in user):** used only for the **governed** surfaces
   — the Genie copilot/chat (`dashboards.genie` scope) and the business-dashboard
   warehouse queries (`sql` scope). The OBO user identity (`x-forwarded-email`) is
@@ -107,7 +107,7 @@ npm run test                      # vitest — authz matrix + finalize contract 
 npx tsc -b tsconfig.server.json   # server typecheck — clean
 npx tsc -b tsconfig.client.json   # client typecheck — clean
 npx appkit lint                   # ast-grep (no-double-type-assertion, etc.) — clean
-databricks bundle validate --profile fe-bar   # Validation OK
+databricks bundle validate --profile fe-bar-ir-2026   # Validation OK
 ```
 
 `server/**` and `client/**` are eslint- and prettier-clean.
@@ -117,7 +117,7 @@ databricks bundle validate --profile fe-bar   # Validation OK
 Deploying provisions the app's own service principal, whose id the Lakebase grants
 need. Order:
 
-1. `databricks bundle deploy -t default --profile fe-bar` — creates the app + its SP,
+1. `databricks bundle deploy -t default --profile fe-bar-ir-2026` — creates the app + its SP,
    injects `PGHOST`/`PGDATABASE`/`PGPORT`/`PGSSLMODE` + the resource envs.
 2. Grant the **app SP** a Lakebase Postgres role + fine-grained grants (the app SP is
    distinct from the serving SP `claims-adjudication-serving`):
