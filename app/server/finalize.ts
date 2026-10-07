@@ -32,6 +32,21 @@ export function operationalVerdict(v: AgentVerdict): OperationalVerdict {
   return v === 'PEND_INVESTIGATE' ? 'PEND' : v;
 }
 
+/**
+ * Canonical verdict for the "did the human change the recommendation?" comparison only.
+ *
+ * The agent/UI 'PEND_INVESTIGATE' and the operational 'PEND' are the SAME verdict in two
+ * vocabularies: `adjudications.recommended_verdict` is stored operationally ('PEND') while the
+ * client submits the agent form ('PEND_INVESTIGATE'). Collapsing both to 'PEND' before comparing
+ * means accepting an investigate/hold recommendation UNCHANGED is not mistaken for an override
+ * (which would wrongly demand an override reason). This affects ONLY override/differs detection —
+ * it does not change which verdicts/dispositions finalize accepts or writes, the operational
+ * verdict persisted, or any money/eligibility invariant.
+ */
+function canonicalVerdict(v: string): string {
+  return v === 'PEND_INVESTIGATE' ? 'PEND' : v;
+}
+
 export interface FinalizeRequest {
   finalVerdict: AgentVerdict;
   finalDisposition: string;
@@ -98,8 +113,11 @@ export function validateFinalize(req: FinalizeRequest, rec: RecommendationState)
     if (!amountsEqual(amount, 0)) errors.push('pend_must_be_zero_amount');
   }
 
+  // Compare verdicts on a canonical basis so the operational 'PEND' recommendation and an
+  // unchanged 'PEND_INVESTIGATE' acceptance are not treated as a change. A genuine change —
+  // PEND -> APPROVE/DENY, any disposition change, or any amount change — still flips `differs`.
   const differs =
-    verdict !== rec.recommendedVerdict ||
+    canonicalVerdict(verdict) !== canonicalVerdict(rec.recommendedVerdict) ||
     disposition !== rec.recommendedDisposition ||
     !amountsEqual(amount, rec.approvedAmount);
   if (differs && (!req.overrideReason || req.overrideReason.trim().length === 0)) {

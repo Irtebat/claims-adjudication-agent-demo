@@ -120,6 +120,78 @@ describe('validateFinalize', () => {
   });
 });
 
+describe('validateFinalize — investigate/PEND vocabulary (override detection)', () => {
+  // The recommendation as persisted on adjudications: verdict is OPERATIONAL ('PEND'),
+  // disposition is 'PEND_INVESTIGATE', amount 0. The client submits the agent verdict
+  // 'PEND_INVESTIGATE' for an unchanged accept — the two must NOT read as a change.
+  const pendRec = {
+    recommendedVerdict: 'PEND',
+    recommendedDisposition: 'PEND_INVESTIGATE',
+    approvedAmount: 0,
+    claimedAmount: 9000,
+  };
+
+  it('treats an unchanged PEND/investigate accept as NOT an override (no reason required)', () => {
+    const v = validateFinalize(
+      { finalVerdict: 'PEND_INVESTIGATE', finalDisposition: 'PEND_INVESTIGATE', approvedAmount: 0, decidedBy: 'a@x' },
+      pendRec
+    );
+    expect(v.ok).toBe(true);
+    expect(v.overrideFlag).toBe(false);
+    expect(v.operationalVerdict).toBe('PEND');
+    expect(v.errors).not.toContain('override_reason_required');
+  });
+
+  it('ignores a stray reason on an unchanged PEND accept (still not an override)', () => {
+    const v = validateFinalize(
+      {
+        finalVerdict: 'PEND_INVESTIGATE',
+        finalDisposition: 'PEND_INVESTIGATE',
+        approvedAmount: 0,
+        overrideReason: 'noted',
+        decidedBy: 'a@x',
+      },
+      pendRec
+    );
+    expect(v.ok).toBe(true);
+    expect(v.overrideFlag).toBe(false);
+  });
+
+  it('still flags a genuine PEND -> APPROVE change as an override requiring a reason', () => {
+    const v = validateFinalize(
+      { finalVerdict: 'APPROVE', finalDisposition: 'CREDIT', approvedAmount: 4000, decidedBy: 'a@x' },
+      pendRec
+    );
+    expect(v.overrideFlag).toBe(true);
+    expect(v.ok).toBe(false);
+    expect(v.errors).toContain('override_reason_required');
+  });
+
+  it('accepts a PEND -> APPROVE override when a reason is given', () => {
+    const v = validateFinalize(
+      {
+        finalVerdict: 'APPROVE',
+        finalDisposition: 'CREDIT',
+        approvedAmount: 4000,
+        overrideReason: 'goodwill settlement',
+        decidedBy: 'a@x',
+      },
+      pendRec
+    );
+    expect(v.ok).toBe(true);
+    expect(v.overrideFlag).toBe(true);
+  });
+
+  it('flags a genuine PEND -> DENY change as an override requiring a reason', () => {
+    const v = validateFinalize(
+      { finalVerdict: 'DENY', finalDisposition: 'DENY', approvedAmount: 0, decidedBy: 'a@x' },
+      pendRec
+    );
+    expect(v.overrideFlag).toBe(true);
+    expect(v.errors).toContain('override_reason_required');
+  });
+});
+
 describe('buildAdjudicatedEvent', () => {
   it('reflects the FINAL decision and mirrors the canonical shape', () => {
     const { eventId, sql } = buildAdjudicatedEvent(

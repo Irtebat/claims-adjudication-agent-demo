@@ -100,7 +100,10 @@ export function RiskFlags({
   riskReason?: Str;
   className?: string;
 }) {
-  const hasAny = Boolean(duplicateOf || highRisk);
+  // Strict `=== true`: never render the fraud chip for a falsy-but-present value (e.g. a stray
+  // string "false"), only for a real high_risk flag.
+  const showHighRisk = highRisk === true;
+  const hasAny = Boolean(duplicateOf) || showHighRisk;
   if (!hasAny) return null;
   return (
     <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
@@ -110,7 +113,7 @@ export function RiskFlags({
           Duplicate
         </Chip>
       )}
-      {highRisk &&
+      {showHighRisk &&
         (riskReason ? (
           <Tooltip>
             <TooltipTrigger asChild>

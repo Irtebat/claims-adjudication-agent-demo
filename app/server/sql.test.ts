@@ -35,18 +35,24 @@ describe('queueSql', () => {
     expect(params.slice(-2)).toEqual([25, 5]);
   });
 
-  it('LEFT JOINs customer_heat_risk and surfaces the gold high_risk signal (not fraud_cluster_id alone)', () => {
+  it('surfaces the gold high_risk signal via a provably-1:1 LATERAL (not fraud_cluster_id, not a multiplying join)', () => {
     // Bug 2: the queue chip must gate on the tuned `high_risk` flag, which lives on
-    // reference.customer_heat_risk — not on `fraud_cluster_id`, which is on ~every claim. The
-    // joins are LEFT so a claim with no matching heat-risk row is listed (high_risk NULL), not
-    // dropped or duplicated.
+    // reference.customer_heat_risk — not on `fraud_cluster_id`, which is on ~every claim.
+    // Cardinality must be guaranteed by construction, not by the data: a LEFT JOIN LATERAL
+    // whose subquery ends in LIMIT 1 returns AT MOST ONE row per queue row even if heats_coils
+    // or customer_heat_risk have duplicate keys, so the queue stays one row per adjudication.
     const t = flat(queueSql().text);
-    expect(t).toContain('LEFT JOIN reference.heats_coils hc ON hc.coil_id = c.coil_id');
-    expect(t).toContain(
-      'LEFT JOIN reference.customer_heat_risk r ON r.customer_id = c.customer_id AND r.heat_no = hc.heat_no'
-    );
-    expect(t).toContain('r.high_risk');
-    expect(t).toContain('r.risk_reason');
+    expect(t).toContain('LEFT JOIN LATERAL');
+    expect(t).toContain('r.high_risk, r.risk_reason');
+    // The LIMIT 1 is what guarantees ≤1 row; assert it sits inside the lateral subquery, before
+    // its closing `) r ON true`.
+    const lateral = t.slice(t.indexOf('LEFT JOIN LATERAL'), t.indexOf(') r ON true'));
+    expect(lateral).toContain('reference.customer_heat_risk r');
+    expect(lateral).toContain('reference.heats_coils hc');
+    expect(lateral).toContain('LIMIT 1');
+    // And the selected high_risk/risk_reason come from the lateral alias, not a plain join that
+    // could multiply queue rows.
+    expect(t).not.toContain('JOIN reference.customer_heat_risk r ON r.customer_id = c.customer_id');
   });
 });
 
