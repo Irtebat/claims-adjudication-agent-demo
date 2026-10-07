@@ -158,23 +158,39 @@ Use the `fe-bar` workspace profile for every command. The release order is fixed
    Serving endpoint. The `deploy_claims_agent` job in `agent/databricks.yml` runs
    the same script.
 
-Before the first deployment, a workspace administrator must complete these
-prerequisites for the application service principal:
+Before the first deployment, a workspace administrator runs
+`agent/scripts/setup_serving_sp.py`, the idempotent prerequisite script that
+provisions the application service principal end to end (it takes the workspace
+profile and the account profile, since the account-SP and OAuth-secret steps need
+the account profile):
 
-1. Create the application service principal and generate a workspace-level OAuth
-   secret for it.
-2. Grant only the `workspace-access` entitlement. This lets the service principal
-   call the workspace API to resolve the Lakebase endpoint and mint a database
-   credential; it does not need workspace admin, cluster creation, or SQL access.
+```bash
+uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
+  python agent/scripts/setup_serving_sp.py \
+  --profile fe-bar --account-profile <account-profile>
+```
+
+It performs these steps, skipping any resource that already exists and printing the
+resulting service principal application id:
+
+1. Create the application service principal and assign it to the workspace with the
+   `workspace-access` entitlement (the USER workspace permission). This lets the
+   service principal call the workspace API to resolve the Lakebase endpoint and mint
+   a database credential; it does not need workspace admin, cluster creation, or SQL
+   access.
+2. Generate a workspace-level OAuth secret for it.
 3. Create the Lakebase OAuth role for the service principal and grant the
    table-level read/write permissions required by the agent. The role value is the
    application service principal's application UUID.
-4. Create the `claims-agent` secret scope and write `app-sp-client-id`,
-   `app-sp-client-secret`, and `lakebase-db-user`. Set `lakebase-db-user` to the
-   Lakebase OAuth role from step 3: the application service principal's application
-   UUID.
-5. Grant the service principal `EXECUTE` on
+4. Grant the service principal `EXECUTE` on
    `system.ai.databricks-gpt-5-4` and `system.ai.gte_large_en_v1_5`.
+5. Create the `claims-agent` secret scope and write `app-sp-client-id`,
+   `app-sp-client-secret`, and `lakebase-db-user`. `lakebase-db-user` is the Lakebase
+   OAuth role from step 3: the application service principal's application UUID.
+
+The `reference.*` synced-table SELECTs in the grant set are also reapplied by
+`lakebase/scripts/regrant_synced_table_selects.py` whenever a synced table is created
+or recreated.
 
 Run the lifecycle and deployment as follows, replacing `N` with the newly
 registered version:
