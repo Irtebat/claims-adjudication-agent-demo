@@ -1,5 +1,14 @@
 command: ['npm', 'run', 'start']
 env:
+  # Databricks Apps installs devDependencies by default; its npm proxy only serves
+  # packages cached from a prior successful build, so a NEW devDependency tarball
+  # (e.g. jsdom -> xmlchars) 404s and fails the deploy. NODE_ENV=production makes the
+  # deploy install production-only, skipping test-only devDependencies (jsdom, vitest,
+  # eslint). All packages the on-platform `npm run build` needs are therefore kept in
+  # "dependencies" (vite, tsc/typescript, tsdown, tailwind, @types/*). It also matches
+  # the runtime, which already runs as production.
+  - name: NODE_ENV
+    value: 'production'
   - name: DATABRICKS_WAREHOUSE_ID
     valueFrom: sql-warehouse
   - name: DATABRICKS_GENIE_SPACE_ID
