@@ -53,8 +53,8 @@ create-role, create-database, or bypass-RLS attributes.
 
 Granted `CONNECT` on `databricks_postgres`; `USAGE` on `public` and `reference`;
 `SELECT` on `public.claims`, `spec_params`, `warranty_terms`, `spec_clauses`,
-`warranty_clauses`, and `prior_claims`; `SELECT` on `reference.heats_coils`,
-`mill_test_certs`, and `customer_heat_risk`; `SELECT, INSERT, UPDATE` on
+and `warranty_clauses`; `SELECT` on `reference.heats_coils`, `mill_test_certs`,
+`customer_heat_risk`, and `prior_claims_corpus`; `SELECT, INSERT, UPDATE` on
 `public.adjudications`; and `SELECT, INSERT` on
 `public.adjudication_decision_records`. `pg_get_serial_sequence` returned no
 sequences for either writable table, so no sequence grant was applied.
