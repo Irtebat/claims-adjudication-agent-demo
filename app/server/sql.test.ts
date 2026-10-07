@@ -34,6 +34,20 @@ describe('queueSql', () => {
     // limit + offset are the last two bound params.
     expect(params.slice(-2)).toEqual([25, 5]);
   });
+
+  it('LEFT JOINs customer_heat_risk and surfaces the gold high_risk signal (not fraud_cluster_id alone)', () => {
+    // Bug 2: the queue chip must gate on the tuned `high_risk` flag, which lives on
+    // reference.customer_heat_risk — not on `fraud_cluster_id`, which is on ~every claim. The
+    // joins are LEFT so a claim with no matching heat-risk row is listed (high_risk NULL), not
+    // dropped or duplicated.
+    const t = flat(queueSql().text);
+    expect(t).toContain('LEFT JOIN reference.heats_coils hc ON hc.coil_id = c.coil_id');
+    expect(t).toContain(
+      'LEFT JOIN reference.customer_heat_risk r ON r.customer_id = c.customer_id AND r.heat_no = hc.heat_no'
+    );
+    expect(t).toContain('r.high_risk');
+    expect(t).toContain('r.risk_reason');
+  });
 });
 
 describe('cockpitAdjudicationSql', () => {

@@ -68,6 +68,14 @@ function whereFilters(alias: string, claimAlias: string, f: ListFilters, params:
  * sibling excludes the claim. The NOT EXISTS is correlated on claim_id, so it also drops
  * an offline-validation-style stray RECOMMENDED row written against an already-finalized
  * claim.
+ *
+ * The queue also surfaces the gold fraud signal `high_risk` (+ `risk_reason`) by LEFT JOINing
+ * reference.customer_heat_risk on (customer_id, heat_no) — heat_no resolved from the claim's
+ * coil via reference.heats_coils, the same linkage the cockpit context uses. This is what the
+ * queue's risk chip gates on: `fraud_cluster_id` is a graph-component id present on virtually
+ * every claim and is NOT a fraud signal on its own, whereas `high_risk` is the tuned flag. The
+ * joins are LEFT (and 1:1 on the key) so a claim with no matching heat-risk row stays in the
+ * queue with high_risk NULL rather than being dropped or duplicated.
  */
 export function queueSql(f: ListFilters = {}): Sql {
   const params: unknown[] = [];
@@ -78,9 +86,12 @@ export function queueSql(f: ListFilters = {}): Sql {
            a.verdict, a.recommended_verdict, a.recommended_disposition,
            a.approved_amount, a.claimed_amount, a.confidence,
            a.duplicate_of_claim_id, a.fraud_cluster_id, a.supplier_attributable,
-           a.recommended_at
+           a.recommended_at, r.high_risk, r.risk_reason
       FROM public.adjudications a
       JOIN public.claims c ON c.claim_id = a.claim_id
+      LEFT JOIN reference.heats_coils hc ON hc.coil_id = c.coil_id
+      LEFT JOIN reference.customer_heat_risk r
+             ON r.customer_id = c.customer_id AND r.heat_no = hc.heat_no
      WHERE a.decision_status = 'RECOMMENDED'
        AND NOT EXISTS (
              SELECT 1 FROM public.adjudications h

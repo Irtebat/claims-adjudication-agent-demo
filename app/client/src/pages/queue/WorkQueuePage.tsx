@@ -30,7 +30,9 @@ import { ClaimCockpit } from '@/components/cockpit/ClaimCockpit';
 type RiskFilter = 'all' | 'duplicate' | 'fraud';
 
 function riskCount(r: QueueItem): number {
-  return (r.duplicate_of_claim_id ? 1 : 0) + (r.fraud_cluster_id ? 1 : 0);
+  // Gate on the tuned `high_risk` gold flag, NOT fraud_cluster_id (a graph-component id present
+  // on virtually every claim) — so the Risk column only lights up for genuine signals.
+  return (r.duplicate_of_claim_id ? 1 : 0) + (r.high_risk ? 1 : 0);
 }
 
 function uniqueSorted(values: (string | null)[]): string[] {
@@ -107,7 +109,7 @@ export function WorkQueuePage() {
       if (verdict !== 'all' && r.recommended_verdict !== verdict) return false;
       if (disposition !== 'all' && r.recommended_disposition !== disposition) return false;
       if (risk === 'duplicate' && !r.duplicate_of_claim_id) return false;
-      if (risk === 'fraud' && !r.fraud_cluster_id) return false;
+      if (risk === 'fraud' && !r.high_risk) return false;
       if (q) {
         const hay =
           `${r.claim_id} ${r.customer_id ?? ''} ${r.defect_code ?? ''} ${r.defect_narrative ?? ''}`.toLowerCase();
@@ -173,7 +175,7 @@ export function WorkQueuePage() {
       sortValue: (r) => riskCount(r),
       cell: (r) =>
         riskCount(r) > 0 ? (
-          <RiskFlags duplicateOf={r.duplicate_of_claim_id} fraudCluster={r.fraud_cluster_id} />
+          <RiskFlags duplicateOf={r.duplicate_of_claim_id} highRisk={Boolean(r.high_risk)} riskReason={r.risk_reason} />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),

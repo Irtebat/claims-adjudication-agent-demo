@@ -55,6 +55,15 @@ export interface QueueItem {
   fraud_cluster_id: Str;
   supplier_attributable: boolean | null;
   recommended_at: Str;
+  /**
+   * Gold fraud signal joined from reference.customer_heat_risk (risk_score + cluster_size
+   * tuned threshold). Unlike fraud_cluster_id — a graph-component id present on virtually
+   * every claim — high_risk is the real signal the queue's risk chip gates on. May be null
+   * when no customer_heat_risk row matches (or the column predates the fraud workstream).
+   */
+  high_risk: boolean | null;
+  /** Human-readable basis for high_risk (becomes the risk chip's tooltip). May be null. */
+  risk_reason: Str;
 }
 
 /** One row of claims history (`GET /api/history`, FINAL adjudications). */
