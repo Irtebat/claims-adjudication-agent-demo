@@ -175,6 +175,21 @@ def test_widgets_match_base_parameters(job):
     assert keys == _widget_names(_tree(job))
 
 
+def test_migrate_serving_principal_is_bundle_parameterized():
+    bundle_source = (SERVICES / "databricks.yml").read_text()
+    sp_role_block = re.search(r"(?ms)^  sp_role:\n(?P<body>(?:    .*\n)+)", bundle_source)
+    assert sp_role_block is not None
+    default = re.search(r"(?m)^    default: (?P<value>\S+)$", sp_role_block["body"])
+    assert default is not None
+    serving_principal = default["value"]
+    migrate_source = (SRC / "migrate.py").read_text()
+
+    assert serving_principal == "9779e0a0-0dc3-4f60-8746-ae1445b27c6e"
+    assert serving_principal not in migrate_source
+    assert 'dbutils.widgets.text("sp_role", "")' in migrate_source
+    assert 'dbutils.widgets.get("sp_role").strip()' in migrate_source
+
+
 def test_no_cache_or_persist_on_serverless():
     offenders = [
         p.name for p in SRC.glob("*.py") if re.search(r"\.(cache|persist)\(", p.read_text())

@@ -1,7 +1,7 @@
 # Databricks notebook source
 # ruff: noqa: F821
-"""Wave 8 operational-plane migration: drop the deprecated pending queue and grant
-the Wave 6 application service principal the privileges the event layer needs.
+"""Drop the deprecated pending queue and grant the serving service principal the
+privileges the event layer needs.
 
 - DROP ``public.claims_pending`` (user-confirmed removal; empty and out of the DDL).
 - GRANT the SP role the minimum privileges so the endpoint's writer can INSERT the
@@ -10,7 +10,7 @@ the Wave 6 application service principal the privileges the event layer needs.
 
 Runs as the deploying admin (mints a short-lived OAuth credential like
 ``lakebase/src/setup_and_seed.py``); no password/token is stored. The SP role name is
-the SP's application UUID (from the Wave 6 serving-endpoint evidence, not a secret).
+the serving principal's application UUID supplied by the bundle.
 """
 
 import json
@@ -22,11 +22,13 @@ dbutils.widgets.text(
     "endpoint", "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
 )
 dbutils.widgets.text("postgres_database", "databricks_postgres")
-dbutils.widgets.text("sp_role", "47643eb1-dbd5-40a6-a51d-5da6b8e2da7a")
+dbutils.widgets.text("sp_role", "")
 
 endpoint = dbutils.widgets.get("endpoint")
 postgres_database = dbutils.widgets.get("postgres_database")
-sp_role = dbutils.widgets.get("sp_role")
+sp_role = dbutils.widgets.get("sp_role").strip()
+if not sp_role:
+    raise ValueError("sp_role must be supplied by the bundle")
 
 w = WorkspaceClient()
 endpoint_details = w.postgres.get_endpoint(name=endpoint)
