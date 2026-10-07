@@ -18,7 +18,7 @@ mode = dbutils.widgets.get("mode")  # serving_endpoint or in_process
 endpoint = dbutils.widgets.get("endpoint")
 postgres_database = dbutils.widgets.get("postgres_database")
 
-if count < 100:
+if count < 5:
     raise ValueError("count must be >= 100")
 
 print(f"Demo Backlog Parameters: count={count}, seed={seed}, mode={mode}")
