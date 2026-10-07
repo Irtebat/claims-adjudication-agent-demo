@@ -78,6 +78,11 @@ def _run_main(monkeypatch, cursor, argv):
     return connect_calls
 
 
+# Both ids must be passed explicitly now (no hardcoded defaults), so the main()
+# tests supply them on argv.
+BOTH = ["--app-principal", APP_SP, "--serving-principal", SERVING_SP]
+
+
 # --- _regrant: exact statements, right mapping, no over-grant ---------------------
 
 
@@ -116,7 +121,7 @@ def test_regrant_only_select_and_usage_never_write_or_ownership():
 
 def test_main_grants_both_principals_with_exact_table_mapping(monkeypatch):
     cur = FakeCursor()
-    _run_main(monkeypatch, cur, ["regrant"])
+    _run_main(monkeypatch, cur, ["regrant", *BOTH])
     assert cur.statements == _expected(APP_SP, regrant.APP_TABLES) + _expected(
         SERVING_SP, regrant.SERVING_TABLES
     )
@@ -135,9 +140,9 @@ def test_main_is_idempotent_across_repeat_invocations(monkeypatch):
     # Postgres GRANTs are idempotent; the script is also deterministic, so a second
     # invocation issues the identical statement sequence (no accumulation, no skip).
     first = FakeCursor()
-    _run_main(monkeypatch, first, ["regrant"])
+    _run_main(monkeypatch, first, ["regrant", *BOTH])
     second = FakeCursor()
-    _run_main(monkeypatch, second, ["regrant"])
+    _run_main(monkeypatch, second, ["regrant", *BOTH])
     assert first.statements == second.statements
 
 
@@ -163,10 +168,32 @@ def test_main_missing_required_principal_raises_and_grants_nothing(monkeypatch):
         return FakeConn(cur)
 
     monkeypatch.setattr(regrant, "_connect", fake_connect)
-    monkeypatch.setattr(sys, "argv", ["regrant", "--serving-principal", ""])
+    monkeypatch.setattr(
+        sys, "argv", ["regrant", "--app-principal", APP_SP, "--serving-principal", ""]
+    )
     with pytest.raises(ValueError, match="serving"):
         regrant.main()
     # It must fail BEFORE connecting and must not have granted the app principal.
+    assert connect_calls == []
+    assert cur.statements == []
+
+
+def test_main_requires_principals_explicitly(monkeypatch):
+    # No ids on argv and no env fallback: the blanked defaults mean main() fails loudly
+    # before connecting, naming both required principals (no stale hardcoded id runs).
+    monkeypatch.delenv("APP_SP_PRINCIPAL", raising=False)
+    monkeypatch.delenv("SERVING_SP_PRINCIPAL", raising=False)
+    cur = FakeCursor()
+    connect_calls = []
+
+    def fake_connect(*args, **kwargs):
+        connect_calls.append((args, kwargs))
+        return FakeConn(cur)
+
+    monkeypatch.setattr(regrant, "_connect", fake_connect)
+    monkeypatch.setattr(sys, "argv", ["regrant"])
+    with pytest.raises(ValueError, match="app"):
+        regrant.main()
     assert connect_calls == []
     assert cur.statements == []
 
@@ -185,7 +212,7 @@ def test_allow_single_principal_is_explicit_opt_out():
 def test_db_error_propagates_and_no_success(monkeypatch, capsys):
     cur = FakeCursor(fail_on="customer_heat_risk")
     with pytest.raises(RuntimeError, match="postgres error"):
-        _run_main(monkeypatch, cur, ["regrant"])
+        _run_main(monkeypatch, cur, ["regrant", *BOTH])
     # The success JSON is never printed when a grant fails.
     assert "regranted" not in capsys.readouterr().out
 

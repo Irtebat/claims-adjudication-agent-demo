@@ -119,15 +119,27 @@ need. Order:
 
 1. `databricks bundle deploy -t default --profile fe-bar-ir-2026` — creates the app + its SP,
    injects `PGHOST`/`PGDATABASE`/`PGPORT`/`PGSSLMODE` + the resource envs.
-2. Grant the **app SP** a Lakebase Postgres role + fine-grained grants (the app SP is
-   distinct from the serving SP `claims-adjudication-serving`):
-   - `CONNECT` on `databricks_postgres`; `USAGE` on `public` + `reference`.
+2. Grant the **app SP** its fine-grained Lakebase grants with
+   `app/scripts/setup_app_sp.py` (the app SP is distinct from the serving SP
+   `claims-adjudication-serving`; pass the app SP client id from step 1's
+   `service_principal_client_id`):
+
+   ```bash
+   uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
+     python app/scripts/setup_app_sp.py --profile fe-bar-ir-2026 \
+     --app-principal <app-sp-client-id>
+   ```
+
+   The grant set mirrors `docs/evidence/app-deploy/grants.sql`:
+   - `USAGE` on `public` + `reference`.
    - `SELECT` on `public.claims`, `adjudications`, `adjudication_decision_records`,
-     and `reference.*` (including the synced precedent corpus
-     `reference.prior_claims_corpus`; `lakebase/run.py synced-tables` grants the
-     `reference.*` SELECTs when it creates or recreates a synced table).
-   - `SELECT, UPDATE` on `public.adjudications` (finalize UPDATE).
-   - `INSERT` on `public.adjudication_decision_records` (new record_version).
+     `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`, and
+     `reference.heats_coils`, `mill_test_certs`, `customers`, `customer_heat_risk`,
+     `prior_claims_corpus`. The `reference.*` SELECTs are also reapplied by
+     `lakebase/scripts/regrant_synced_table_selects.py` (via `lakebase/run.py
+     synced-tables`) when a synced table is created or recreated.
+   - `INSERT, UPDATE` on `public.adjudications` and
+     `public.adjudication_decision_records` (finalize UPDATE + new record_version).
    - **`INSERT` on `public.outbox`** ← REQUIRED for finalize; not in the serving SP's
      documented grants (`docs/evidence/serving-endpoint/README.md`) — a NEW grant.
 3. Enable **user authorization** with scopes `dashboards.genie` + `sql` (in

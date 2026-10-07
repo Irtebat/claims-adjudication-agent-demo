@@ -1,29 +1,32 @@
 """Re-grant SELECT on the reference.* synced tables to their documented consumers.
 
 Creating or recreating a Lakebase synced table (``scripts/synced_tables.py create`` /
-``recreate``) makes the table owned by the creating role with no consumer grants — a
-recreate DROPS every prior grant. On the go-live run the app service principal lost
-SELECT on ``reference.customer_heat_risk`` and the cockpit 500'd until a manual
-``GRANT SELECT`` was restored. This script re-applies those grants idempotently so a
-create/recreate is reproducible without a manual step. A routine triggered re-sync
-(``synced_tables.py resync``) keeps the existing table and its grants and does NOT
-call this script. It grants ONLY SELECT (plus the
-prerequisite schema USAGE) — never ownership or write — mirroring
+``recreate``) makes the table owned by the creating role with no consumer grants, and
+a recreate drops every prior grant. This script re-applies those grants idempotently
+so a create/recreate reapplies the consumer SELECTs without a manual step. A routine
+triggered re-sync (``synced_tables.py resync``) keeps the existing table and its
+grants and does NOT call this script. It grants ONLY SELECT (plus the prerequisite
+schema USAGE) — never ownership or write — mirroring the reference.* reads in
 ``docs/evidence/app-deploy/grants.sql`` (app SP) and
-``docs/evidence/serving-endpoint/README.md`` (serving SP).
+``docs/evidence/serving-endpoint/README.md`` (serving SP). The one-time service
+principal provisioning and non-synced-table grants live in
+``agent/scripts/setup_serving_sp.py`` and ``app/scripts/setup_app_sp.py``.
 
 Runs against the live Lakebase Postgres endpoint over psycopg as the invoking
 superuser (SDK OAuth credential, sslmode=require) — the same connection pattern as
 ``synced_tables.py``.
 
-Both the app SP and the serving SP are contractually required consumers, so by
-default both principals must be resolved or the script errors before touching the
-database — it never reports success for a principal it skipped. Pass the explicit
+Both the app SP and the serving SP are required consumers, so by default both
+principal ids must be supplied or the script errors before touching the database — it
+never reports success for a principal it skipped. The ids are passed explicitly via
+``--app-principal`` / ``--serving-principal`` (or the ``APP_SP_PRINCIPAL`` /
+``SERVING_SP_PRINCIPAL`` env vars); there is no default id. Pass the explicit
 ``--allow-single-principal`` opt-out to grant only the principal(s) supplied.
 
 Usage:
     uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
-        python lakebase/scripts/regrant_synced_table_selects.py --profile fe-bar-ir-2026
+        python lakebase/scripts/regrant_synced_table_selects.py --profile fe-bar-ir-2026 \
+        --app-principal <app-sp-client-id> --serving-principal <serving-sp-app-id>
 """
 
 from __future__ import annotations
@@ -40,13 +43,6 @@ DEFAULT_ENDPOINT = (
 )
 DEFAULT_DATABASE = "databricks_postgres"
 REFERENCE_SCHEMA = "reference"
-
-# Documented service-principal ids (= Postgres role names). Overridable via flag/env so
-# the flow stays reproducible if a principal is rotated.
-#   app SP     -> docs/evidence/app-deploy/grants.sql
-#   serving SP -> docs/evidence/serving-endpoint/README.md
-DEFAULT_APP_PRINCIPAL = "d5309ee7-a8ea-499f-99d4-4ccbd8369d93"
-DEFAULT_SERVING_PRINCIPAL = "47643eb1-dbd5-40a6-a51d-5da6b8e2da7a"
 
 # reference.* synced tables each consumer reads, per the two evidence docs above.
 # prior_claims_corpus is the precedent corpus the agent's find_similar_prior_claims and
@@ -143,13 +139,15 @@ def main() -> None:
     parser.add_argument("--database", default=DEFAULT_DATABASE)
     parser.add_argument(
         "--app-principal",
-        default=os.environ.get("APP_SP_PRINCIPAL", DEFAULT_APP_PRINCIPAL),
-        help="App service-principal id (Postgres role) for the cockpit reads",
+        default=os.environ.get("APP_SP_PRINCIPAL"),
+        help="App service-principal id (Postgres role) for the cockpit reads. "
+        "Required (or set APP_SP_PRINCIPAL); there is no default id.",
     )
     parser.add_argument(
         "--serving-principal",
-        default=os.environ.get("SERVING_SP_PRINCIPAL", DEFAULT_SERVING_PRINCIPAL),
-        help="Serving service-principal id (Postgres role)",
+        default=os.environ.get("SERVING_SP_PRINCIPAL"),
+        help="Serving service-principal id (Postgres role). Required (or set "
+        "SERVING_SP_PRINCIPAL); there is no default id.",
     )
     parser.add_argument(
         "--allow-single-principal",

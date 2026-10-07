@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import time
@@ -221,7 +222,28 @@ def pg_execute(statements: list[str]) -> None:
 
 
 def regrant(runner: Runner = subprocess.run) -> None:
-    """Re-apply consumer SELECT grants (create / recreate paths only)."""
+    """Re-apply consumer SELECT grants (create / recreate paths only).
+
+    Passes both required principals from APP_SP_PRINCIPAL / SERVING_SP_PRINCIPAL to the
+    regrant script, which has no default ids. If either env var is unset this raises
+    before the subprocess runs, so a create/recreate fails loudly rather than invoking
+    the regrant with a missing principal.
+    """
+    app = os.environ.get("APP_SP_PRINCIPAL")
+    serving = os.environ.get("SERVING_SP_PRINCIPAL")
+    missing = [
+        name
+        for name, value in (
+            ("APP_SP_PRINCIPAL", app),
+            ("SERVING_SP_PRINCIPAL", serving),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            "Set " + " and ".join(missing) + " so the synced-table SELECT re-grant can "
+            "target the app and serving service principals."
+        )
     runner(
         [
             "uv",
@@ -234,6 +256,10 @@ def regrant(runner: Runner = subprocess.run) -> None:
             str(SCRIPTS / "regrant_synced_table_selects.py"),
             "--profile",
             PROFILE,
+            "--app-principal",
+            app,
+            "--serving-principal",
+            serving,
         ],
         check=True,
     )
