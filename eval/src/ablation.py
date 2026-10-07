@@ -190,7 +190,7 @@ def _worker_main(spec: WorkerSpec, connection) -> None:
             deterministic = False
         elif spec.kind == "deterministic":
             runtime, decision, duplicate, db = _local_baseline_functions()
-            manager = db.connect(profile=spec.profile or "fe-bar", autocommit=True)
+            manager = db.connect(profile=spec.profile or "fe-bar-ir-2026", autocommit=True)
             lakebase = manager.__enter__()
 
             def close():
@@ -367,7 +367,7 @@ def _recommend_from_context(context: dict) -> dict:
 def deterministic_baseline(claim: dict) -> dict:
     """One-off baseline entry point; run adapters reuse one connection instead."""
     runtime, decision, duplicate, db = _local_baseline_functions()
-    profile = os.environ.get("LAKEBASE_PROFILE") or "fe-bar"
+    profile = os.environ.get("LAKEBASE_PROFILE") or "fe-bar-ir-2026"
     with db.connect(profile=profile, autocommit=True) as connection:
         context = _deterministic_context(
             connection,
@@ -492,7 +492,8 @@ def deterministic_adapter(name: str, profile: str | None = None) -> CandidateAda
         lambda claim: deterministic_baseline(claim),
         deterministic=True,
         worker_spec=WorkerSpec(
-            "deterministic", profile=profile or os.environ.get("LAKEBASE_PROFILE") or "fe-bar"
+            "deterministic",
+            profile=profile or os.environ.get("LAKEBASE_PROFILE") or "fe-bar-ir-2026",
         ),
     )
 
@@ -989,7 +990,7 @@ def main() -> None:
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--n", type=int, default=100)
     parser.add_argument("--candidates", required=True)
-    parser.add_argument("--profile", default="fe-bar")
+    parser.add_argument("--profile", default="fe-bar-ir-2026")
     parser.add_argument("--warehouse-id")
     parser.add_argument("--experiment", default=DEFAULT_EXPERIMENT)
     parser.add_argument("--estimate-only", action="store_true")

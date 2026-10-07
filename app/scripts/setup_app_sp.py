@@ -20,7 +20,7 @@ idempotent, so re-running issues the same statements with no side effects.
 
 Usage:
     uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
-        python app/scripts/setup_app_sp.py --profile fe-bar \
+        python app/scripts/setup_app_sp.py --profile fe-bar-ir-2026 \
         --app-principal <app-sp-client-id>
 """
 
@@ -54,12 +54,12 @@ GRANTS: list[tuple[str, tuple]] = [
     ("SELECT", ("table", "public", "spec_clauses")),
     ("SELECT", ("table", "public", "warranty_terms")),
     ("SELECT", ("table", "public", "warranty_clauses")),
-    ("SELECT", ("table", "public", "prior_claims")),
     # Read grants (reference synced tables the cockpit context query reads).
     ("SELECT", ("table", "reference", "heats_coils")),
     ("SELECT", ("table", "reference", "mill_test_certs")),
     ("SELECT", ("table", "reference", "customers")),
     ("SELECT", ("table", "reference", "customer_heat_risk")),
+    ("SELECT", ("table", "reference", "prior_claims_corpus")),
     # Write grants for the finalize transaction.
     ("INSERT, UPDATE", ("table", "public", "adjudications")),
     ("INSERT, UPDATE", ("table", "public", "adjudication_decision_records")),
@@ -135,7 +135,7 @@ def _connect(profile: str, endpoint: str, database: str) -> psycopg.Connection:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", default="fe-bar")
+    parser.add_argument("--profile", default="fe-bar-ir-2026")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--database", default=DEFAULT_DATABASE)
     parser.add_argument(

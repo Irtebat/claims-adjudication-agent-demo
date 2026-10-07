@@ -17,7 +17,7 @@ resources:
             pause_status: UNPAUSED
         - In producer.py, replace .trigger(availableNow=True) with
           .trigger(processingTime='30 seconds')
-        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar`
+        - Re-deploy: `databricks bundle deploy -t prod --profile fe-bar-ir-2026`
         - The job will stream new claims every 30 seconds in real time.
 
       tasks:

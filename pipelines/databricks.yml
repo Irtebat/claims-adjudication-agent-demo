@@ -1,6 +1,8 @@
 bundle:
   name: steel-claims
 variables:
+  databricks_profile:
+    default: fe-bar-ir-2026
   catalog:
     description: Unity Catalog supplied by settings.yaml or --var
   claim_count:
@@ -21,7 +23,7 @@ variables:
     default: fe-bar-ir.cdf.lb_adjudication_decision_records_history
   warehouse_id:
     description: SQL warehouse used to deploy Unity Catalog metric views
-    default: 38e458a09de4a055
+    default: a323b5700ae25d85
 resources:
   pipelines:
     medallion:
@@ -100,7 +102,7 @@ targets:
     default: true
     mode: production
     workspace:
-      profile: fe-bar
+      profile: ${var.databricks_profile}
       # Production deployment state.
       root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims/prod
     variables:

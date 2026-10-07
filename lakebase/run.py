@@ -20,7 +20,7 @@ def command(*parts, cwd=ROOT, capture=False):
 
 def databricks(*parts, cwd=ROOT, capture=False):
     return command(
-        "databricks", *parts, "--profile", "fe-bar", cwd=cwd, capture=capture
+        "databricks", *parts, "--profile", "fe-bar-ir-2026", cwd=cwd, capture=capture
     )
 
 
@@ -95,7 +95,7 @@ def main():
             "python",
             "src/policy_intake.py",
             "--profile",
-            "fe-bar",
+            "fe-bar-ir-2026",
         )
     elif args.action == "policy-intake":
         command(
@@ -108,7 +108,7 @@ def main():
             "python",
             "src/policy_intake.py",
             "--profile",
-            "fe-bar",
+            "fe-bar-ir-2026",
         )
     elif args.action == "synced-tables":
         # Create path: creates missing tables; re-grants only if it created any.

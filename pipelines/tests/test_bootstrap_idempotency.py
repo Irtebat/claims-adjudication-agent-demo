@@ -64,7 +64,7 @@ def test_bootstrap_main_issues_exact_commands_in_order(monkeypatch):
     bootstrap.main()
 
     wrapper = ("uv", "run", "--with", "pyyaml", "python")
-    target = ("--target", "prod", "--profile", "fe-bar")
+    target = ("--target", "prod", "--profile", "fe-bar-ir-2026")
     root = {"cwd": REPO, "check": True}
     agent = {"cwd": REPO / "agent", "check": True}
     assert calls == [
@@ -108,7 +108,7 @@ def test_bootstrap_main_stops_at_first_failing_step(monkeypatch):
     with pytest.raises(bootstrap.subprocess.CalledProcessError):
         bootstrap.main()
 
-    assert [call[-1] for call in calls] == ["fe-bar", "generate", "setup-and-seed"]
+    assert [call[-1] for call in calls] == ["fe-bar-ir-2026", "generate", "setup-and-seed"]
 
 
 def test_history_uses_native_cdf_auto_cdc_scd2():

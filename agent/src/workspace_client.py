@@ -21,4 +21,4 @@ def workspace_client(profile: str | None = None):
             client_id=client_id,
             client_secret=client_secret,
         )
-    return WorkspaceClient(profile=profile or "fe-bar")
+    return WorkspaceClient(profile=profile or "fe-bar-ir-2026")

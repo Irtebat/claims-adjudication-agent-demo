@@ -1,7 +1,7 @@
 """Log, register, validate, and alias the claims-adjudication agent in Unity Catalog.
 
-Runs as local runtime Python against the ``fe-bar`` workspace (set
-``DATABRICKS_CONFIG_PROFILE=fe-bar``). Logs the ResponsesAgent via
+Runs as local runtime Python against the configured workspace (set
+``DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026``). Logs the ResponsesAgent via
 ``mlflow.pyfunc.log_model`` (Models-from-code: ``python_model="agent.py"`` plus the
 sibling modules as ``code_paths``), with pinned deps. It registers to
 ``fe-bar-ir.default.claims_adjudication_agent``, validates the isolated artifact
@@ -147,7 +147,9 @@ def run(profile: str, experiment: str, validate: bool = True, register: bool = T
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", default=os.environ.get("DATABRICKS_CONFIG_PROFILE", "fe-bar"))
+    parser.add_argument(
+        "--profile", default=os.environ.get("DATABRICKS_CONFIG_PROFILE", "fe-bar-ir-2026")
+    )
     parser.add_argument(
         "--experiment",
         default="/Users/irtebat.shaukat@databricks.com/claims_adjudication_agent",

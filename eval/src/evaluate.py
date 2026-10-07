@@ -144,8 +144,8 @@ def _write(name: str, payload) -> None:
 
 
 def run(args) -> dict:
-    if args.profile != "fe-bar":
-        raise ValueError("live evaluation is approved only for the explicit fe-bar profile")
+    if args.profile != "fe-bar-ir-2026":
+        raise ValueError("live evaluation is approved only for the explicit fe-bar-ir-2026 profile")
     # The candidate registered-model VERSION under evaluation. Passed via
     # --candidate-version. It is
     # stamped as the ``candidate_version`` run tag on every eval run so the run — and the
@@ -290,9 +290,9 @@ def run(args) -> dict:
                 "uv run pytest -q",
             ],
             "live": (
-                "DATABRICKS_CONFIG_PROFILE=fe-bar LAKEBASE_PROFILE=fe-bar "
+                "DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026 LAKEBASE_PROFILE=fe-bar-ir-2026 "
                 "MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py "
-                f"--profile fe-bar --candidate-version {candidate_version} "
+                f"--profile fe-bar-ir-2026 --candidate-version {candidate_version} "
                 f"--scorer-tier {args.scorer_tier}"
             ),
         },
@@ -311,7 +311,7 @@ def run(args) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", default=os.environ.get("DATABRICKS_CONFIG_PROFILE", ""))
-    parser.add_argument("--warehouse-id", default="38e458a09de4a055")
+    parser.add_argument("--warehouse-id", default="a323b5700ae25d85")
     parser.add_argument("--experiment", default="/Shared/claims-adjudication-offline-evaluation")
     parser.add_argument(
         "--model-uri",
@@ -331,7 +331,7 @@ def main() -> None:
     )
     parser.add_argument("--dataset-version", default="latest")
     parser.add_argument(
-        "--workspace-host", default="https://fe-sandbox-fe-bar-ir.cloud.databricks.com"
+        "--workspace-host", default="https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com"
     )
     print(json.dumps(run(parser.parse_args()), indent=2, sort_keys=True, default=str))
 

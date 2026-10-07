@@ -35,12 +35,15 @@ CAN_USE; genie-space `01f1bb5b9d081378b00a283760825c64` CAN_RUN; genie-space-bus
 Grant target = Postgres role `d5309ee7-a8ea-499f-99d4-4ccbd8369d93` (auto-provisioned on
 deploy as role_id `dbrx-apps-d5309ee7-…`; no role creation needed). Applied as
 DATABRICKS_SUPERUSER `irtebat.shaukat@databricks.com` against `databricks_postgres`
-(endpoint `ep-lively-waterfall-d8mn6aui…`). Full statements: `grants.sql` (this dir).
+(endpoint `ep-lively-waterfall-d8mn6aui…`). Apply or reapply the grants with
+`app/scripts/setup_app_sp.py --principal <app-sp-client-id> --profile <profile>`.
+The authoritative grant inventory is `grants.sql` (this dir).
 
 - USAGE on `public`, `reference`.
 - SELECT on `public.{claims, adjudications, adjudication_decision_records, spec_params,
-  spec_clauses, warranty_terms, warranty_clauses, prior_claims}`.
-- SELECT on `reference.{heats_coils, mill_test_certs, customers, customer_heat_risk}`.
+  spec_clauses, warranty_terms, warranty_clauses}`.
+- SELECT on `reference.{heats_coils, mill_test_certs, customers, customer_heat_risk,
+  prior_claims_corpus}`.
 - INSERT, UPDATE on `public.adjudications`, `public.adjudication_decision_records`.
 - INSERT on `public.outbox` (finalize event fan-out).
 

@@ -58,7 +58,7 @@ Secret scope `fe-bar-lakebase` — keys `database`, `endpoint`, `host`, `port`,
 ## Resources configured
 
 - Bundle `fe-bar-lakebase`; job `fe-bar-lakebase-setup-and-seed`; target `prod`,
-  profile `fe-bar`; serverless job environment with `databricks-sdk` and
+  profile `fe-bar-ir-2026`; serverless job environment with `databricks-sdk` and
   `psycopg[binary]`.
 - Synced tables use Triggered mode and are managed by `scripts/synced_tables.py`
   (via the `databricks postgres create-synced-table` surface), which has three paths
@@ -165,8 +165,8 @@ than the raw bundle for these actions. Plain bundle operations are not wrapped; 
 them directly from `lakebase/`:
 
 ```bash
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy -t prod --profile fe-bar
+databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
+databricks bundle deploy -t prod --profile fe-bar-ir-2026
 ```
 
 Guarded and non-bundle actions:
@@ -183,7 +183,7 @@ uv run --with pyyaml python lakebase/run.py recreate-synced-table --table <name>
 
 See `docs/RUNBOOK.md` for when each is triggered.
 
-The wrappers always use `-t prod --profile fe-bar`. The underlying bundle job key
+The wrappers always use `-t prod --profile fe-bar-ir-2026`. The underlying bundle job key
 is `setup_and_seed`; `lakebase/scripts/synced_tables.py` is the direct alternative
 to the synced-table actions. `setup-and-seed` refuses before its own
 Lakebase bundle deploy or seed if native CDF already exists. When run through

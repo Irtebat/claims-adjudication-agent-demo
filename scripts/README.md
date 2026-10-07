@@ -11,7 +11,7 @@ directly — they do **not** shell through per-layer `run.py` shims for plain bu
 operations:
 
 1. **DABs bundle for compute, invoked directly.** Plain deploys and job runs are
-   `databricks bundle deploy|run --target prod --profile fe-bar` in the owning layer
+   `databricks bundle deploy|run --target prod --profile fe-bar-ir-2026` in the owning layer
    directory (`pipelines/`, `agent/`, `demo/`).
 2. **Direct `uv run python` only for genuine orchestration/guards.**
    - `pipelines/run.py generate` — injects the authored warranty schedule

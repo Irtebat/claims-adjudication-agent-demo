@@ -256,7 +256,7 @@ def _verify_indexes(cur) -> dict:
 
 
 def run_intake(
-    profile: str = "fe-bar",
+    profile: str = "fe-bar-ir-2026",
     endpoint: str = DEFAULT_ENDPOINT,
     database: str = DEFAULT_DATABASE,
     source_path: str | None = None,
@@ -324,7 +324,7 @@ def run_intake(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Load authored policy into Lakebase")
-    parser.add_argument("--profile", default="fe-bar")
+    parser.add_argument("--profile", default="fe-bar-ir-2026")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--database", default=DEFAULT_DATABASE)
     parser.add_argument(

@@ -92,7 +92,7 @@ def _default_post(url: str, authorization: str, body: dict) -> dict:
 
 def embed_texts(
     texts: list[str],
-    profile: str | None = "fe-bar",
+    profile: str | None = "fe-bar-ir-2026",
     batch_size: int = DEFAULT_BATCH,
     max_retries: int = 6,
     normalize: bool = True,

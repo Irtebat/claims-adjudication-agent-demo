@@ -4,7 +4,7 @@
  * Data access:
  *   - Lakebase (operational OLTP: queue, cockpit, finalize, history) runs as the
  *     App SERVICE PRINCIPAL via the injected identity (appkit.lakebase pool); the
- *     platform mints the DB credential, sslmode=require. No fe-bar profile fallback.
+ *     platform mints the DB credential, sslmode=require. No local CLI profile fallback.
  *   - Governed surfaces use OBO (on-behalf-of the signed-in user): the cockpit
  *     copilot and business chat go through the Genie plugin (OBO), and the business
  *     dashboard's warehouse data through the analytics plugin. OBO scopes are

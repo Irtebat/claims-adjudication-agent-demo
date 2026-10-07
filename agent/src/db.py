@@ -19,7 +19,7 @@ DEFAULT_DATABASE = "databricks_postgres"
 
 
 def connection_params(
-    profile: str | None = "fe-bar",
+    profile: str | None = "fe-bar-ir-2026",
     endpoint: str = DEFAULT_ENDPOINT,
     database: str = DEFAULT_DATABASE,
 ) -> dict:
@@ -40,7 +40,7 @@ def connection_params(
 
 @contextmanager
 def connect(
-    profile: str | None = "fe-bar",
+    profile: str | None = "fe-bar-ir-2026",
     endpoint: str = DEFAULT_ENDPOINT,
     database: str = DEFAULT_DATABASE,
     autocommit: bool = False,

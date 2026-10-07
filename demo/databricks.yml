@@ -2,6 +2,8 @@ bundle:
   name: steel-claims-demo
 
 variables:
+  databricks_profile:
+    default: fe-bar-ir-2026
   catalog:
     description: Unity Catalog
     default: fe-bar-ir
@@ -85,5 +87,5 @@ targets:
     default: true
     mode: production
     workspace:
-      profile: fe-bar
+      profile: ${var.databricks_profile}
       root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/steel-claims-demo/prod

@@ -2,6 +2,8 @@ bundle:
   name: fe-bar-lakebase
 
 variables:
+  databricks_profile:
+    default: fe-bar-ir-2026
   catalog:
     default: fe-bar-ir
   endpoint:
@@ -38,5 +40,5 @@ targets:
     default: true
     mode: production
     workspace:
-      profile: fe-bar
+      profile: ${var.databricks_profile}
       root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/fe-bar-lakebase/prod

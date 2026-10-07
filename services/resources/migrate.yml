@@ -3,7 +3,7 @@ resources:
     migrate:
       name: fe-bar-services-migrate
       max_concurrent_runs: 1
-      # Run-once / manual: `databricks bundle run migrate -t prod --profile fe-bar`.
+      # Run-once / manual: `databricks bundle run migrate -t prod --profile fe-bar-ir-2026`.
       environments:
         - environment_key: services
           spec:

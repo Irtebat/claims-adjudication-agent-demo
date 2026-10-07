@@ -136,11 +136,11 @@ No secret is ever inlined or committed.
 1. **Populate the Kafka secret scope** — the Aiven MCP connector redacts all secret
    material, so these must be set by a human from the Aiven console:
    ```bash
-   databricks secrets put-secret fe-bar-aiven-kafka bootstrap-servers --profile fe-bar \
+   databricks secrets put-secret fe-bar-aiven-kafka bootstrap-servers --profile fe-bar-ir-2026 \
      --string-value 'fe-bar-kafka-kafka-dbx-pipeline-001.i.aivencloud.com:25358'
-   databricks secrets put-secret fe-bar-aiven-kafka sasl-username --profile fe-bar   # Aiven "avnadmin"
-   databricks secrets put-secret fe-bar-aiven-kafka sasl-password --profile fe-bar   # Aiven SASL password
-   databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem   --profile fe-bar    # Aiven CA cert (PEM)
+   databricks secrets put-secret fe-bar-aiven-kafka sasl-username --profile fe-bar-ir-2026   # Aiven "avnadmin"
+   databricks secrets put-secret fe-bar-aiven-kafka sasl-password --profile fe-bar-ir-2026   # Aiven SASL password
+   databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem   --profile fe-bar-ir-2026    # Aiven CA cert (PEM)
    ```
 2. The `claims-agent` scope (`app-sp-client-id`, `app-sp-client-secret`,
    `lakebase-db-user`) and the serving endpoint must already exist (they do).
@@ -148,18 +148,18 @@ No secret is ever inlined or committed.
 **Deploy the bundle:**
 ```bash
 cd services
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy   -t prod --profile fe-bar
+databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
+databricks bundle deploy   -t prod --profile fe-bar-ir-2026
 ```
 
 **Run (order matters the first time):**
 ```bash
-databricks bundle run migrate  -t prod --profile fe-bar   # drop pending queue + grants (once)
-databricks bundle run producer -t prod --profile fe-bar   # CDF inserts -> claim.submitted
-databricks bundle run worker   -t prod --profile fe-bar   # RECOMMENDED adjudications (persist=true)
+databricks bundle run migrate  -t prod --profile fe-bar-ir-2026   # drop pending queue + grants (once)
+databricks bundle run producer -t prod --profile fe-bar-ir-2026   # CDF inserts -> claim.submitted
+databricks bundle run worker   -t prod --profile fe-bar-ir-2026   # RECOMMENDED adjudications (persist=true)
 # ... an adjuster finalizes claims in the App, which writes the outbox rows ...
-databricks bundle run relay    -t prod --profile fe-bar   # outbox -> claim.adjudicated
-databricks bundle run consumers -t prod --profile fe-bar  # fan-out (4 parallel tasks)
+databricks bundle run relay    -t prod --profile fe-bar-ir-2026   # outbox -> claim.adjudicated
+databricks bundle run consumers -t prod --profile fe-bar-ir-2026  # fan-out (4 parallel tasks)
 ```
 
 **Schedules.** The producer, worker, relay, and consumers jobs deploy with an hourly

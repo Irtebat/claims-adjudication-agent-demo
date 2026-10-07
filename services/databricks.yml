@@ -6,6 +6,8 @@ include:
   - resources/*.yml
 
 variables:
+  databricks_profile:
+    default: fe-bar-ir-2026
   catalog:
     default: fe-bar-ir
   endpoint:
@@ -14,8 +16,8 @@ variables:
   postgres_database:
     default: databricks_postgres
   sp_role:
-    description: Postgres role of the Wave 6 application SP (its app UUID; not a secret)
-    default: 47643eb1-dbd5-40a6-a51d-5da6b8e2da7a
+    description: Postgres role of the serving SP (its application UUID; not a secret)
+    default: 9779e0a0-0dc3-4f60-8746-ae1445b27c6e
   cdf_claims_table:
     description: Native Lakebase CDF history table for claims — the producer's source
     default: fe-bar-ir.cdf.lb_claims_history
@@ -37,5 +39,5 @@ targets:
     default: true
     mode: production
     workspace:
-      profile: fe-bar
+      profile: ${var.databricks_profile}
       root_path: /Workspace/Users/irtebat.shaukat@databricks.com/.bundle/fe-bar-services/prod

@@ -16,7 +16,7 @@ refresh = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(refresh)
 
 WRAPPER = ("uv", "run", "--with", "pyyaml", "python")
-TARGET = ("--target", "prod", "--profile", "fe-bar")
+TARGET = ("--target", "prod", "--profile", "fe-bar-ir-2026")
 MEDALLION = ((*WRAPPER, "pipelines/run.py", "refresh"), REPO)
 ROUTINE = [
     MEDALLION,

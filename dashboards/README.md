@@ -14,13 +14,13 @@ This directory contains the deployed Steel Quality Claims Analytics dashboard an
 
 Workflow-backlog visuals remain deferred until settlement, recovery, and investigation events exist (downstream services, not yet built).
 
-Deploy with the authenticated `fe-bar` profile:
+Deploy with the authenticated `fe-bar-ir-2026` profile:
 
 ```sh
 cd dashboards
-databricks bundle validate --strict -t prod --profile fe-bar
-databricks bundle deploy -t prod --profile fe-bar
-databricks bundle summary -t prod --profile fe-bar
+databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
+databricks bundle deploy -t prod --profile fe-bar-ir-2026
+databricks bundle summary -t prod --profile fe-bar-ir-2026
 ```
 
 ## Genie
@@ -31,20 +31,20 @@ Create a new space reproducibly:
 
 ```sh
 SERIALIZED=$(jq -c '.' dashboards/genie/genie_space.json | jq -Rs '.')
-jq -n --arg warehouse_id '38e458a09de4a055' \
+jq -n --arg warehouse_id 'a323b5700ae25d85' \
   --arg title 'Steel Quality Claims Analytics' \
   --arg parent_path '/Workspace/Users/<user>/genie-spaces' \
   --argjson serialized_space "$SERIALIZED" \
   '{warehouse_id:$warehouse_id,title:$title,parent_path:$parent_path,serialized_space:$serialized_space}' \
   > /tmp/create-genie.json
-databricks genie create-space --json @/tmp/create-genie.json --profile fe-bar
+databricks genie create-space --json @/tmp/create-genie.json --profile fe-bar-ir-2026
 ```
 
 To update the deployed space, build the same `SERIALIZED` value and run:
 
 ```sh
 jq -n --argjson serialized_space "$SERIALIZED" '{serialized_space:$serialized_space}' > /tmp/update-genie.json
-databricks genie update-space <space-id> --json @/tmp/update-genie.json --profile fe-bar
+databricks genie update-space <space-id> --json @/tmp/update-genie.json --profile fe-bar-ir-2026
 ```
 
 The dashboard's `uiSettings.genieSpace.overrideId` links to the deployed space. Change it when importing into another workspace.

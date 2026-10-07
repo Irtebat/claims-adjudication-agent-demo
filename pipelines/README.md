@@ -4,7 +4,7 @@ Builds the synthetic steel-claims dataset in Unity Catalog `fe-bar-ir`, publishe
 reference and master data through a medallion pipeline (bronze -> silver -> gold),
 ingests the live claims/adjudications history from Lakebase via native Change Data
 Feed (CDF), and applies Unity Catalog governance. All compute is serverless. The
-CLI wrapper always passes the `fe-bar` profile explicitly and reads settings from
+CLI wrapper always passes the `fe-bar-ir-2026` profile explicitly and reads settings from
 `settings.yaml` (see `../config/config.example.yaml`); credentials stay in CLI
 authentication and are never committed.
 
@@ -40,7 +40,7 @@ Column-mask functions in `silver`: `mask_customer`, `mask_money`.
 
 ## Resources configured
 
-- Bundle `steel-claims`; single target `prod` (production mode), profile `fe-bar`.
+- Bundle `steel-claims`; single target `prod` (production mode), profile `fe-bar-ir-2026`.
 - Lakeflow pipeline workspace name `steel-claims` (bundle resource key `medallion`) — serverless, triggered; default schema `silver`;
   processes every file under `src/transformations/**`.
 - Jobs: `steel-claims-validate-generator`, `steel-claims-generate-raw`,
@@ -107,9 +107,9 @@ uv run --with pyyaml python scripts/bootstrap.py
 **Plain DABs operations — run directly** (from `pipelines/`):
 
 ```bash
-databricks bundle validate --strict --target prod --profile fe-bar
-databricks bundle deploy            --target prod --profile fe-bar
-databricks bundle summary           --target prod --profile fe-bar
+databricks bundle validate --strict --target prod --profile fe-bar-ir-2026
+databricks bundle deploy            --target prod --profile fe-bar-ir-2026
+databricks bundle summary           --target prod --profile fe-bar-ir-2026
 ```
 
 **`run.py` actions** (DABs job run plus the orchestration each needs):
@@ -208,10 +208,10 @@ metric-view SQL job. The pipeline run is a normal update; never pass a full-refr
 flag.
 
 ```bash
-databricks bundle validate --strict --target prod --profile fe-bar
-databricks bundle deploy --target prod --profile fe-bar
-databricks bundle run refresh_medallion --target prod --profile fe-bar
-databricks bundle run deploy_metric_views --target prod --profile fe-bar
+databricks bundle validate --strict --target prod --profile fe-bar-ir-2026
+databricks bundle deploy --target prod --profile fe-bar-ir-2026
+databricks bundle run refresh_medallion --target prod --profile fe-bar-ir-2026
+databricks bundle run deploy_metric_views --target prod --profile fe-bar-ir-2026
 uv run --with pyyaml python evidence.py
 ```
 

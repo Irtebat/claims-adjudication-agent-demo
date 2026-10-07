@@ -1,0 +1,586 @@
+{
+  "version": 2,
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "fe-bar-ir.gold.adjudication_decision_records",
+        "column_configs": [
+          {
+            "column_name": "authorities_source_sha256",
+            "exclude": true
+          },
+          {
+            "column_name": "citations",
+            "description": [
+              "Persisted policy citations supporting this record."
+            ]
+          },
+          {
+            "column_name": "claim_input",
+            "exclude": true
+          },
+          {
+            "column_name": "coil",
+            "exclude": true
+          },
+          {
+            "column_name": "deterministic_disposition",
+            "description": [
+              "Disposition produced by deterministic policy and money rules."
+            ]
+          },
+          {
+            "column_name": "deterministic_verdict",
+            "description": [
+              "Verdict produced by deterministic policy and money rules."
+            ]
+          },
+          {
+            "column_name": "mlflow_trace_id",
+            "exclude": true
+          },
+          {
+            "column_name": "mtc_measured",
+            "exclude": true
+          },
+          {
+            "column_name": "rationale",
+            "description": [
+              "Persisted decision-record rationale."
+            ]
+          },
+          {
+            "column_name": "record_version",
+            "description": [
+              "Immutable version number within an adjudication trail."
+            ]
+          },
+          {
+            "column_name": "spec_params",
+            "exclude": true
+          },
+          {
+            "column_name": "warranty_terms",
+            "exclude": true
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.adjudications_current",
+        "column_configs": [
+          {
+            "column_name": "__END_AT",
+            "exclude": true
+          },
+          {
+            "column_name": "__START_AT",
+            "exclude": true
+          },
+          {
+            "column_name": "adjudication_id",
+            "description": [
+              "Current adjudication identifier."
+            ],
+            "synonyms": [
+              "decision id"
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "advisory_risk",
+            "exclude": true
+          },
+          {
+            "column_name": "decided_by",
+            "description": [
+              "Identity recorded for the final decision."
+            ]
+          },
+          {
+            "column_name": "decision_status",
+            "description": [
+              "Workflow state such as RECOMMENDED or FINAL."
+            ],
+            "enable_format_assistance": true
+          },
+          {
+            "column_name": "flags",
+            "exclude": true
+          },
+          {
+            "column_name": "idempotency_key",
+            "exclude": true
+          },
+          {
+            "column_name": "override_flag",
+            "description": [
+              "True when the final human decision changed the recommendation."
+            ]
+          },
+          {
+            "column_name": "override_reason",
+            "description": [
+              "Recorded reason for a human override."
+            ]
+          },
+          {
+            "column_name": "precedent",
+            "exclude": true
+          },
+          {
+            "column_name": "rationale",
+            "description": [
+              "Persisted rationale from the adjudication; not a live model response."
+            ]
+          },
+          {
+            "column_name": "recommended_verdict",
+            "description": [
+              "Agent-recommended verdict before human finalization."
+            ]
+          },
+          {
+            "column_name": "verdict",
+            "description": [
+              "Current verdict; for FINAL rows this is the decision of record."
+            ],
+            "enable_format_assistance": true
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.claims_current",
+        "column_configs": [
+          {
+            "column_name": "__END_AT",
+            "exclude": true
+          },
+          {
+            "column_name": "__START_AT",
+            "exclude": true
+          },
+          {
+            "column_name": "claim_id",
+            "description": [
+              "Current claim identifier."
+            ],
+            "synonyms": [
+              "claim",
+              "claim number"
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "claim_type",
+            "description": [
+              "Operational claim category."
+            ],
+            "enable_format_assistance": true
+          },
+          {
+            "column_name": "defect_code",
+            "description": [
+              "Defect code reported on the claim."
+            ],
+            "enable_format_assistance": true
+          },
+          {
+            "column_name": "defect_narrative",
+            "description": [
+              "Claimant-provided description of the observed defect."
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.customer_heat_risk",
+        "column_configs": [
+          {
+            "column_name": "high_risk",
+            "description": [
+              "Advisory high-risk indicator; it does not determine the verdict."
+            ]
+          },
+          {
+            "column_name": "risk_reason",
+            "description": [
+              "Persisted explanation for the advisory customer-heat risk."
+            ]
+          },
+          {
+            "column_name": "risk_score",
+            "description": [
+              "Advisory customer-heat risk score; it does not determine the verdict."
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.gold.prior_claims_corpus",
+        "column_configs": [
+          {
+            "column_name": "claim_id",
+            "description": [
+              "Finalized prior claim available as precedent."
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "defect_narrative",
+            "description": [
+              "Narrative used for precedent retrieval."
+            ]
+          },
+          {
+            "column_name": "embedding",
+            "exclude": true
+          },
+          {
+            "column_name": "embedding_provenance",
+            "exclude": true
+          },
+          {
+            "column_name": "narrative_sha256",
+            "exclude": true
+          },
+          {
+            "column_name": "verdict",
+            "description": [
+              "Final verdict of the prior claim."
+            ],
+            "enable_format_assistance": true
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.silver.customers",
+        "column_configs": [
+          {
+            "column_name": "customer_id",
+            "description": [
+              "Customer identifier used by claims and coils."
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "customer_name",
+            "description": [
+              "Customer display name."
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "email",
+            "exclude": true
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.silver.defect_codes",
+        "column_configs": [
+          {
+            "column_name": "defect_code",
+            "description": [
+              "Standard defect code."
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "description",
+            "description": [
+              "Business description of the defect code."
+            ]
+          },
+          {
+            "column_name": "process_step",
+            "description": [
+              "Manufacturing process step associated with the defect."
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.silver.heats_coils",
+        "column_configs": [
+          {
+            "column_name": "coating_class",
+            "description": [
+              "Coating specification or class."
+            ],
+            "enable_format_assistance": true
+          },
+          {
+            "column_name": "coil_id",
+            "description": [
+              "Coil identifier referenced by claims."
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "grade",
+            "description": [
+              "Steel grade."
+            ],
+            "enable_format_assistance": true
+          },
+          {
+            "column_name": "heat_no",
+            "description": [
+              "Steel heat identifier."
+            ],
+            "synonyms": [
+              "heat",
+              "heat number"
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "line",
+            "description": [
+              "Manufacturing line."
+            ],
+            "enable_format_assistance": true
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.silver.mill_test_certs",
+        "column_configs": [
+          {
+            "column_name": "cert_id",
+            "description": [
+              "Mill test certificate identifier."
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "coating_adhesion_pass",
+            "description": [
+              "Whether coating adhesion passed on the certificate."
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "fe-bar-ir.silver.suppliers",
+        "column_configs": [
+          {
+            "column_name": "supplier_id",
+            "description": [
+              "Supplier identifier referenced by recoverable adjudications or coil lots."
+            ],
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "supplier_name",
+            "description": [
+              "Supplier display name."
+            ],
+            "enable_entity_matching": true
+          }
+        ]
+      }
+    ]
+  },
+  "config": {
+    "sample_questions": [
+      {
+        "id": "41000000000000000000000000000001",
+        "question": [
+          "What is the current verdict, disposition, and approved amount for claim CLM-0004962?"
+        ]
+      },
+      {
+        "id": "41000000000000000000000000000002",
+        "question": [
+          "Show finalized claims that were overridden and include the recorded override reason."
+        ]
+      },
+      {
+        "id": "41000000000000000000000000000003",
+        "question": [
+          "Show the decision-record trail and persisted citations for a claim."
+        ]
+      },
+      {
+        "id": "41000000000000000000000000000004",
+        "question": [
+          "Which related prior claims have the same defect code and what were their verdicts?"
+        ]
+      },
+      {
+        "id": "41000000000000000000000000000005",
+        "question": [
+          "Is this claim's customer and heat flagged as advisory risk?"
+        ]
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "id": "42000000000000000000000000000001",
+        "content": [
+          "## PURPOSE\n- Answer claim-level operational questions for adjusters and claims-history users using current claims, adjudications, persisted decision records, manufacturing context, advisory risk, and prior-claim precedent.\n\n## DATA QUALITY NOTES\n- adjudication_decision_records can be empty until decision records have reached the gold layer; disclose that state instead of inferring a trail or citations.\n- customer_heat_risk is advisory context only and never determines verdict, disposition, or approved amount.\n\n## CONSTRAINTS\n- Treat adjudications_current rows with decision_status FINAL as decisions of record; distinguish recommended_verdict from verdict.\n- Use persisted rationale, citations, override_reason, and precedent only; never fabricate policy evidence or recompute settlement amounts.\n- Do not expose customer email, embeddings, hashes, trace identifiers, or hidden raw payloads.\n\n## Instructions you must follow when providing summaries\n- State the claim_id and decision_status for per-claim answers.\n- Label risk and precedent as advisory context, not deterministic authority."
+        ]
+      }
+    ],
+    "join_specs": [
+      {
+        "id": "43000000000000000000000000000001",
+        "left": {
+          "identifier": "fe-bar-ir.gold.claims_current",
+          "alias": "claims_current"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.gold.adjudications_current",
+          "alias": "adjudications_current"
+        },
+        "sql": [
+          "`claims_current`.`claim_id` = `adjudications_current`.`claim_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_ONE_TO_ONE--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000002",
+        "left": {
+          "identifier": "fe-bar-ir.gold.adjudications_current",
+          "alias": "adjudications_current"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.gold.adjudication_decision_records",
+          "alias": "adjudication_decision_records"
+        },
+        "sql": [
+          "`adjudications_current`.`adjudication_id` = `adjudication_decision_records`.`adjudication_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_ONE_TO_MANY--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000003",
+        "left": {
+          "identifier": "fe-bar-ir.gold.claims_current",
+          "alias": "claims_current"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.silver.heats_coils",
+          "alias": "heats_coils"
+        },
+        "sql": [
+          "`claims_current`.`coil_id` = `heats_coils`.`coil_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000004",
+        "left": {
+          "identifier": "fe-bar-ir.gold.claims_current",
+          "alias": "claims_current"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.silver.customers",
+          "alias": "customers"
+        },
+        "sql": [
+          "`claims_current`.`customer_id` = `customers`.`customer_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000005",
+        "left": {
+          "identifier": "fe-bar-ir.gold.claims_current",
+          "alias": "claims_current"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.silver.defect_codes",
+          "alias": "defect_codes"
+        },
+        "sql": [
+          "`claims_current`.`defect_code` = `defect_codes`.`defect_code`",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000006",
+        "left": {
+          "identifier": "fe-bar-ir.silver.heats_coils",
+          "alias": "heats_coils"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.silver.mill_test_certs",
+          "alias": "mill_test_certs"
+        },
+        "sql": [
+          "`heats_coils`.`coil_id` = `mill_test_certs`.`coil_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_ONE_TO_ONE--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000007",
+        "left": {
+          "identifier": "fe-bar-ir.gold.adjudications_current",
+          "alias": "adjudications_current"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.silver.suppliers",
+          "alias": "suppliers"
+        },
+        "sql": [
+          "`adjudications_current`.`recovery_supplier_id` = `suppliers`.`supplier_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000008",
+        "left": {
+          "identifier": "fe-bar-ir.silver.heats_coils",
+          "alias": "heats_coils"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.gold.customer_heat_risk",
+          "alias": "customer_heat_risk"
+        },
+        "sql": [
+          "`heats_coils`.`customer_id` = `customer_heat_risk`.`customer_id` AND `heats_coils`.`heat_no` = `customer_heat_risk`.`heat_no`",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "id": "43000000000000000000000000000009",
+        "left": {
+          "identifier": "fe-bar-ir.gold.claims_current",
+          "alias": "claims_current"
+        },
+        "right": {
+          "identifier": "fe-bar-ir.gold.prior_claims_corpus",
+          "alias": "prior_claims_corpus"
+        },
+        "sql": [
+          "`claims_current`.`claim_id` = `prior_claims_corpus`.`claim_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_ONE_TO_ONE--"
+        ]
+      }
+    ],
+    "example_question_sqls": [
+      {
+        "id": "44000000000000000000000000000001",
+        "question": [
+          "What is the current verdict, disposition, and approved amount for claim CLM-0004962?"
+        ],
+        "sql": [
+          "SELECT c.claim_id, c.claim_type, c.defect_code, a.decision_status, a.recommended_verdict, a.verdict, a.disposition, a.approved_amount, a.override_flag, a.override_reason FROM `fe-bar-ir`.gold.claims_current AS c JOIN `fe-bar-ir`.gold.adjudications_current AS a ON c.claim_id = a.claim_id WHERE c.claim_id = 'CLM-0004962'"
+        ]
+      },
+      {
+        "id": "44000000000000000000000000000002",
+        "question": [
+          "Show finalized claims that were overridden and include the recorded override reason."
+        ],
+        "sql": [
+          "SELECT c.claim_id, a.adjudication_id, a.recommended_verdict, a.verdict, a.disposition, a.approved_amount, a.override_reason, a.decided_by, a.finalized_at FROM `fe-bar-ir`.gold.claims_current AS c JOIN `fe-bar-ir`.gold.adjudications_current AS a ON c.claim_id = a.claim_id WHERE a.decision_status = 'FINAL' AND a.override_flag = true ORDER BY a.finalized_at DESC LIMIT 100"
+        ]
+      }
+    ]
+  }
+}

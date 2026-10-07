@@ -63,7 +63,7 @@ route hard-denies.
 
 - **Lakebase (operational OLTP):** all reads/writes run as the **App service
   principal** via the platform-injected identity (`appkit.lakebase` pool; the
-  platform mints the DB credential, `sslmode=require`). No `fe-bar` profile fallback.
+  platform mints the DB credential, `sslmode=require`). No local CLI profile fallback.
 - **OBO (on-behalf-of the signed-in user):** used only for the **governed** surfaces
   — the Genie copilot/chat (`dashboards.genie` scope) and the business-dashboard
   warehouse queries (`sql` scope). The OBO user identity (`x-forwarded-email`) is
@@ -107,7 +107,7 @@ npm run test                      # vitest — authz matrix + finalize contract 
 npx tsc -b tsconfig.server.json   # server typecheck — clean
 npx tsc -b tsconfig.client.json   # client typecheck — clean
 npx appkit lint                   # ast-grep (no-double-type-assertion, etc.) — clean
-databricks bundle validate --profile fe-bar   # Validation OK
+databricks bundle validate --profile fe-bar-ir-2026   # Validation OK
 ```
 
 `server/**` and `client/**` are eslint- and prettier-clean.
@@ -117,7 +117,7 @@ databricks bundle validate --profile fe-bar   # Validation OK
 Deploying provisions the app's own service principal, whose id the Lakebase grants
 need. Order:
 
-1. `databricks bundle deploy -t default --profile fe-bar` — creates the app + its SP,
+1. `databricks bundle deploy -t default --profile fe-bar-ir-2026` — creates the app + its SP,
    injects `PGHOST`/`PGDATABASE`/`PGPORT`/`PGSSLMODE` + the resource envs.
 2. Grant the **app SP** its fine-grained Lakebase grants with
    `app/scripts/setup_app_sp.py` (the app SP is distinct from the serving SP
@@ -126,16 +126,16 @@ need. Order:
 
    ```bash
    uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
-     python app/scripts/setup_app_sp.py --profile fe-bar \
+     python app/scripts/setup_app_sp.py --profile fe-bar-ir-2026 \
      --app-principal <app-sp-client-id>
    ```
 
    The grant set mirrors `docs/evidence/app-deploy/grants.sql`:
    - `USAGE` on `public` + `reference`.
    - `SELECT` on `public.claims`, `adjudications`, `adjudication_decision_records`,
-     `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`,
-     `prior_claims`, and `reference.heats_coils`, `mill_test_certs`, `customers`,
-     `customer_heat_risk`. The `reference.*` SELECTs are also reapplied by
+     `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`, and
+     `reference.heats_coils`, `mill_test_certs`, `customers`, `customer_heat_risk`,
+     `prior_claims_corpus`. The `reference.*` SELECTs are also reapplied by
      `lakebase/scripts/regrant_synced_table_selects.py` (via `lakebase/run.py
      synced-tables`) when a synced table is created or recreated.
    - `INSERT, UPDATE` on `public.adjudications` and

@@ -1,6 +1,6 @@
 # Same databricks mapping as ../config/config.example.yaml; no credentials.
 databricks:
-  profile: fe-bar
+  profile: fe-bar-ir-2026
   catalog: fe-bar-ir
   warehouse_name: Serverless Starter Warehouse
   lakebase_database: projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres

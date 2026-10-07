@@ -2,8 +2,9 @@ bundle:
   name: steel-claims-cockpit
 
 variables:
-  sql_warehouse_id:
+  warehouse_id:
     description: SQL Warehouse ID
+    default: a323b5700ae25d85
   genie_space_id:
     description: Default Genie Space ID
   genie_space_name:
@@ -40,7 +41,7 @@ resources:
       resources:
         - name: sql-warehouse
           sql_warehouse:
-            id: ${var.sql_warehouse_id}
+            id: ${var.warehouse_id}
             permission: CAN_USE
         - name: genie-space
           genie_space:
@@ -63,14 +64,13 @@ targets:
   default:
     default: true
     workspace:
-      host: https://fe-sandbox-fe-bar-ir.cloud.databricks.com
+      host: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com
 
     variables:
-      sql_warehouse_id: 38e458a09de4a055
-      genie_space_id: 01f1bb5b9d081378b00a283760825c64
+      genie_space_id: 01f1c269ca3c1adea7feb9f248ab3445
       genie_space_name: Steel Claims Operational Cockpit
       postgres_branch: projects/fe-bar-operational-plane/branches/production
       postgres_database: projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres
       postgres_project: projects/fe-bar-operational-plane
-      business_genie_space_id: 01f1bac20bf6119f84fa99c7ba438ba4
+      business_genie_space_id: 01f1c2698a5418298f81f9e79df576ca
       business_genie_space_name: Steel Quality Claims Analytics

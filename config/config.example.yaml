@@ -5,8 +5,8 @@
 # ---------------------------------------------------------------------------
 
 databricks:
-  profile: fe-bar                       # always pass --profile fe-bar
-  host: https://fe-sandbox-fe-bar-ir.cloud.databricks.com
+  profile: fe-bar-ir-2026               # always pass --profile fe-bar-ir-2026
+  host: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com
   catalog: fe-bar-ir                    # Unity Catalog for this build
   schemas:
     bronze: bronze
