@@ -331,7 +331,7 @@ def main() -> None:
     )
     parser.add_argument("--dataset-version", default="latest")
     parser.add_argument(
-        "--workspace-host", default="https://fe-sandbox-fe-bar-ir.cloud.databricks.com"
+        "--workspace-host", default="https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com"
     )
     print(json.dumps(run(parser.parse_args()), indent=2, sort_keys=True, default=str))
 
