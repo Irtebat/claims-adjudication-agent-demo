@@ -115,6 +115,11 @@ function measured(): MtcMeasured {
   };
 }
 
+// The pass/fail markers are class-based so assertions can't be fooled by incidental "Pass" /
+// "Fail" text elsewhere in the row (e.g. the adhesion measured value or "Pass required" spec).
+const PASS_MARKER = 'text-success'; // the Pass pill's class, present ONLY on a Pass marker
+const FAIL_MARKER = 'text-destructive'; // the Fail pill's class
+
 describe('ConformanceDetail — spec vs measured (Feature A)', () => {
   it('renders a spec-vs-measured row for each conformance-checked property', () => {
     const conformance: ConformanceEvidence = { conforms: false, nonconforming_properties: ['tensile_mpa'] };
@@ -135,8 +140,8 @@ describe('ConformanceDetail — spec vs measured (Feature A)', () => {
     const html = renderToStaticMarkup(
       <ConformanceDetail conformance={conformance} specParams={specParams()} measured={measured()} />
     );
-    expect(html).toContain('Fail'); // tensile_mpa is in nonconforming_properties
-    expect(html).toContain('Pass'); // carbon etc. evaluated and not listed
+    expect(html).toContain(FAIL_MARKER); // tensile_mpa is in nonconforming_properties
+    expect(html).toContain(PASS_MARKER); // carbon etc. evaluated and not listed
   });
 
   it('shows "Not checked" for a property the authority had no measured value for', () => {
@@ -146,6 +151,32 @@ describe('ConformanceDetail — spec vs measured (Feature A)', () => {
     const html = renderToStaticMarkup(
       <ConformanceDetail conformance={conformance} specParams={specParams()} measured={partial} />
     );
+    expect(html).toContain('Not checked');
+  });
+
+  it('NEVER fabricates a Pass when the verdict (nonconforming_properties) is absent', () => {
+    // A snapshot with the spec + measurements but NO recorded verdict: the result is unknown,
+    // so no row may show Pass. (Regression guard for the false-trust bug in PR #54 review.)
+    const conformance = { conforms: true } as ConformanceEvidence; // nonconforming_properties absent
+    const html = renderToStaticMarkup(
+      <ConformanceDetail conformance={conformance} specParams={specParams()} measured={measured()} />
+    );
+    expect(html).not.toContain(PASS_MARKER); // no Pass pill anywhere
+    expect(html).not.toContain(FAIL_MARKER); // and no Fail either — the verdict is unknown
+    expect(html).toContain('Not checked');
+    expect(html).toContain('Conformance verdict'); // the "verdict not recorded" notice
+  });
+
+  it('shows Not checked (never Pass) for rows whose required spec fields are missing (partial snapshot)', () => {
+    // Verdict is PRESENT and empty (all-conforming), but the spec bands are absent on this
+    // partial snapshot — a missing spec ('—') must never pair with a Pass marker.
+    const conformance: ConformanceEvidence = { conforms: true, nonconforming_properties: [] };
+    const partialSpec: SpecParams = { grade: 'EN 10346 DX51D+Z275' }; // identity key only, no bands
+    const html = renderToStaticMarkup(
+      <ConformanceDetail conformance={conformance} specParams={partialSpec} measured={measured()} />
+    );
+    expect(html).toContain('Spec requirement'); // the table still renders (not the unavailable notice)
+    expect(html).not.toContain(PASS_MARKER); // but no row is Pass — every spec requirement is '—'
     expect(html).toContain('Not checked');
   });
 

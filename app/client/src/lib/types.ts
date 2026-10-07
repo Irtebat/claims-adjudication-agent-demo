@@ -126,7 +126,14 @@ export interface Adjudication {
 
 export interface ConformanceEvidence {
   conforms: boolean;
-  nonconforming_properties: string[];
+  /**
+   * The per-property verdict list. OPTIONAL on purpose: it is PRESENT (an array, possibly
+   * empty `[]`) when the authority produced a verdict — `[]` legitimately means all-conforming
+   * — and ABSENT (undefined) on a malformed or older snapshot where no verdict was recorded.
+   * The cockpit's spec-vs-measured view distinguishes the two so an absent verdict is never
+   * coerced to `[]` and rendered as a fabricated "Pass".
+   */
+  nonconforming_properties?: string[];
 }
 export interface CoverageEvidence {
   covered: boolean;
@@ -258,12 +265,16 @@ export interface DecisionRecord {
   coverage: CoverageEvidence | null;
   settlement: SettlementEvidence | null;
   duplicate: DuplicateEvidence | null;
-  /** Frozen authority inputs for the read-only detail views; may be absent on older records. */
-  spec_params: SpecParams | null;
-  warranty_terms: WarrantyTerms | null;
-  mtc_measured: MtcMeasured | null;
-  coil: CoilSnapshot | null;
-  claim_input: ClaimInputSnapshot | null;
+  /**
+   * Frozen authority inputs for the read-only detail views. OPTIONAL: a record written before
+   * these columns were projected omits them entirely (undefined), distinct from a projected-but-
+   * null value. Either way the detail views read them defensively and degrade to "unavailable".
+   */
+  spec_params?: SpecParams | null;
+  warranty_terms?: WarrantyTerms | null;
+  mtc_measured?: MtcMeasured | null;
+  coil?: CoilSnapshot | null;
+  claim_input?: ClaimInputSnapshot | null;
   citations: Citation[] | null;
   cited_clause_ids: string[] | null;
   precedent: PrecedentRef[] | null;
