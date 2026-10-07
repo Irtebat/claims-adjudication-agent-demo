@@ -283,8 +283,15 @@ interface ConformanceRow {
   result: 'pass' | 'fail' | 'none';
 }
 
-/** A property's verdict: fail if the authority listed it, else pass when it was evaluated. */
-function resultOf(key: string, evaluated: boolean, nonconforming: string[]): 'pass' | 'fail' | 'none' {
+/**
+ * A property's result marker, from the authority's recorded verdict — never fabricated.
+ *  - `nonconforming === null` → the verdict was NOT recorded on this snapshot (unknown), so
+ *    return 'none' ("Not checked") and NEVER a 'pass'.
+ *  - verdict present (array, possibly empty): a property named in it is 'fail'; otherwise
+ *    'pass' ONLY when the row was actually evaluated (both spec and measurement present).
+ */
+function resultOf(key: string, evaluated: boolean, nonconforming: string[] | null): 'pass' | 'fail' | 'none' {
+  if (nonconforming === null) return 'none';
   if (nonconforming.includes(key)) return 'fail';
   return evaluated ? 'pass' : 'none';
 }
@@ -293,40 +300,50 @@ function buildConformanceRow(
   spec: ConformanceRowSpec,
   sp: SpecParams,
   m: MtcMeasured,
-  nonconforming: string[]
+  nonconforming: string[] | null
 ): ConformanceRow {
   const { key, label, unit, kind } = spec;
   const withUnit = (s: string | null) => (s === null ? DASH : unit ? `${s} ${unit}` : s);
   let specText = DASH;
   let measuredText = DASH;
+  // A property is "evaluated" only when BOTH its spec requirement and its measured value are
+  // present on the snapshot — the exact inputs the authority needed. A row whose spec renders
+  // '—' (missing/partial snapshot) or that has no measurement is NEVER a Pass; it reads
+  // "Not checked".
   let evaluated = false;
 
   if (kind === 'range') {
     const lo = n3(sp[`${key}_min`] as Num);
     const hi = n3(sp[`${key}_max`] as Num);
+    const meas = n3(m[key] as Num);
     specText = lo !== null && hi !== null ? withUnit(`${lo}–${hi}`) : DASH;
-    measuredText = withUnit(n3(m[key] as Num));
-    evaluated = toNum(m[key] as Num) !== null;
+    measuredText = withUnit(meas);
+    evaluated = lo !== null && hi !== null && meas !== null;
   } else if (kind === 'tolerance') {
     const orderedKey = key === 'gauge_mm' ? 'ordered_gauge_mm' : 'ordered_width_mm';
     const tolKey = key === 'gauge_mm' ? 'gauge_tolerance_mm' : 'width_tolerance_mm';
     const ordered = n3(m[orderedKey] as Num);
     const tol = n3(sp[tolKey] as Num);
+    const meas = n3(m[key] as Num);
     specText =
       ordered !== null && tol !== null ? withUnit(`${ordered} ± ${tol}`) : tol !== null ? withUnit(`± ${tol}`) : DASH;
-    measuredText = withUnit(n3(m[key] as Num));
-    evaluated = toNum(m[key] as Num) !== null && toNum(m[orderedKey] as Num) !== null;
+    measuredText = withUnit(meas);
+    // The authority checks the tolerance only with the measured value, its ordered target, AND
+    // the spec tolerance all present.
+    evaluated = tol !== null && ordered !== null && meas !== null;
   } else if (kind === 'min') {
     const min = n3(sp.min_coating_g_m2);
+    const meas = n3(m.coating_weight_g_m2);
     specText = min !== null ? withUnit(`≥ ${min}`) : DASH;
-    measuredText = withUnit(n3(m.coating_weight_g_m2));
-    evaluated = toNum(m.coating_weight_g_m2) !== null;
+    measuredText = withUnit(meas);
+    evaluated = min !== null && meas !== null;
   } else {
-    const required = sp.coating_adhesion_required === true;
-    specText = sp.coating_adhesion_required == null ? DASH : required ? 'Pass required' : 'Not required';
+    const required = sp.coating_adhesion_required;
     const pass = m.coating_adhesion_pass;
+    specText = required == null ? DASH : required ? 'Pass required' : 'Not required';
     measuredText = pass == null ? DASH : pass ? 'Pass' : 'Fail';
-    evaluated = pass != null && required;
+    // Adhesion is an authority check only when it is required; otherwise it is not evaluated.
+    evaluated = required === true && pass != null;
   }
 
   return { key, label, specText, measuredText, result: resultOf(key, evaluated, nonconforming) };
@@ -354,32 +371,43 @@ export function ConformanceDetail({
   ) {
     return <InlineNotice>Spec-vs-measured detail isn’t recorded on this decision record.</InlineNotice>;
   }
-  const nonconforming = conformance.nonconforming_properties ?? [];
+  // Carry an ABSENT verdict through as null (do NOT coerce to []): without a recorded verdict
+  // the per-property result is unknown, so every row reads "Not checked" rather than "Pass".
+  const nonconforming = Array.isArray(conformance.nonconforming_properties)
+    ? conformance.nonconforming_properties
+    : null;
   const rows = CONFORMANCE_ROWS.map((s) => buildConformanceRow(s, specParams, measured, nonconforming));
   return (
-    <div className="overflow-hidden rounded-md border border-border">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="h-8">Property</TableHead>
-            <TableHead className="h-8">Spec requirement</TableHead>
-            <TableHead className="h-8 text-right">Measured</TableHead>
-            <TableHead className="h-8 text-right">Result</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.key} className={cn(r.result === 'fail' && 'bg-destructive/5')}>
-              <TableCell className="py-1.5 font-medium text-foreground">{r.label}</TableCell>
-              <TableCell className="py-1.5 text-muted-foreground tabular-nums">{r.specText}</TableCell>
-              <TableCell className="py-1.5 text-right text-foreground tabular-nums">{r.measuredText}</TableCell>
-              <TableCell className="py-1.5 text-right">
-                <ResultPill result={r.result} />
-              </TableCell>
+    <div className="space-y-2">
+      {nonconforming === null && (
+        <InlineNotice>
+          Conformance verdict isn’t recorded on this version — showing the measured values against spec only.
+        </InlineNotice>
+      )}
+      <div className="overflow-hidden rounded-md border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-8">Property</TableHead>
+              <TableHead className="h-8">Spec requirement</TableHead>
+              <TableHead className="h-8 text-right">Measured</TableHead>
+              <TableHead className="h-8 text-right">Result</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.key} className={cn(r.result === 'fail' && 'bg-destructive/5')}>
+                <TableCell className="py-1.5 font-medium text-foreground">{r.label}</TableCell>
+                <TableCell className="py-1.5 text-muted-foreground tabular-nums">{r.specText}</TableCell>
+                <TableCell className="py-1.5 text-right text-foreground tabular-nums">{r.measuredText}</TableCell>
+                <TableCell className="py-1.5 text-right">
+                  <ResultPill result={r.result} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
