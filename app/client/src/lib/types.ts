@@ -161,6 +161,89 @@ export interface PrecedentRef {
   rrf_score: Num;
 }
 
+// --- Frozen authority-input snapshots (read-only detail views) ---------------
+//
+// The deterministic authorities (agent/src/authorities.py) are evaluated over a
+// RESOLVE-ONCE snapshot of the policy params + coil MTC + claim, which the agent
+// persists verbatim onto every decision record (agent/src/decision_record.py:
+// spec_params / warranty_terms / mtc_measured / coil / claim_input JSONB columns).
+// The cockpit's expandable "spec vs measured" and warranty-proration detail views
+// read these EXACT inputs for transparency — they are presented, never recomputed,
+// and the conform/coverage verdict always comes from the persisted conformance /
+// coverage structs. Every field is optional and read defensively (via lib/format
+// coercion): a record written before these columns were projected — or any field a
+// policy row omits — simply renders as "detail unavailable", never a crash.
+
+/** Ordered-grade spec bands + tolerances (public.spec_params; compute_conformance). */
+export interface SpecParams {
+  carbon_pct_min?: Num;
+  carbon_pct_max?: Num;
+  manganese_pct_min?: Num;
+  manganese_pct_max?: Num;
+  yield_mpa_min?: Num;
+  yield_mpa_max?: Num;
+  tensile_mpa_min?: Num;
+  tensile_mpa_max?: Num;
+  elongation_pct_min?: Num;
+  elongation_pct_max?: Num;
+  gauge_tolerance_mm?: Num;
+  width_tolerance_mm?: Num;
+  min_coating_g_m2?: Num;
+  coating_adhesion_required?: boolean | null;
+  /** Preserves any other persisted spec column for forward-compat. */
+  [key: string]: unknown;
+}
+
+/** The coil MTC measured properties the authority checked (merged chemistry + dimensional). */
+export interface MtcMeasured {
+  carbon_pct?: Num;
+  manganese_pct?: Num;
+  yield_mpa?: Num;
+  tensile_mpa?: Num;
+  elongation_pct?: Num;
+  gauge_mm?: Num;
+  ordered_gauge_mm?: Num;
+  width_mm?: Num;
+  ordered_width_mm?: Num;
+  coating_weight_g_m2?: Num;
+  coating_adhesion_pass?: boolean | null;
+  [key: string]: unknown;
+}
+
+/** Coating-warranty terms (public.warranty_terms; compute_coverage). */
+export interface WarrantyTerms {
+  duration_months?: Num;
+  full_coverage_months?: Num;
+  excluded_environments?: string[];
+  excluded_installations?: string[];
+  min_coast_distance_km?: Num;
+  freight_cap?: Num;
+  coating_class?: Str;
+  proration_method?: Str;
+  [key: string]: unknown;
+}
+
+/** The resolved coil snapshot (ship date, coating class, pricing) the authority used. */
+export interface CoilSnapshot {
+  coil_id?: Str;
+  ship_date?: Str;
+  coating_class?: Str;
+  grade?: Str;
+  shipped_tonnage?: Num;
+  unit_price?: Num;
+  [key: string]: unknown;
+}
+
+/** The frozen claim the authority evaluated (claim-side dates/env for the coverage view). */
+export interface ClaimInputSnapshot {
+  claim_date?: Str;
+  install_date?: Str;
+  environment?: Str;
+  installation?: Str;
+  coast_distance_km?: Num;
+  [key: string]: unknown;
+}
+
 /** One immutable decision-record version (`GET /api/claims/:id` -> decision_records). */
 export interface DecisionRecord {
   record_version: number;
@@ -175,6 +258,12 @@ export interface DecisionRecord {
   coverage: CoverageEvidence | null;
   settlement: SettlementEvidence | null;
   duplicate: DuplicateEvidence | null;
+  /** Frozen authority inputs for the read-only detail views; may be absent on older records. */
+  spec_params: SpecParams | null;
+  warranty_terms: WarrantyTerms | null;
+  mtc_measured: MtcMeasured | null;
+  coil: CoilSnapshot | null;
+  claim_input: ClaimInputSnapshot | null;
   citations: Citation[] | null;
   cited_clause_ids: string[] | null;
   precedent: PrecedentRef[] | null;

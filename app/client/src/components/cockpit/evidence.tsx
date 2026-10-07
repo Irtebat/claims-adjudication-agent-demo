@@ -10,24 +10,53 @@
  */
 
 import type { ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@databricks/appkit-ui/react';
-import { ArrowUpRight, CheckCircle2, FileText, MinusCircle, ShieldAlert, ShieldCheck, XCircle } from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@databricks/appkit-ui/react';
+import {
+  ArrowUpRight,
+  CheckCircle2,
+  ChevronDown,
+  FileText,
+  MinusCircle,
+  ShieldAlert,
+  ShieldCheck,
+  XCircle,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EvidenceInfo } from '@/components/EvidenceTooltip';
 import { VerdictChip } from '@/components/StatusChip';
-import { EmptyState } from '@/components/States';
+import { EmptyState, InlineNotice } from '@/components/States';
 import { EVIDENCE_APPROACH } from '@/lib/evidence';
-import { DASH, humanizeKey, money, num, pct, scalar, shortDate } from '@/lib/format';
+import { DASH, humanizeKey, money, num, pct, scalar, shortDate, toNum } from '@/lib/format';
 import type {
   CockpitContext,
   DecisionRecord,
   PriorClaim,
+  ClaimInputSnapshot,
+  CoilSnapshot,
   ConformanceEvidence,
   CoverageEvidence,
   DuplicateEvidence,
+  MtcMeasured,
   SettlementEvidence,
+  SpecParams,
+  WarrantyTerms,
   SourceKind,
   SourceTarget,
+  Num,
 } from '@/lib/types';
 
 /** Callback that opens the source drill-through panel for one evidence item. */
@@ -171,6 +200,276 @@ function TagList({
   );
 }
 
+/**
+ * A collapsed-by-default disclosure for an evidence card's extra detail. The affordance is
+ * a real focusable button (keyboard + screen-reader reachable); the chevron rotates on open.
+ * Kept understated (small label, hairline separator above) so the card stays calm until the
+ * adjuster asks for more.
+ */
+function ExpandSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Collapsible className="mt-3 border-t border-border pt-2.5">
+      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 rounded-[5px] text-xs font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <span>{label}</span>
+        <ChevronDown
+          className="h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+          aria-hidden
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2.5">{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** The per-property pass/fail/not-checked marker, read from the authority's verdict (never recomputed). */
+function ResultPill({ result }: { result: 'pass' | 'fail' | 'none' }) {
+  if (result === 'none') return <span className="text-xs text-muted-foreground">Not checked</span>;
+  const ok = result === 'pass';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs font-semibold',
+        ok ? 'border-success/30 bg-success/10 text-success' : 'border-destructive/30 bg-destructive/10 text-destructive'
+      )}
+    >
+      {ok ? <CheckCircle2 className="h-3 w-3" aria-hidden /> : <XCircle className="h-3 w-3" aria-hidden />}
+      {ok ? 'Pass' : 'Fail'}
+    </span>
+  );
+}
+
+// --- Feature A: conformance spec-vs-measured detail --------------------------
+//
+// The rows mirror the exact checks in authorities.compute_conformance (chemistry +
+// mechanicals as min/max bands, gauge/width as ordered ± tolerance, coating weight as a
+// minimum, coating adhesion as a required pass). The spec requirement and measured value
+// are PRESENTED from the frozen spec_params / mtc_measured snapshot the authority used; the
+// pass/fail marker is DERIVED from the persisted `nonconforming_properties` list, so the
+// verdict is shown, never recomputed. A property whose measured value the authority did not
+// have is shown as "Not checked".
+
+type SpecKind = 'range' | 'tolerance' | 'min' | 'adhesion';
+interface ConformanceRowSpec {
+  /** Must match a `nonconforming_properties` token exactly (agent/src/authorities.py). */
+  key: string;
+  label: string;
+  unit: string;
+  kind: SpecKind;
+}
+
+const CONFORMANCE_ROWS: ConformanceRowSpec[] = [
+  { key: 'carbon_pct', label: 'Carbon', unit: '%', kind: 'range' },
+  { key: 'manganese_pct', label: 'Manganese', unit: '%', kind: 'range' },
+  { key: 'yield_mpa', label: 'Yield strength', unit: 'MPa', kind: 'range' },
+  { key: 'tensile_mpa', label: 'Tensile strength', unit: 'MPa', kind: 'range' },
+  { key: 'elongation_pct', label: 'Elongation', unit: '%', kind: 'range' },
+  { key: 'gauge_mm', label: 'Gauge', unit: 'mm', kind: 'tolerance' },
+  { key: 'width_mm', label: 'Width', unit: 'mm', kind: 'tolerance' },
+  { key: 'coating_weight_g_m2', label: 'Coating weight', unit: 'g/m²', kind: 'min' },
+  { key: 'coating_adhesion', label: 'Coating adhesion', unit: '', kind: 'adhesion' },
+];
+
+/** A jsonb numeric formatted to ≤3 dp, or null when absent/non-finite. */
+function n3(v: Num | undefined): string | null {
+  const x = toNum(v);
+  return x === null ? null : x.toLocaleString('en-US', { maximumFractionDigits: 3 });
+}
+
+interface ConformanceRow {
+  key: string;
+  label: string;
+  specText: string;
+  measuredText: string;
+  result: 'pass' | 'fail' | 'none';
+}
+
+/** A property's verdict: fail if the authority listed it, else pass when it was evaluated. */
+function resultOf(key: string, evaluated: boolean, nonconforming: string[]): 'pass' | 'fail' | 'none' {
+  if (nonconforming.includes(key)) return 'fail';
+  return evaluated ? 'pass' : 'none';
+}
+
+function buildConformanceRow(
+  spec: ConformanceRowSpec,
+  sp: SpecParams,
+  m: MtcMeasured,
+  nonconforming: string[]
+): ConformanceRow {
+  const { key, label, unit, kind } = spec;
+  const withUnit = (s: string | null) => (s === null ? DASH : unit ? `${s} ${unit}` : s);
+  let specText = DASH;
+  let measuredText = DASH;
+  let evaluated = false;
+
+  if (kind === 'range') {
+    const lo = n3(sp[`${key}_min`] as Num);
+    const hi = n3(sp[`${key}_max`] as Num);
+    specText = lo !== null && hi !== null ? withUnit(`${lo}–${hi}`) : DASH;
+    measuredText = withUnit(n3(m[key] as Num));
+    evaluated = toNum(m[key] as Num) !== null;
+  } else if (kind === 'tolerance') {
+    const orderedKey = key === 'gauge_mm' ? 'ordered_gauge_mm' : 'ordered_width_mm';
+    const tolKey = key === 'gauge_mm' ? 'gauge_tolerance_mm' : 'width_tolerance_mm';
+    const ordered = n3(m[orderedKey] as Num);
+    const tol = n3(sp[tolKey] as Num);
+    specText =
+      ordered !== null && tol !== null ? withUnit(`${ordered} ± ${tol}`) : tol !== null ? withUnit(`± ${tol}`) : DASH;
+    measuredText = withUnit(n3(m[key] as Num));
+    evaluated = toNum(m[key] as Num) !== null && toNum(m[orderedKey] as Num) !== null;
+  } else if (kind === 'min') {
+    const min = n3(sp.min_coating_g_m2);
+    specText = min !== null ? withUnit(`≥ ${min}`) : DASH;
+    measuredText = withUnit(n3(m.coating_weight_g_m2));
+    evaluated = toNum(m.coating_weight_g_m2) !== null;
+  } else {
+    const required = sp.coating_adhesion_required === true;
+    specText = sp.coating_adhesion_required == null ? DASH : required ? 'Pass required' : 'Not required';
+    const pass = m.coating_adhesion_pass;
+    measuredText = pass == null ? DASH : pass ? 'Pass' : 'Fail';
+    evaluated = pass != null && required;
+  }
+
+  return { key, label, specText, measuredText, result: resultOf(key, evaluated, nonconforming) };
+}
+
+/**
+ * Spec-vs-measured table for the MTC conformance card. Requires both the frozen spec_params
+ * and mtc_measured snapshots; when either is absent (older records) it degrades to a clear
+ * "detail unavailable" notice rather than rendering an empty or misleading table.
+ */
+export function ConformanceDetail({
+  conformance,
+  specParams,
+  measured,
+}: {
+  conformance: ConformanceEvidence;
+  specParams: SpecParams | null;
+  measured: MtcMeasured | null;
+}) {
+  if (
+    specParams == null ||
+    measured == null ||
+    Object.keys(specParams).length === 0 ||
+    Object.keys(measured).length === 0
+  ) {
+    return <InlineNotice>Spec-vs-measured detail isn’t recorded on this decision record.</InlineNotice>;
+  }
+  const nonconforming = conformance.nonconforming_properties ?? [];
+  const rows = CONFORMANCE_ROWS.map((s) => buildConformanceRow(s, specParams, measured, nonconforming));
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-8">Property</TableHead>
+            <TableHead className="h-8">Spec requirement</TableHead>
+            <TableHead className="h-8 text-right">Measured</TableHead>
+            <TableHead className="h-8 text-right">Result</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={r.key} className={cn(r.result === 'fail' && 'bg-destructive/5')}>
+              <TableCell className="py-1.5 font-medium text-foreground">{r.label}</TableCell>
+              <TableCell className="py-1.5 text-muted-foreground tabular-nums">{r.specText}</TableCell>
+              <TableCell className="py-1.5 text-right text-foreground tabular-nums">{r.measuredText}</TableCell>
+              <TableCell className="py-1.5 text-right">
+                <ResultPill result={r.result} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// --- Feature B: warranty coverage / proration detail -------------------------
+
+/** Turn an authority exclusion token (e.g. `environment:marine`) into readable text. */
+function humanizeExclusion(token: string): string {
+  if (token === 'duration_expired') return 'Warranty duration expired';
+  if (token === 'coast_distance') return 'Coast distance below minimum';
+  const idx = token.indexOf(':');
+  if (idx > 0) {
+    const kind = token.slice(0, idx);
+    const value = token.slice(idx + 1);
+    if (kind === 'environment') return `Excluded environment: ${value}`;
+    if (kind === 'installation') return `Excluded installation: ${value}`;
+  }
+  return humanizeKey(token);
+}
+
+/**
+ * Warranty coverage detail: the exclusions evaluated plus the proration derivation shown
+ * with its inputs (ship/claim/install dates, coating class, duration + full-coverage
+ * threshold, elapsed months). The elapsed months and proration factor are PRESENTED from
+ * the persisted coverage struct — never recomputed. When the warranty-terms snapshot is
+ * missing (older records) it still shows the computed coverage figures with a clear note;
+ * when nothing is available it degrades to a "detail unavailable" notice.
+ */
+export function CoverageDetail({
+  coverage,
+  warrantyTerms,
+  coil,
+  claim,
+}: {
+  coverage: CoverageEvidence;
+  warrantyTerms: WarrantyTerms | null;
+  coil: CoilSnapshot | null;
+  claim: ClaimInputSnapshot | null;
+}) {
+  const exclusions = coverage.exclusions_hit ?? [];
+  const duration = toNum(warrantyTerms?.duration_months);
+  const full = toNum(warrantyTerms?.full_coverage_months);
+  const elapsed = toNum(coverage.elapsed_months);
+  const proration = coverage.proration_factor;
+  const shipDate = coil?.ship_date ?? null;
+  const claimDate = claim?.claim_date ?? null;
+  const installDate = claim?.install_date ?? null;
+  const coatingClass = coil?.coating_class ?? warrantyTerms?.coating_class ?? null;
+  const hasTerms = duration !== null || full !== null;
+  const canDerive = hasTerms || elapsed !== null || toNum(proration) !== null;
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="mb-1 text-[0.68rem] font-medium uppercase tracking-wide text-muted-foreground">
+          Exclusions evaluated
+        </p>
+        <TagList items={exclusions.map(humanizeExclusion)} tone="warn" />
+      </div>
+
+      {canDerive ? (
+        <div className="rounded-md border border-border bg-muted/30 p-3">
+          <p className="text-sm leading-relaxed text-foreground">
+            In service <span className="font-semibold tabular-nums">{num(elapsed, 0)}</span> of{' '}
+            <span className="font-semibold tabular-nums">{num(duration, 0)}</span> warranty months
+            {full !== null && <> (full coverage through {num(full, 0)} months)</>}
+            <span className="mx-1.5 text-muted-foreground">→</span>
+            proration <span className="font-semibold tabular-nums">{pct(proration)}</span>
+          </p>
+          <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+            <Stat label="Ship date" value={shortDate(shipDate)} />
+            <Stat label="Claim date" value={shortDate(claimDate)} />
+            <Stat label="Install date" value={shortDate(installDate)} />
+            <Stat label="Coating class" value={coatingClass ?? DASH} />
+            <Stat label="Warranty duration" value={duration !== null ? `${num(duration, 0)} mo` : DASH} />
+            <Stat label="Full-coverage window" value={full !== null ? `${num(full, 0)} mo` : DASH} />
+          </div>
+          {!hasTerms && (
+            <p className="mt-2.5 text-xs text-muted-foreground">
+              Full warranty terms aren’t recorded on this version; showing the computed coverage figures only.
+            </p>
+          )}
+        </div>
+      ) : (
+        <InlineNotice>Proration derivation detail isn’t recorded on this decision record.</InlineNotice>
+      )}
+    </div>
+  );
+}
+
 export function SupportingSources({ record }: { record: DecisionRecord | null }) {
   const conformance: ConformanceEvidence | null = record?.conformance ?? null;
   const coverage: CoverageEvidence | null = record?.coverage ?? null;
@@ -191,10 +490,19 @@ export function SupportingSources({ record }: { record: DecisionRecord | null })
         }
       >
         {conformance ? (
-          <Stat
-            label="Non-conforming properties"
-            value={<TagList items={conformance.nonconforming_properties ?? []} tone="warn" />}
-          />
+          <>
+            <Stat
+              label="Non-conforming properties"
+              value={<TagList items={conformance.nonconforming_properties ?? []} tone="warn" />}
+            />
+            <ExpandSection label="Spec vs measured">
+              <ConformanceDetail
+                conformance={conformance}
+                specParams={record?.spec_params ?? null}
+                measured={record?.mtc_measured ?? null}
+              />
+            </ExpandSection>
+          </>
         ) : (
           <span className="text-sm text-muted-foreground">{DASH}</span>
         )}
@@ -206,15 +514,25 @@ export function SupportingSources({ record }: { record: DecisionRecord | null })
         determination={coverage && <Determination ok={coverage.covered} positive="Covered" negative="Not covered" />}
       >
         {coverage ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Elapsed" value={`${num(coverage.elapsed_months, 0)} mo`} />
-            <Stat label="Proration" value={pct(coverage.proration_factor)} />
-            <Stat
-              label="Exclusions hit"
-              value={<TagList items={coverage.exclusions_hit ?? []} tone="warn" />}
-              className="col-span-2"
-            />
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="Elapsed" value={`${num(coverage.elapsed_months, 0)} mo`} />
+              <Stat label="Proration" value={pct(coverage.proration_factor)} />
+              <Stat
+                label="Exclusions hit"
+                value={<TagList items={coverage.exclusions_hit ?? []} tone="warn" />}
+                className="col-span-2"
+              />
+            </div>
+            <ExpandSection label="Coverage detail">
+              <CoverageDetail
+                coverage={coverage}
+                warrantyTerms={record?.warranty_terms ?? null}
+                coil={record?.coil ?? null}
+                claim={record?.claim_input ?? null}
+              />
+            </ExpandSection>
+          </>
         ) : (
           <span className="text-sm text-muted-foreground">{DASH}</span>
         )}
