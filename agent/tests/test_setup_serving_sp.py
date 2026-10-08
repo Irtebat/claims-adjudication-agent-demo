@@ -90,12 +90,32 @@ def test_lakebase_grants_cover_the_synced_precedent_corpus():
 
 
 def test_build_uc_grant_statements_exact():
+    # (a) a valid UUID principal produces exactly the expected, backtick-quoted grants.
     assert setup.build_uc_grant_statements(APP_ID) == [
-        f"GRANT USE CATALOG ON CATALOG system TO `{APP_ID}`",
-        f"GRANT USE SCHEMA ON SCHEMA system.ai TO `{APP_ID}`",
-        f"GRANT EXECUTE ON FUNCTION system.ai.`databricks-gpt-5-4` TO `{APP_ID}`",
-        f"GRANT EXECUTE ON FUNCTION system.ai.`gte_large_en_v1_5` TO `{APP_ID}`",
+        f"GRANT USE CATALOG ON CATALOG `fe-bar-ir` TO `{APP_ID}`",
+        f"GRANT USE SCHEMA ON SCHEMA `fe-bar-ir`.`adjudication-agent` TO `{APP_ID}`",
+        "GRANT EXECUTE ON MODEL SERVICE "
+        f"`fe-bar-ir`.`adjudication-agent`.`adjudication-reasoning` TO `{APP_ID}`",
+        f"GRANT EXECUTE ON MODEL SERVICE `fe-bar-ir`.`adjudication-agent`.`embedding` TO `{APP_ID}`",
     ]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "not-a-uuid",
+        "`; DROP ROLE victim; --",  # backtick-bearing injection attempt
+        f"{APP_ID}`",  # valid UUID with a trailing backtick appended
+        f"`{APP_ID}`",  # pre-wrapped in backticks
+        APP_ID + "0",  # wrong length
+        "",
+    ],
+)
+def test_build_uc_grant_statements_rejects_invalid_principal(bad):
+    # (b) a non-UUID or backtick-bearing principal is always a bug: fail loud rather than
+    # silently escape it into a GRANT statement.
+    with pytest.raises(ValueError, match="not a valid service-principal"):
+        setup.build_uc_grant_statements(bad)
 
 
 def test_apply_uc_execute_grants_runs_each_on_the_warehouse():

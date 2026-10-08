@@ -2,11 +2,12 @@
 
 Used by BOTH the policy intake (embedding clause text at load) and the agent-runtime
 retrieval (embedding the query). It calls the governed model service
-``system.ai.gte-large-en`` at ``/ai-gateway/mlflow/v1/embeddings`` with an OAuth
-bearer token from the Databricks SDK credential provider, refreshed per batch. GTE
-output is 1024-dim and NOT normalized, so we L2-normalize both stored and query
-vectors and use cosine distance. No ``dimensions`` param is sent (unsupported for
-GTE). ``ai_query`` is deliberately not used — it bypasses most gateway governance.
+``fe-bar-ir.adjudication-agent.embedding`` at ``/ai-gateway/mlflow/v1/embeddings`` with
+an OAuth bearer token from the Databricks SDK credential provider, refreshed per batch.
+The service is backed by GTE (gte-large-en-v1.5), whose output is 1024-dim and NOT
+normalized, so we L2-normalize both stored and query vectors and use cosine distance.
+No ``dimensions`` param is sent (unsupported for GTE). ``ai_query`` is deliberately not
+used — it bypasses most gateway governance.
 
 The HTTP transport is injectable (``post_fn``) so batching, normalization and
 retry/backoff are unit-testable without the network.
@@ -23,7 +24,7 @@ import urllib.error
 import urllib.request
 from typing import Callable
 
-MODEL_SERVICE = "system.ai.gte-large-en"
+MODEL_SERVICE = "fe-bar-ir.adjudication-agent.embedding"
 EMBEDDING_DIM = 1024
 GATEWAY_PATH = "/ai-gateway/mlflow/v1/embeddings"
 DEFAULT_BATCH = 16
