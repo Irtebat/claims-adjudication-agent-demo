@@ -80,26 +80,30 @@ export function DecisionStatusChip({ status, className }: { status: Str; classNa
 }
 
 /**
- * Risk flags shown on the queue and cockpit header. Duplicate + fraud-cluster are simple
- * neutral-attention markers. The HIGH-RISK chip is different: it appears only when the
- * fraud workstream's `high_risk` gold column is strictly true, and it carries the
- * `risk_reason` string as a hover tooltip (e.g. "Fraud cluster: 4 claims from 1 customer
- * on heat H-4821 (concentration 0.80)."). Lower-risk claims get no alarming chip here.
+ * Risk flags shown on the queue and cockpit header. There is exactly ONE fraud indicator —
+ * the HIGH-RISK chip — and it appears only when the fraud workstream's `high_risk` gold
+ * column is strictly true, carrying the `risk_reason` string as a hover tooltip (e.g. "Fraud
+ * cluster: 10 claims from 5 customers on heat HEAT-000000 (concentration 0.50)."). We do NOT
+ * render a chip off `fraud_cluster_id`: that is a graph-component (heat) id assigned to
+ * virtually every claim, so a chip gated on its mere presence tagged nearly the whole queue
+ * as fraud regardless of risk. Lower-/zero-risk claims therefore get no alarming chip here;
+ * the only other marker is the neutral Duplicate chip.
  */
 export function RiskFlags({
   duplicateOf,
-  fraudCluster,
   highRisk,
   riskReason,
   className,
 }: {
   duplicateOf?: Str;
-  fraudCluster?: Str;
   highRisk?: boolean;
   riskReason?: Str;
   className?: string;
 }) {
-  const hasAny = Boolean(duplicateOf || fraudCluster || highRisk);
+  // Strict `=== true`: never render the fraud chip for a falsy-but-present value (e.g. a stray
+  // string "false"), only for a real high_risk flag.
+  const showHighRisk = highRisk === true;
+  const hasAny = Boolean(duplicateOf) || showHighRisk;
   if (!hasAny) return null;
   return (
     <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
@@ -109,13 +113,7 @@ export function RiskFlags({
           Duplicate
         </Chip>
       )}
-      {fraudCluster && (
-        <Chip tone="attention">
-          <ShieldAlert className="h-3 w-3" aria-hidden />
-          Fraud cluster
-        </Chip>
-      )}
-      {highRisk &&
+      {showHighRisk &&
         (riskReason ? (
           <Tooltip>
             <TooltipTrigger asChild>

@@ -120,3 +120,30 @@ export const DISPOSITIONS_FOR: Record<Verdict, string[]> = {
   DENY: ['DENY', 'DUPLICATE'],
   PEND_INVESTIGATE: ['PEND_INVESTIGATE'],
 };
+
+/**
+ * Safe accessor for DISPOSITIONS_FOR: the dispositions valid for a verdict, or an EMPTY
+ * array for any value that is not one of the three UI verdicts — the operational 'PEND',
+ * a null, or any unrecognized string. Callers do `dispositionsFor(v).includes(…)` and map
+ * over the result, so returning `[]` (never `undefined`) means an unexpected verdict can
+ * never crash the cockpit with `Cannot read properties of undefined (reading 'includes')`.
+ */
+export function dispositionsFor(v: Str | undefined): string[] {
+  return (v != null && DISPOSITIONS_FOR[v as Verdict]) || [];
+}
+
+/**
+ * Reconcile a persisted verdict to the UI Verdict vocabulary. `adjudications.recommended_verdict`
+ * (and `.verdict`) store the OPERATIONAL verdict 'APPROVE' | 'DENY' | 'PEND', where 'PEND' is how
+ * the agent's 'PEND_INVESTIGATE' hold is recorded (agent/src/writer.py maps it via
+ * adjudication_verdict). The decision form and DISPOSITIONS_FOR speak the agent/UI vocabulary, so
+ * collapse the operational 'PEND' back to 'PEND_INVESTIGATE', pass APPROVE/DENY through, and fall
+ * back to the safe, defined 'APPROVE' for anything unrecognized or null (its disposition set is
+ * non-empty). The submit flow then sends 'PEND_INVESTIGATE', which server/finalize.ts accepts and
+ * re-maps to the operational 'PEND'.
+ */
+export function uiVerdict(v: Str | undefined): Verdict {
+  if (v === 'PEND' || v === 'PEND_INVESTIGATE') return 'PEND_INVESTIGATE';
+  if (v === 'DENY') return 'DENY';
+  return 'APPROVE';
+}

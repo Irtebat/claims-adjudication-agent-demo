@@ -26,7 +26,7 @@ import {
 } from '@databricks/appkit-ui/react';
 import { AlertCircle, Check, Search } from 'lucide-react';
 import { finalizeClaim, ApiError } from '@/lib/api';
-import { DISPOSITIONS_FOR, dispositionLabel, money, toNum, verdictLabel } from '@/lib/format';
+import { dispositionsFor, dispositionLabel, money, toNum, uiVerdict, verdictLabel } from '@/lib/format';
 import type { Adjudication, FinalizeResult, Verdict } from '@/lib/types';
 
 const VERDICTS: Verdict[] = ['APPROVE', 'DENY', 'PEND_INVESTIGATE'];
@@ -56,8 +56,11 @@ export function DecisionForm({
   adjudication: Adjudication;
   onFinalized: (result: FinalizeResult) => void;
 }) {
-  const recVerdict = (adjudication.recommended_verdict as Verdict | null) ?? 'APPROVE';
-  const recDisposition = adjudication.recommended_disposition ?? DISPOSITIONS_FOR[recVerdict][0];
+  // The persisted recommendation is OPERATIONAL ('PEND' for an investigate hold); reconcile it
+  // to the UI verdict vocabulary so DISPOSITIONS_FOR resolves (operational 'PEND' has no entry
+  // and used to crash the validation useMemo below on `.includes`).
+  const recVerdict = uiVerdict(adjudication.recommended_verdict);
+  const recDisposition = adjudication.recommended_disposition ?? dispositionsFor(recVerdict)[0];
   const recAmount = toNum(adjudication.approved_amount) ?? 0;
   const claimedAmount = toNum(adjudication.claimed_amount) ?? 0;
 
@@ -78,7 +81,7 @@ export function DecisionForm({
 
   const validation = useMemo(() => {
     const errs: string[] = [];
-    const dispositions = DISPOSITIONS_FOR[verdict];
+    const dispositions = dispositionsFor(verdict);
     if (!dispositions.includes(disposition)) errs.push('disposition');
     if (verdict === 'APPROVE') {
       if (amountNum < 0) errs.push('amount');
@@ -93,7 +96,7 @@ export function DecisionForm({
   function changeVerdict(next: Verdict) {
     setVerdict(next);
     // Snap disposition + amount to values consistent with the new verdict.
-    const valid = DISPOSITIONS_FOR[next];
+    const valid = dispositionsFor(next);
     if (!valid.includes(disposition)) setDisposition(next === recVerdict ? recDisposition : valid[0]);
     if (next !== 'APPROVE') setAmount('0');
     else if (verdict !== 'APPROVE') setAmount(String(recAmount));
@@ -214,7 +217,7 @@ export function DecisionForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {DISPOSITIONS_FOR[verdict].map((d) => (
+                {dispositionsFor(verdict).map((d) => (
                   <SelectItem key={d} value={d}>
                     {dispositionLabel(d)}
                   </SelectItem>

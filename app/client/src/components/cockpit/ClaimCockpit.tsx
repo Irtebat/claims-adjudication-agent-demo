@@ -274,12 +274,7 @@ export function ClaimCockpit({
                   {a.claim_type ?? 'Claim'}
                 </Badge>
                 <DecisionStatusChip status={a.decision_status} />
-                <RiskFlags
-                  duplicateOf={a.duplicate_of_claim_id}
-                  fraudCluster={a.fraud_cluster_id}
-                  highRisk={highRisk}
-                  riskReason={riskReason}
-                />
+                <RiskFlags duplicateOf={a.duplicate_of_claim_id} highRisk={highRisk} riskReason={riskReason} />
               </>
             )}
           </div>

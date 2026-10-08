@@ -68,6 +68,18 @@ function whereFilters(alias: string, claimAlias: string, f: ListFilters, params:
  * sibling excludes the claim. The NOT EXISTS is correlated on claim_id, so it also drops
  * an offline-validation-style stray RECOMMENDED row written against an already-finalized
  * claim.
+ *
+ * The queue also surfaces the gold fraud signal `high_risk` (+ `risk_reason`) from
+ * reference.customer_heat_risk (resolved via the claim's coil -> heat in reference.heats_coils,
+ * the same linkage the cockpit context uses). This is what the queue's risk chip gates on:
+ * `fraud_cluster_id` is a graph-component id present on virtually every claim and is NOT a fraud
+ * signal on its own, whereas `high_risk` is the tuned flag.
+ *
+ * The lookup is a LEFT JOIN LATERAL (... LIMIT 1): the subquery returns AT MOST ONE row by
+ * construction, so the queue stays strictly one row per adjudication REGARDLESS of whether
+ * heats_coils has multiple rows per coil_id or customer_heat_risk has duplicate (customer_id,
+ * heat_no) rows — the 1:1 guarantee comes from LIMIT 1, not from the data happening to be unique.
+ * Being LEFT, a claim with no matching heat-risk row stays in the queue with high_risk NULL.
  */
 export function queueSql(f: ListFilters = {}): Sql {
   const params: unknown[] = [];
@@ -78,9 +90,17 @@ export function queueSql(f: ListFilters = {}): Sql {
            a.verdict, a.recommended_verdict, a.recommended_disposition,
            a.approved_amount, a.claimed_amount, a.confidence,
            a.duplicate_of_claim_id, a.fraud_cluster_id, a.supplier_attributable,
-           a.recommended_at
+           a.recommended_at, r.high_risk, r.risk_reason
       FROM public.adjudications a
       JOIN public.claims c ON c.claim_id = a.claim_id
+      LEFT JOIN LATERAL (
+             SELECT r.high_risk, r.risk_reason
+               FROM reference.customer_heat_risk r
+               JOIN reference.heats_coils hc ON hc.heat_no = r.heat_no
+              WHERE hc.coil_id = c.coil_id
+                AND r.customer_id = c.customer_id
+              LIMIT 1
+           ) r ON true
      WHERE a.decision_status = 'RECOMMENDED'
        AND NOT EXISTS (
              SELECT 1 FROM public.adjudications h
