@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { queueSql, cockpitAdjudicationSql, historySql, sourceRowSql, isSourceName, SOURCE_REGISTRY } from './sql';
+import {
+  queueSql,
+  cockpitAdjudicationSql,
+  cockpitDecisionRecordsSql,
+  historySql,
+  sourceRowSql,
+  isSourceName,
+  SOURCE_REGISTRY,
+} from './sql';
 
 /** Collapse whitespace so assertions about SQL structure ignore formatting. */
 function flat(text: string): string {
@@ -77,6 +85,24 @@ describe('cockpitAdjudicationSql', () => {
     // exact filter has narrowed to a single row).
     expect(t).toContain("ORDER BY CASE WHEN a.decision_status = 'RECOMMENDED' THEN 0 ELSE 1 END");
     expect(t).toContain('LIMIT 1');
+  });
+});
+
+describe('cockpitDecisionRecordsSql', () => {
+  it('projects the verdict structs AND the frozen authority-input snapshots for the detail views', () => {
+    const { text, params } = cockpitDecisionRecordsSql('ADJ-1');
+    const t = flat(text);
+    expect(params).toEqual(['ADJ-1']);
+    expect(t).toContain('FROM public.adjudication_decision_records');
+    expect(t).toContain('WHERE adjudication_id = $1');
+    expect(t).toContain('ORDER BY record_version ASC');
+    // The already-persisted verdict structs stay projected…
+    expect(t).toContain('conformance');
+    expect(t).toContain('coverage');
+    // …plus the frozen inputs the read-only spec-vs-measured / proration views present.
+    for (const col of ['spec_params', 'warranty_terms', 'mtc_measured', 'coil', 'claim_input']) {
+      expect(t).toContain(col);
+    }
   });
 });
 
