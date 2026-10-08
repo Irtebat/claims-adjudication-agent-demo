@@ -39,6 +39,7 @@ from mlflow.types.responses import (
 )
 
 import agent_tools
+import genie_tools
 from decision_record import (
     PROMPT_VERSION,
     SCHEMA_VERSION,
@@ -49,6 +50,7 @@ from decision_record import (
     source_sha256,
     validate_narrative_conflict,
 )
+from workspace_client import workspace_client
 from writer import write_adjudication
 
 LLM_ENDPOINT = "system.ai.gpt-5-4"
@@ -87,7 +89,12 @@ SYSTEM_PROMPT = (
     "DENY/DUPLICATE and never payable; an in-spec material claim is DENY; an "
     "out-of-coverage warranty claim is DENY; the settlement_estimate MUST equal the "
     "settlement authority's approved amount; you may only escalate to PEND_INVESTIGATE "
-    "as a safe hold, never convert a denial into a payment."
+    "as a safe hold, never convert a denial into a payment. "
+    "Two ADVISORY Genie tools are available: query_claims_genie (natural-language "
+    "questions over per-claim operational history and context) and query_analytics_genie "
+    "(portfolio/KPI analytics). You MAY call them to enrich your rationale with historical "
+    "or aggregate context, but their answers are ADVISORY ONLY: they must NEVER change the "
+    "deterministic verdict, eligibility, or amount, and must not be cited as policy clauses."
 )
 
 
@@ -238,47 +245,59 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             return agent_tools.default_recommendation(core), False
 
     def _tools(self, core: dict):
-        """Expose the required tools as read-only views of the frozen tool results.
+        """Bind the frozen echo tools PLUS the two live, model-driven Genie tools.
 
         The deterministic core has already resolved the policy snapshot and run every
-        tool exactly once. These wrappers let LangGraph reason with the named tools
-        without re-resolving policy or giving the LLM a path to rerun/change money.
+        deterministic tool exactly once; the frozen wrappers let LangGraph reason with
+        the named tools without re-resolving policy or giving the LLM a path to
+        rerun/change money. The Genie tools (``genie_tools``) are the ONLY live tools:
+        they query the two governed Genie Agents with model-authored questions and are
+        ADVISORY — their answers inform the rationale but never the verdict/amount
+        (``enforce_invariants`` runs afterwards and owns the money). Each Genie call is
+        audited into ``core["genie_consultations"]`` for the decision record.
         """
         from langchain_core.tools import StructuredTool
 
         def frozen_result(key: str):
             return lambda: json.dumps(core[key], default=str, sort_keys=True)
 
-        return [
-            StructuredTool.from_function(
-                func=frozen_result(key),
-                name=name,
-                description=description,
-            )
-            for name, description in (
-                ("compute_conformance", "Return the frozen deterministic conformance result."),
-                ("compute_coverage", "Return the frozen deterministic warranty coverage result."),
-                ("compute_settlement", "Return the frozen deterministic settlement amount."),
-                ("check_duplicate_claim", "Return the frozen deterministic duplicate-gate result."),
+        frozen = [
+            StructuredTool.from_function(func=frozen_result(key), name=name, description=desc)
+            for name, desc, key in (
+                (
+                    "compute_conformance",
+                    "Return the frozen deterministic conformance result.",
+                    "conformance",
+                ),
+                (
+                    "compute_coverage",
+                    "Return the frozen deterministic warranty coverage result.",
+                    "coverage",
+                ),
+                (
+                    "compute_settlement",
+                    "Return the frozen deterministic settlement amount.",
+                    "settlement",
+                ),
+                (
+                    "check_duplicate_claim",
+                    "Return the frozen deterministic duplicate-gate result.",
+                    "duplicate",
+                ),
                 (
                     "retrieve_policy_clauses",
                     "Return clauses resolved from the frozen policy snapshot.",
+                    "citations",
                 ),
-                ("find_similar_prior_claims", "Return advisory similar prior claims."),
-                ("get_customer_heat_risk", "Return advisory customer/heat risk."),
+                ("find_similar_prior_claims", "Return advisory similar prior claims.", "precedent"),
+                ("get_customer_heat_risk", "Return advisory customer/heat risk.", "risk"),
             )
-            for key in [
-                {
-                    "compute_conformance": "conformance",
-                    "compute_coverage": "coverage",
-                    "compute_settlement": "settlement",
-                    "check_duplicate_claim": "duplicate",
-                    "retrieve_policy_clauses": "citations",
-                    "find_similar_prior_claims": "precedent",
-                    "get_customer_heat_risk": "risk",
-                }[name]
-            ]
         ]
+        genie = genie_tools.build_genie_tools(
+            client_factory=lambda: workspace_client(self.profile),
+            collector=core.setdefault("genie_consultations", []),
+        )
+        return frozen + genie
 
     def _run_graph(self, core: dict, evidence: str) -> str:
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -369,6 +388,9 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             root.set_inputs({"claim": claim})
             with connect(profile=self.profile, autocommit=False) as conn:
                 core = self._deterministic_core(conn, claim)
+                # Per-adjudication audit trail for any live Genie tool calls the LLM
+                # makes; the tools append here and it is folded into the decision record.
+                core.setdefault("genie_consultations", [])
                 raw_recommendation, llm_used = self._llm_recommendation(core)
                 raw_recommendation = validate_narrative_conflict(
                     raw_recommendation, claim, core["clauses"]
@@ -392,6 +414,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                     citations=core["citations"],
                     advisory_risk=core.get("risk"),
                     reproducibility=reproducibility,
+                    genie_consultations=core["genie_consultations"],
                 )
                 write_result = {"persisted": False}
                 if persist:
@@ -426,13 +449,14 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                     f"approved={record['approved_amount']}"
                 ),
             )
-            self._tag_trace(root, claim, record, violations, llm_used)
+            self._tag_trace(root, claim, record, violations, llm_used, core["genie_consultations"])
         return {
             "record": record,
             "recommendation": corrected,
             "deterministic": core["deterministic"],
             "invariant_violations": violations,
             "llm_used": llm_used,
+            "genie_consultations": core["genie_consultations"],
             "write_result": write_result,
         }
 
@@ -443,8 +467,10 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
         record: dict,
         violations: list[str],
         llm_used: bool,
+        genie_consultations: list[dict],
     ) -> None:
-        # Searchable root attributes — NO credentials/PII.
+        # Searchable root attributes — NO credentials/PII. The genie_* attributes make
+        # any adjudication that consulted a Genie Agent discoverable in the trace UI.
         root.set_attributes(
             {
                 "claim_id": str(claim.get("claim_id")),
@@ -460,6 +486,10 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                 "cited_clause_ids": ",".join(record.get("cited_clause_ids") or []),
                 "invariant_violations": ",".join(violations),
                 "llm_used": str(llm_used),
+                "genie_consultation_count": len(genie_consultations),
+                "genie_spaces_consulted": ",".join(
+                    sorted({c["space"] for c in genie_consultations})
+                ),
             }
         )
 
@@ -505,6 +535,7 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                 "adjudication_id": record["adjudication_id"],
                 "cited_clause_ids": record["cited_clause_ids"],
                 "llm_used": outcome["llm_used"],
+                "genie_consultations": outcome["genie_consultations"],
                 "write_result": outcome["write_result"],
             },
         )

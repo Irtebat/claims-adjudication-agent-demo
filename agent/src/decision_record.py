@@ -448,11 +448,18 @@ def build_decision_record(
     record_version: int = 1,
     idempotency_key: str | None = None,
     adjudication_id: str | None = None,
+    genie_consultations: list[dict] | None = None,
 ) -> dict:
     """Assemble the full canonical payload for one adjudication decision record.
 
     Returns a dict keyed by ``DECISION_RECORD_COLUMNS``; nested values in
     ``JSONB_COLUMNS`` stay as dict/list for the writer to bind as JSONB.
+
+    ``genie_consultations`` (the audit trail of any live, model-driven Genie tool
+    calls made during reasoning) is folded into the ``flags`` JSONB under the
+    ``genie_consultations`` key — the same mechanism used for ``narrative_conflict``
+    — so it persists on BOTH the decision record and the adjudications row without a
+    schema change. It is advisory audit metadata only and never affects money.
     """
     authorities_src = reproducibility["authorities_source_sha256"]
     key = idempotency_key or build_idempotency_key(
@@ -464,6 +471,8 @@ def build_decision_record(
     flags = dict(recommendation.get("flags", {}))
     if narrative_conflict:
         flags["narrative_conflict"] = narrative_conflict
+    if genie_consultations:
+        flags["genie_consultations"] = genie_consultations
     return {
         "adjudication_id": adj_id,
         "claim_id": claim["claim_id"],
