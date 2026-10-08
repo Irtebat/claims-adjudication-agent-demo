@@ -19,21 +19,22 @@ recommendation back to the deterministic outcome, so a Genie answer can NEVER
 change the verdict, the eligibility, or the amount — it only informs the LLM's
 rationale and narrative.
 
-ROBUSTNESS. Each call runs in its own short-lived daemon thread bounded by a
-wall-clock timeout. Because a daemon thread cannot be force-killed, the worker is
-kept from hanging forever by giving the underlying Genie client a HARD
-per-request HTTP/socket timeout AND a capped retry window (``_bound_client_http_timeout``):
-a stalled request raises instead of blocking, so the worker thread actually
-TERMINATES (returns or errors) within bounds rather than leaking a thread stuck
-on a dead socket. A module-level concurrency cap (``GENIE_MAX_INFLIGHT``) is the
-backstop: it bounds the number of simultaneously in-flight Genie threads, so even
-under repeated hangs daemon threads (and their sockets) cannot accumulate
-unbounded — once the cap is reached, a new call sheds load with a graceful
-"capacity" string instead of spawning yet another thread. Every failure (timeout,
-capacity, 403/permission, Genie/HTTP error, empty answer) is swallowed into a
-short graceful string returned to the LLM, so a Genie outage never hangs or fails
-an adjudication: the reasoning simply proceeds on the deterministic + frozen
-evidence.
+ROBUSTNESS. A daemon thread cannot be force-killed, so three independent bounds keep
+a stalled Genie call from leaking a worker thread. (1) The ``client_factory`` yields a
+``WorkspaceClient`` built with a HARD per-request HTTP/socket timeout and a bounded
+retry window, applied at construction through the SUPPORTED public ``Config`` fields
+(see ``agent.ClaimsAdjudicationAgent._tools`` -> ``workspace_client``), so a stalled
+request raises instead of blocking forever and the underlying call returns/errors
+rather than hanging on a dead socket. (2) Each call runs in its own short-lived daemon
+thread joined with a wall-clock timeout, so ``consult_genie`` returns promptly even
+when the underlying call is slow. (3) A module-level concurrency cap
+(``GENIE_MAX_INFLIGHT``) bounds how many Genie worker threads may be in flight at once,
+so even repeated hangs cannot let daemon threads (and their sockets) accumulate
+unbounded — once the cap is reached a new call sheds load with a graceful "capacity"
+string instead of spawning yet another thread. Every failure (timeout, capacity,
+403/permission, Genie/HTTP error, empty answer) is swallowed into a short graceful
+string returned to the LLM, so a Genie outage never hangs or fails an adjudication: the
+reasoning simply proceeds on the deterministic + frozen evidence.
 
 AUDITABILITY. Every call is captured twice: as a ``genie_<label>`` MLflow span
 (the question in; the status/answer/SQL/latency out) AND as a structured
@@ -59,10 +60,10 @@ OPERATIONAL_SPACE_ID = "01f1c269ca3c1adea7feb9f248ab3445"
 # Per-call wall-clock bound (seconds); override with GENIE_TIMEOUT_S on the endpoint.
 DEFAULT_TIMEOUT_S = 45.0
 
-# Hard per-request HTTP/socket timeout and retry-window cap imposed on the underlying
-# Genie client so a stalled call errors out and the worker thread terminates within
-# bounds (see _bound_client_http_timeout). Overridable with GENIE_HTTP_TIMEOUT_S; it
-# defaults to the wall-clock bound so the socket gives up around the same time.
+# Hard per-request HTTP/socket timeout and retry-window cap the Genie client is BUILT
+# with (via the public Config fields in workspace_client), so a stalled call errors out
+# and the worker thread terminates within bounds. Overridable with GENIE_HTTP_TIMEOUT_S;
+# it defaults to the wall-clock bound so the socket gives up around the same time.
 DEFAULT_HTTP_TIMEOUT_S = DEFAULT_TIMEOUT_S
 
 # Backstop cap on concurrently in-flight Genie worker threads so repeated hangs cannot
@@ -91,12 +92,14 @@ def _timeout_s() -> float:
         return DEFAULT_TIMEOUT_S
 
 
-def _http_timeout_s() -> float:
-    """Hard per-request HTTP/socket timeout for the underlying Genie client.
+def http_timeout_s() -> float:
+    """Hard per-request HTTP/socket timeout the Genie client is constructed with.
 
-    Defaults to the wall-clock bound so a single stalled request raises around the
-    same time the wall-clock join would abandon the thread; override independently
-    with ``GENIE_HTTP_TIMEOUT_S``.
+    Consumed by ``agent._tools`` when it builds the Genie ``client_factory`` so the
+    ``WorkspaceClient`` carries this request timeout (and retry-window cap) from
+    construction. Defaults to the wall-clock bound so a single stalled request raises
+    around the same time the wall-clock join would abandon the thread; override
+    independently with ``GENIE_HTTP_TIMEOUT_S``.
     """
     raw = os.environ.get("GENIE_HTTP_TIMEOUT_S")
     if raw is None:
@@ -122,39 +125,6 @@ def _max_inflight() -> int:
 _INFLIGHT = threading.BoundedSemaphore(_max_inflight())
 
 
-def _bound_client_http_timeout(client: Any, timeout_s: float | None = None) -> Any:
-    """Impose a HARD per-request HTTP/socket timeout (and a matching retry-window cap)
-    on the SDK ``WorkspaceClient`` so a stalled Genie request raises instead of hanging
-    the worker thread forever.
-
-    The databricks-sdk captures ``http_timeout_seconds`` (default 60) and
-    ``retry_timeout_seconds`` (default 300) when the low-level client is BUILT, so
-    mutating only ``config`` on an already-constructed client would not take effect for
-    the live request path. We therefore set the bound on ``config`` AND, best-effort,
-    on the live low-level client (``client.api_client`` -> ``_api_client``). Every write
-    is guarded so an unexpected client shape degrades to the SDK default rather than
-    raising — the concurrency cap remains the hard backstop regardless.
-    """
-    bound = _http_timeout_s() if timeout_s is None else timeout_s
-    config = getattr(client, "config", None)
-    if config is not None:
-        try:
-            config.http_timeout_seconds = bound
-            config.retry_timeout_seconds = bound
-        except Exception:  # noqa: BLE001 - config shape differences must not break the call
-            pass
-    api_client = getattr(client, "api_client", None)
-    base = getattr(api_client, "_api_client", None)
-    if base is not None:
-        for attr in ("_http_timeout_seconds", "_retry_timeout_seconds"):
-            if hasattr(base, attr):
-                try:
-                    setattr(base, attr, bound)
-                except Exception:  # noqa: BLE001 - internal shape differences are non-fatal
-                    pass
-    return client
-
-
 def _ask_bounded(
     space_id: str,
     question: str,
@@ -166,14 +136,15 @@ def _ask_bounded(
 
     Each Genie call gets its own daemon thread — there is NO shared worker pool to
     exhaust, so repeated hangs cannot starve other adjudications. Two things keep an
-    abandoned worker from leaking forever: the underlying client carries a hard
-    HTTP/socket timeout (see ``_bound_client_http_timeout`` on the ``_ask`` path) so a
-    stalled call raises and the thread terminates within bounds, and a module-level
-    ``_INFLIGHT`` semaphore caps how many worker threads may be alive at once. A call
-    that cannot acquire a slot raises ``_GenieBusy`` (no thread is spawned); a call that
-    exceeds the wall-clock bound raises ``_GenieTimeout`` and is abandoned, but it holds
-    its slot only until the (now time-bounded) underlying call returns or errors, at
-    which point the thread releases the slot and dies.
+    abandoned worker from leaking forever: the underlying client is constructed with a
+    hard HTTP/socket timeout (``client_factory`` yields a timeout-bounded
+    ``WorkspaceClient`` — see ``agent._tools``) so a stalled call raises and the thread
+    terminates within bounds, and a module-level ``_INFLIGHT`` semaphore caps how many
+    worker threads may be alive at once. A call that cannot acquire a slot raises
+    ``_GenieBusy`` (no thread is spawned); a call that exceeds the wall-clock bound
+    raises ``_GenieTimeout`` and is abandoned, but it holds its slot only until the (now
+    time-bounded) underlying call returns or errors, at which point the thread releases
+    the slot and dies.
     """
     if not _INFLIGHT.acquire(blocking=False):
         raise _GenieBusy()
@@ -207,15 +178,15 @@ def _ask(space_id: str, question: str, client_factory: Callable[[], Any]) -> dic
     Imported lazily so this module imports without ``databricks-ai-bridge`` present
     (local dev / unit tests); the dependency is pinned for the serving container in
     ``register_agent.PIP_REQUIREMENTS``. ``client_factory`` yields the dedicated
-    serving-SP ``WorkspaceClient`` (same auth as the rest of the agent), so Genie's
-    generated SQL runs as the SP against the space's warehouse and tables. The client
-    is given a hard HTTP/socket timeout first so this call cannot hang the worker
+    serving-SP ``WorkspaceClient`` (same auth as the rest of the agent), already built
+    with a hard HTTP/socket timeout and bounded retry window (see ``agent._tools`` ->
+    ``workspace_client``), so Genie's generated SQL runs as the SP against the space's
+    warehouse and tables and a stalled request raises instead of hanging this worker
     thread on a dead socket.
     """
     from databricks_ai_bridge.genie import Genie
 
-    client = _bound_client_http_timeout(client_factory())
-    response = Genie(space_id, client=client).ask_question(question)
+    response = Genie(space_id, client=client_factory()).ask_question(question)
     return {
         "result": getattr(response, "result", None),
         "query": getattr(response, "query", None),

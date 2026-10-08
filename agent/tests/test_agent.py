@@ -134,6 +134,75 @@ def test_adjudication_records_the_real_reasoning_endpoint():
     assert outcome["record"]["reasoning_endpoint"] == gateway_chat.MODEL_SERVICE
 
 
+def test_agent_wiring_is_lazy_no_client_at_construction():
+    """Constructing the agent must not build any workspace/gateway client (all client
+    wiring is lazy); only the reasoning-label constant is resolved."""
+    instance = agent_module.ClaimsAdjudicationAgent()
+    assert instance._llm is None
+    assert instance._llm_with_tools is None
+
+
+def test_importing_agent_module_builds_no_client_and_has_no_cycle():
+    """Importing the agent module must not instantiate a workspace/gateway client at
+    import time and must not hit a circular import — deriving LLM_ENDPOINT from
+    gateway_chat only reads a string constant."""
+    import importlib
+
+    import databricks.sdk
+
+    with patch.object(databricks.sdk, "WorkspaceClient") as constructor:
+        importlib.reload(agent_module)
+    constructor.assert_not_called()
+    # The reasoning label is still single-sourced from gateway_chat after a clean reload.
+    assert agent_module.LLM_ENDPOINT == gateway_chat.MODEL_SERVICE
+
+
+def test_llm_endpoint_is_reproducibility_metadata_only():
+    """Lock the negative: LLM_ENDPOINT is referenced ONLY as its definition and the
+    decision-record/reproducibility `reasoning_endpoint` field — never on a live
+    reasoning call path (bind/invoke/post/model=)."""
+    import inspect
+
+    uses = [
+        ln.strip()
+        for ln in inspect.getsource(agent_module).splitlines()
+        if "LLM_ENDPOINT" in ln and not ln.strip().startswith("#")
+    ]
+    assert "LLM_ENDPOINT = REASONING_MODEL_SERVICE" in uses
+    assert '"reasoning_endpoint": LLM_ENDPOINT,' in uses
+    assert len(uses) == 2  # exactly the definition + the metadata field, nothing else
+    for line in uses:
+        for forbidden in ("invoke", "bind", "post_fn", "ask_question", "model=", "model_service"):
+            assert forbidden not in line
+
+
+def test_genie_client_factory_builds_a_timeout_bounded_client(monkeypatch):
+    """End-to-end: the agent hands build_genie_tools a client_factory that constructs the
+    Genie WorkspaceClient WITH the hard per-request http + retry timeouts (the real,
+    supported mechanism), sourced from genie_tools.http_timeout_s()."""
+    import genie_tools
+
+    captured = {}
+
+    def fake_build(client_factory, collector):
+        captured["factory"] = client_factory
+        return []
+
+    built = []
+    monkeypatch.setattr(genie_tools, "build_genie_tools", fake_build)
+    monkeypatch.setattr(agent_module, "workspace_client", lambda *a, **k: built.append((a, k)))
+    monkeypatch.setenv("GENIE_HTTP_TIMEOUT_S", "11")
+
+    instance = agent_module.ClaimsAdjudicationAgent()
+    instance._tools(dict(CORE))
+    captured["factory"]()  # invoke the factory the agent handed to build_genie_tools
+
+    assert built, "the Genie client_factory did not construct a workspace client"
+    _, kwargs = built[0]
+    assert kwargs["http_timeout_seconds"] == 11.0
+    assert kwargs["retry_timeout_seconds"] == 11.0
+
+
 # --- advisory-only: a Genie answer can never change the money decision -------------
 
 # A deterministic DENY (in-spec material): not eligible, authority amount 1234, paid 0.

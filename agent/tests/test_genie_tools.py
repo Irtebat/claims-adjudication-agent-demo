@@ -214,62 +214,19 @@ def test_repeated_timeouts_stay_graceful_and_contained():
     assert [row["status"] for row in collector] == ["timeout"] * 12
 
 
-# --- hardening: hard HTTP/socket timeout so the worker thread terminates -----------
+# --- hardening: the Genie timeout value genie_tools asks the factory to build with ----
 
 
-class _FakeBaseClient:
-    def __init__(self):
-        self._http_timeout_seconds = 60
-        self._retry_timeout_seconds = 300
-
-
-class _FakeApiClient:
-    def __init__(self):
-        self._api_client = _FakeBaseClient()
-
-
-class _FakeConfig:
-    def __init__(self):
-        self.http_timeout_seconds = None
-        self.retry_timeout_seconds = None
-
-
-class _FakeWorkspaceClient:
-    """Mirrors the databricks-sdk client shape _bound_client_http_timeout reaches into."""
-
-    def __init__(self):
-        self.config = _FakeConfig()
-        self.api_client = _FakeApiClient()
-
-
-def test_bound_client_http_timeout_imposes_hard_socket_timeout():
-    # The underlying Genie call must get a HARD per-request HTTP/socket timeout (and a
-    # matching retry-window cap) so a stalled request raises and the worker thread
-    # TERMINATES within bounds instead of hanging on a dead socket forever. The bound is
-    # written both to config AND to the already-built low-level client (the SDK captures
-    # the timeout at build time, so config alone would not take effect for the live call).
-    client = _FakeWorkspaceClient()
-    returned = genie_tools._bound_client_http_timeout(client, 12.0)
-    assert returned is client
-    assert client.config.http_timeout_seconds == 12.0
-    assert client.config.retry_timeout_seconds == 12.0
-    assert client.api_client._api_client._http_timeout_seconds == 12.0
-    assert client.api_client._api_client._retry_timeout_seconds == 12.0
-
-
-def test_bound_client_http_timeout_defaults_to_wall_clock_bound(monkeypatch):
+def test_http_timeout_s_defaults_to_wall_clock_bound(monkeypatch):
+    # agent._tools reads this and constructs the Genie WorkspaceClient with it; here we
+    # only pin that the default tracks the wall-clock bound and the env override wins.
     monkeypatch.delenv("GENIE_HTTP_TIMEOUT_S", raising=False)
     monkeypatch.setenv("GENIE_TIMEOUT_S", "20")
-    client = _FakeWorkspaceClient()
-    genie_tools._bound_client_http_timeout(client)  # no explicit timeout -> wall-clock bound
-    assert client.config.http_timeout_seconds == 20.0
-    assert client.api_client._api_client._http_timeout_seconds == 20.0
-
-
-def test_bound_client_http_timeout_tolerates_unexpected_client_shape():
-    # A client without the expected attributes must degrade gracefully (the concurrency
-    # cap is the hard backstop), never raise.
-    genie_tools._bound_client_http_timeout(object(), 5.0)
+    assert genie_tools.http_timeout_s() == 20.0
+    monkeypatch.setenv("GENIE_HTTP_TIMEOUT_S", "7.5")
+    assert genie_tools.http_timeout_s() == 7.5
+    monkeypatch.setenv("GENIE_HTTP_TIMEOUT_S", "bogus")
+    assert genie_tools.http_timeout_s() == genie_tools._timeout_s()
 
 
 # --- hardening backstop: in-flight concurrency cap bounds thread accumulation ------

@@ -299,8 +299,17 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                 ("get_customer_heat_risk", "Return advisory customer/heat risk.", "risk"),
             )
         ]
+        # The Genie client is built WITH a hard per-request HTTP/socket timeout and a
+        # bounded retry window (public SDK Config fields), so a stalled Genie call raises
+        # and its worker thread terminates within bounds instead of hanging on a dead
+        # socket. This is the real, supported timeout mechanism genie_tools relies on.
+        genie_http_timeout = genie_tools.http_timeout_s()
         genie = genie_tools.build_genie_tools(
-            client_factory=lambda: workspace_client(self.profile),
+            client_factory=lambda: workspace_client(
+                self.profile,
+                http_timeout_seconds=genie_http_timeout,
+                retry_timeout_seconds=genie_http_timeout,
+            ),
             collector=core.setdefault("genie_consultations", []),
         )
         return frozen + genie
