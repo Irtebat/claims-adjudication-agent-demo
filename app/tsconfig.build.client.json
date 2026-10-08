@@ -1,0 +1,11 @@
+{
+  // Production BUILD typecheck for the client. Identical to tsconfig.client.json but
+  // excludes test files (see tsconfig.build.server.json for why). The main
+  // tsconfig.client.json keeps tests included for `npm run typecheck` and ESLint.
+  "extends": "./tsconfig.client.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.build.client.tsbuildinfo"
+  },
+  "include": ["client/src", "shared/appkit-types"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
+}

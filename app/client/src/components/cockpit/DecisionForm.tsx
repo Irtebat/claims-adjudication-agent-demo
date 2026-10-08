@@ -133,9 +133,18 @@ export function DecisionForm({
           override_reason: differs ? reason.trim() : null,
         };
     try {
-      const result = await finalizeClaim(adjudication.claim_id, body);
+      const result = await finalizeClaim(adjudication.claim_id, adjudication.adjudication_id, body);
+      // Only a real finalization (or an idempotent already-FINAL hit — e.g. a concurrent
+      // finalizer) advances the UI to the read-only finalized view. `invalid` and
+      // `not_found` are surfaced inline so the decision never silently no-ops: previously a
+      // not_found was treated as success and the cockpit reloaded with nothing persisted,
+      // which read as "the page refreshed and nothing happened".
       if (result.status === 'invalid') {
         setErrorMsg(firstErrorCopy(result.errors));
+        return;
+      }
+      if (result.status === 'not_found') {
+        setErrorMsg('We couldn’t find this claim’s adjudication to finalize. Reload and try again.');
         return;
       }
       onFinalized(result);

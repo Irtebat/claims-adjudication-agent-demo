@@ -1,0 +1,13 @@
+{
+  // Production BUILD typecheck for the server. Identical to tsconfig.server.json but
+  // excludes test files: the on-platform build runs with NODE_ENV=production, which omits
+  // devDependencies (vitest/jsdom), so `tsc -b` must not compile *.test.ts (they import
+  // 'vitest'). The main tsconfig.server.json keeps tests included for `npm run typecheck`
+  // and ESLint's project service; tests still run under `vitest run`.
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.build.server.tsbuildinfo"
+  },
+  "include": ["server/**/*", "shared/**/*", "config/**/*"],
+  "exclude": ["node_modules", "dist", "client", "**/*.test.ts", "**/*.test.tsx"]
+}

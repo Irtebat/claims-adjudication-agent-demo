@@ -1,5 +1,11 @@
 command: ['npm', 'run', 'start']
 env:
+  # Build + run in production mode so the on-platform `npm install` omits devDependencies.
+  # The Databricks npm proxy does not mirror every test-only transitive (e.g. jsdom's
+  # xmlchars@2.2.0, which 404s and fails the build). Build tools live in `dependencies`
+  # (see package.json) so the production build still has tsc/vite/tsdown/tailwind.
+  - name: NODE_ENV
+    value: production
   - name: DATABRICKS_WAREHOUSE_ID
     valueFrom: sql-warehouse
   - name: DATABRICKS_GENIE_SPACE_ID

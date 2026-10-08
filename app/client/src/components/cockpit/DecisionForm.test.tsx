@@ -69,6 +69,7 @@ const { DecisionForm } = await import('./DecisionForm');
 /** A RECOMMENDED investigate adjudication as the API/DB actually returns it (verdict is operational). */
 function pendAdjudication(): Adjudication {
   return {
+    adjudication_id: 'ADJ-INV-1', // distinct surrogate — finalize keys on THIS, not claim_id
     claim_id: 'CLM-INVESTIGATE-1',
     recommended_verdict: 'PEND', // operational — the value that crashed the form
     recommended_disposition: 'PEND_INVESTIGATE',
@@ -93,6 +94,7 @@ describe('DecisionForm — investigate (PEND) claim renders', () => {
 
   it('still renders cleanly for an APPROVE recommendation (no regression)', () => {
     const approve = {
+      adjudication_id: 'ADJ-APPROVE-1',
       claim_id: 'CLM-APPROVE-1',
       recommended_verdict: 'APPROVE',
       recommended_disposition: 'CREDIT',
@@ -140,12 +142,49 @@ describe('DecisionForm — submission payload', () => {
     // Drives acceptRecommendation() -> submit(): the posted body must be exactly what
     // server/finalize.ts accepts for an unchanged investigate hold.
     expect(vi.mocked(finalizeClaim)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(finalizeClaim)).toHaveBeenCalledWith('CLM-INVESTIGATE-1', {
+    // The claim_id is the URL/resource key; the adjudication_id targets the exact row the
+    // finalize transaction locks (the live 404 bug was passing claim_id as the adjudication).
+    expect(vi.mocked(finalizeClaim)).toHaveBeenCalledWith('CLM-INVESTIGATE-1', 'ADJ-INV-1', {
       final_verdict: 'PEND_INVESTIGATE',
       final_disposition: 'PEND_INVESTIGATE',
       approved_amount: 0,
       override_reason: null,
     });
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+    container.remove();
+  });
+
+  it('surfaces a not_found result inline and does NOT advance the UI (no silent reload)', async () => {
+    // Regression lock for the live symptom: a 404 not_found used to flow through as success
+    // (onFinalized was called), so the cockpit reloaded with nothing persisted and no error.
+    vi.mocked(finalizeClaim).mockResolvedValue({ status: 'not_found', adjudicationId: 'ADJ-INV-1' });
+    const onFinalized = vi.fn();
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<DecisionForm adjudication={pendAdjudication()} onFinalized={onFinalized} />);
+      await Promise.resolve();
+    });
+
+    const acceptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Accept recommendation')
+    );
+    await act(async () => {
+      acceptBtn!.click();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(finalizeClaim)).toHaveBeenCalledTimes(1);
+    // The decision did not persist, so the UI must NOT advance (no reload-to-finalized)...
+    expect(onFinalized).not.toHaveBeenCalled();
+    // ...and the failure is shown inline rather than swallowed.
+    expect(container.textContent).toContain('adjudication to finalize');
 
     await act(async () => {
       root.unmount();

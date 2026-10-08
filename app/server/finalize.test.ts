@@ -249,7 +249,7 @@ describe('decisionRecordInsertSql', () => {
 });
 
 // --- runFinalize (transactional) with a scripted fake pg client --------------
-type Script = (text: string) => { rows: Record<string, unknown>[]; rowCount: number };
+type Script = (text: string, params?: unknown[]) => { rows: Record<string, unknown>[]; rowCount: number };
 
 class FakeClient implements QueryClient {
   calls: { text: string; params?: unknown[] }[] = [];
@@ -258,7 +258,10 @@ class FakeClient implements QueryClient {
   query(text: string, params?: unknown[]) {
     this.calls.push({ text, params });
     if (/^\s*(BEGIN|COMMIT|ROLLBACK)/.test(text)) return Promise.resolve({ rows: [], rowCount: 0 });
-    return Promise.resolve(this.script(text));
+    return Promise.resolve(this.script(text, params));
+  }
+  forUpdateCall() {
+    return this.calls.find((c) => /FOR UPDATE/.test(c.text));
   }
   release() {
     this.released = true;
@@ -312,7 +315,7 @@ const confirmReq: FinalizeRequest = {
 describe('runFinalize', () => {
   it('happy path: one tx writes UPDATE + new record + outbox, then COMMIT', async () => {
     const client = new FakeClient(scriptHappy());
-    const result = await runFinalize(new FakePool(client), 'ADJ-1', confirmReq);
+    const result = await runFinalize(new FakePool(client), 'ADJ-1', 'CLM-9', confirmReq);
     expect(result.status).toBe('finalized');
     if (result.status === 'finalized') {
       expect(result.decidedBy).toBe('adjuster@x');
@@ -331,7 +334,7 @@ describe('runFinalize', () => {
 
   it('records decided_by and override_reason on an override', async () => {
     const client = new FakeClient(scriptHappy());
-    const result = await runFinalize(new FakePool(client), 'ADJ-1', {
+    const result = await runFinalize(new FakePool(client), 'ADJ-1', 'CLM-9', {
       finalVerdict: 'APPROVE',
       finalDisposition: 'CREDIT',
       approvedAmount: 4000,
@@ -346,7 +349,7 @@ describe('runFinalize', () => {
 
   it('rejects an override with no reason server-side, writing nothing', async () => {
     const client = new FakeClient(scriptHappy());
-    const result = await runFinalize(new FakePool(client), 'ADJ-1', {
+    const result = await runFinalize(new FakePool(client), 'ADJ-1', 'CLM-9', {
       finalVerdict: 'DENY',
       finalDisposition: 'DENY',
       approvedAmount: 0,
@@ -364,7 +367,7 @@ describe('runFinalize', () => {
       if (/FOR UPDATE/.test(text)) return { rows: [{ ...RECOMMENDED_ROW, decision_status: 'FINAL' }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     });
-    const result = await runFinalize(new FakePool(client), 'ADJ-1', confirmReq);
+    const result = await runFinalize(new FakePool(client), 'ADJ-1', 'CLM-9', confirmReq);
     expect(result.status).toBe('already_final');
     expect(client.mutations()).toHaveLength(0); // no UPDATE, no new record version, no outbox
     expect(client.didOutbox()).toBe(false);
@@ -377,14 +380,14 @@ describe('runFinalize', () => {
       if (/UPDATE public\.adjudications/.test(text)) return { rows: [], rowCount: 0 };
       return { rows: [], rowCount: 1 };
     });
-    const result = await runFinalize(new FakePool(client), 'ADJ-1', confirmReq);
+    const result = await runFinalize(new FakePool(client), 'ADJ-1', 'CLM-9', confirmReq);
     expect(result.status).toBe('already_final');
     expect(client.didOutbox()).toBe(false);
   });
 
   it('returns not_found when the adjudication is absent', async () => {
     const client = new FakeClient(() => ({ rows: [], rowCount: 0 }));
-    const result = await runFinalize(new FakePool(client), 'ADJ-x', confirmReq);
+    const result = await runFinalize(new FakePool(client), 'ADJ-x', 'CLM-9', confirmReq);
     expect(result.status).toBe('not_found');
     expect(client.didOutbox()).toBe(false);
   });
@@ -399,10 +402,39 @@ describe('runFinalize', () => {
       if (/INSERT INTO public\.adjudication_decision_records/.test(text)) return { rows: [], rowCount: 0 };
       return { rows: [], rowCount: 1 };
     });
-    await expect(runFinalize(new FakePool(client), 'ADJ-1', confirmReq)).rejects.toThrow(/version not written/);
+    await expect(runFinalize(new FakePool(client), 'ADJ-1', 'CLM-9', confirmReq)).rejects.toThrow(
+      /version not written/
+    );
     expect(client.didOutbox()).toBe(false); // outbox insert never reached
     expect(client.committed()).toBe(false); // never committed
     expect(client.calls.some((c) => /^\s*ROLLBACK/.test(c.text))).toBe(true);
     expect(client.released).toBe(true);
+  });
+
+  it('rejects a (claim_id, adjudication_id) mismatch as not_found with NO write and NO outbox', async () => {
+    // Security scope guard: the row-locked SELECT matches on BOTH adjudication_id AND
+    // claim_id (`WHERE adjudication_id=$1 AND claim_id=$2`). Simulate the DB returning the
+    // row ONLY when the bound claim_id matches the row's own claim ('CLM-9'). A caller that
+    // supplies a VALID adjudication_id but the WRONG claim_id must finalize nothing — it
+    // cannot reach across to an adjudication that belongs to a different claim.
+    const client = new FakeClient((text, params) => {
+      if (/FOR UPDATE/.test(text)) {
+        const [adjId, claimId] = (params ?? []) as string[];
+        if (adjId === 'ADJ-1' && claimId === 'CLM-9') return { rows: [RECOMMENDED_ROW], rowCount: 1 };
+        return { rows: [], rowCount: 0 }; // mismatched pair → no row
+      }
+      return { rows: [], rowCount: 1 };
+    });
+    // ADJ-1 is a real RECOMMENDED adjudication, but it belongs to CLM-9; the caller passes
+    // CLM-OTHER (the path claim_id of a different claim).
+    const result = await runFinalize(new FakePool(client), 'ADJ-1', 'CLM-OTHER', confirmReq);
+    expect(result.status).toBe('not_found');
+    // The path claim_id was bound into the atomic row-lock SELECT alongside the adjudication_id.
+    expect(client.forUpdateCall()?.params).toEqual(['ADJ-1', 'CLM-OTHER']);
+    // NOTHING was written: no adjudications UPDATE, no new decision-record version, no outbox,
+    // and the transaction never committed.
+    expect(client.mutations()).toHaveLength(0);
+    expect(client.didOutbox()).toBe(false);
+    expect(client.committed()).toBe(false);
   });
 });
