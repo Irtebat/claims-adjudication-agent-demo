@@ -101,11 +101,18 @@ export function getSourceRow(target: SourceTarget, signal?: AbortSignal): Promis
   );
 }
 
-export async function finalizeClaim(claimId: string, body: FinalizeBody): Promise<FinalizeResult> {
+export async function finalizeClaim(
+  claimId: string,
+  adjudicationId: string,
+  body: FinalizeBody
+): Promise<FinalizeResult> {
+  // The finalize transaction keys on adjudication_id (a claim can carry several
+  // adjudications; claim_id != adjudication_id), so the exact adjudication the cockpit
+  // opened is sent in the body. The claim_id stays in the path as the resource.
   const res = await fetch(`/api/claims/${encodeURIComponent(claimId)}/finalize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, adjudication_id: adjudicationId }),
   });
   // The finalize endpoint returns a typed result on 200/400/404; only treat transport
   // and auth failures (401/403/5xx) as thrown errors.

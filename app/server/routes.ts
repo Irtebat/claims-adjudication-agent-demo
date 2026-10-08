@@ -52,6 +52,13 @@ export interface CockpitAppKit {
 }
 
 const FinalizeBody = z.object({
+  // The EXACT adjudication the human acted on. The finalize transaction keys on
+  // adjudication_id (a surrogate), NOT the claim_id in the URL path — a claim can carry
+  // several adjudications, and claim_id != adjudication_id. The cockpit already opened a
+  // specific adjudication, so the client sends its id here and we finalize precisely that
+  // row (first-write-wins). (Passing the path claim_id to runFinalize made every finalize
+  // a 404 not_found, since no adjudication_id equals the claim_id.)
+  adjudication_id: z.string().min(1),
   final_verdict: z.enum(['APPROVE', 'DENY', 'PEND_INVESTIGATE']),
   final_disposition: z.string().min(1),
   approved_amount: z.number().nonnegative(),
@@ -244,7 +251,9 @@ export function registerRoutes(appkit: CockpitAppKit): void {
         return;
       }
       try {
-        const result = await runFinalize(lb.pool, String(req.params.id), {
+        // Finalize the specific adjudication the client acted on (NOT req.params.id, which
+        // is the claim_id). runFinalize's guarded row-locked transaction is unchanged.
+        const result = await runFinalize(lb.pool, parsed.data.adjudication_id, {
           finalVerdict: parsed.data.final_verdict,
           finalDisposition: parsed.data.final_disposition,
           approvedAmount: parsed.data.approved_amount,
