@@ -38,8 +38,8 @@ therefore fully auditable from the trace and from the immutable record.
 
 from __future__ import annotations
 
-import concurrent.futures
 import os
+import threading
 import time
 from typing import Any, Callable
 
@@ -57,10 +57,9 @@ DEFAULT_TIMEOUT_S = 45.0
 # decision record or the LLM context.
 _ANSWER_MAX_CHARS = 4000
 
-# A small shared pool so a hung Genie call can be abandoned on timeout without the
-# calling (tool) thread blocking on it. An abandoned future keeps running until
-# Genie's own polling gives up; ``max_workers`` bounds how many can pile up.
-_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="genie")
+
+class _GenieTimeout(Exception):
+    """Raised when a single Genie call exceeds its wall-clock bound."""
 
 
 def _timeout_s() -> float:
@@ -68,6 +67,40 @@ def _timeout_s() -> float:
         return float(os.environ.get("GENIE_TIMEOUT_S", DEFAULT_TIMEOUT_S))
     except (TypeError, ValueError):
         return DEFAULT_TIMEOUT_S
+
+
+def _ask_bounded(
+    space_id: str,
+    question: str,
+    client_factory: Callable[[], Any],
+    ask_fn: Callable[[str, str, Callable[[], Any]], dict],
+    timeout_s: float,
+) -> dict:
+    """Run ``ask_fn`` in an ISOLATED, short-lived daemon thread, bounded by ``timeout_s``.
+
+    Each Genie call gets its own daemon thread — there is NO shared worker pool to
+    exhaust, so repeated hangs cannot starve other adjudications. A call that exceeds
+    the bound is abandoned (``_GenieTimeout`` raised to the caller); the daemon thread
+    holds no shared resource, is never joined at interpreter exit, and dies with the
+    process, so Genie degradation stays fully contained while the adjudication proceeds
+    on the deterministic + frozen evidence.
+    """
+    box: dict = {}
+
+    def target() -> None:
+        try:
+            box["result"] = ask_fn(space_id, question, client_factory)
+        except Exception as exc:  # re-raised in the calling thread below
+            box["error"] = exc
+
+    worker = threading.Thread(target=target, name="genie-ask", daemon=True)
+    worker.start()
+    worker.join(timeout_s)
+    if worker.is_alive():
+        raise _GenieTimeout()
+    if "error" in box:
+        raise box["error"]
+    return box.get("result") or {}
 
 
 def _ask(space_id: str, question: str, client_factory: Callable[[], Any]) -> dict:
@@ -121,16 +154,14 @@ def consult_genie(
     generated_sql = None
     with mlflow.start_span(name=f"genie_{label}", span_type="TOOL") as span:
         span.set_inputs({"space": label, "space_id": space_id, "question": question})
-        future = _EXECUTOR.submit(ask_fn, space_id, question, client_factory)
         try:
-            payload = future.result(timeout=bound)
+            payload = _ask_bounded(space_id, question, client_factory, ask_fn, bound)
             answer = (payload.get("result") or payload.get("description") or "").strip()
             generated_sql = payload.get("query")
             if not answer:
                 status = "empty"
                 answer = f"Genie ({label}) returned no answer for this question."
-        except concurrent.futures.TimeoutError:
-            future.cancel()  # best-effort; an already-running future is left to finish
+        except _GenieTimeout:
             status = "timeout"
             answer = f"Genie ({label}) did not answer within {bound:.0f}s; proceeding without it."
         except Exception as exc:  # noqa: BLE001 - advisory tool must never break adjudication

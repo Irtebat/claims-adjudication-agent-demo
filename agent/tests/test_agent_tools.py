@@ -249,3 +249,22 @@ def test_default_recommendation_aligns_to_deterministic():
     assert rec["recommended_verdict"] == core["deterministic"]["verdict"]
     assert rec["settlement_estimate"] == core["deterministic"]["settlement_authority_amount"]
     assert rec["flags"]["over_claim"] is True
+
+
+def test_deterministic_core_does_not_consult_genie(monkeypatch):
+    # Genie is a reasoning-loop-only advisory tool; the deterministic core (authorities
+    # + duplicate gate + advisory retrieval) must never call it. Make every Genie entry
+    # point explode, then prove the core still produces its deterministic outcome and
+    # carries no Genie consultation — the money is decided without Genie.
+    import genie_tools
+
+    def boom(*args, **kwargs):
+        raise AssertionError("Genie must not run inside the deterministic core")
+
+    monkeypatch.setattr(genie_tools, "consult_genie", boom)
+    monkeypatch.setattr(genie_tools, "_ask", boom)
+    monkeypatch.setattr(genie_tools, "_ask_bounded", boom)
+
+    core = agent_tools.run_deterministic_core(_conn(), CLAIM, embed_fn=None)
+    assert core["deterministic"]["verdict"] in {"APPROVE", "DENY", "PEND_INVESTIGATE"}
+    assert "genie_consultations" not in core
