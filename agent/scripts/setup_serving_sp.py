@@ -19,10 +19,10 @@ resource the deployed serving endpoint authenticates and reads with:
    ``app-sp-client-secret``, and ``lakebase-db-user`` — the references
    ``deploy_agent.py`` injects into the endpoint. ``lakebase-db-user`` is the
    Lakebase role, i.e. the service principal's application UUID.
-7. Genie Agent access for the two advisory Genie tools (Phase 2): CAN_RUN on each
-   of the two Genie spaces and CAN USE on their shared SQL warehouse (workspace
+7. Genie Agent access for the advisory Genie tool (Phase 2): CAN_RUN on the
+   operational Genie space and CAN USE on its SQL warehouse (workspace
    permissions API, additive), plus USE SCHEMA on ``fe-bar-ir.gold`` /
-   ``fe-bar-ir.silver`` and SELECT on the tables each space reads (SQL GRANT), so
+   ``fe-bar-ir.silver`` and SELECT on the tables it reads (SQL GRANT), so
    Genie's generated SQL runs as the serving SP.
 
 The account steps use the account profile; the workspace, Lakebase, and Unity
@@ -75,24 +75,23 @@ MODEL_SERVICE_SCHEMA = "adjudication-agent"
 REASONING_MODEL_SERVICE = "adjudication-reasoning"
 EMBEDDING_MODEL_SERVICE = "embedding"
 
-# --- Genie Agents (Phase 2) -------------------------------------------------------
-# The two governed Genie Agents the agent consults as live, advisory tools, the SQL
-# warehouse they both run on, and the Unity Catalog tables they read. The serving SP
-# needs, via the workspace permissions API, CAN_RUN on each space and CAN USE on the
+# --- Genie Agent (Phase 2) --------------------------------------------------------
+# The governed operational Genie Agent the agent consults as a live, advisory tool, the
+# SQL warehouse it runs on, and the Unity Catalog tables Genie reads. The serving SP
+# needs, via the workspace permissions API, CAN_RUN on the space and CAN USE on the
 # warehouse; and, via SQL GRANT, USE SCHEMA on each parent schema plus SELECT on each
 # table so Genie's generated SQL executes as the SP. USE CATALOG on `fe-bar-ir` is
 # already granted for the model services above and is reused here.
 GENIE_SPACES = {
     "operational": "01f1c269ca3c1adea7feb9f248ab3445",
-    "analytics": "01f1c2698a5418298f81f9e79df576ca",
 }
-GENIE_WAREHOUSE_ID = "a323b5700ae25d85"  # both spaces are configured on this warehouse
+GENIE_WAREHOUSE_ID = "a323b5700ae25d85"  # the operational space is configured on this warehouse
 GENIE_SPACE_PERMISSION = "CAN_RUN"
 GENIE_WAREHOUSE_PERMISSION = "CAN_USE"
 
-# UC schemas (within MODEL_SERVICE_CATALOG) and the tables each space reads. Every
-# object is a TABLE-class securable (table, view, streaming table, materialized view,
-# or metric view), so a uniform GRANT SELECT ON TABLE covers all of them.
+# UC schemas (within MODEL_SERVICE_CATALOG) and the tables the operational Genie space
+# reads. Every object is a TABLE-class securable (table, view, streaming table, or
+# materialized view), so a uniform GRANT SELECT ON TABLE covers all of them.
 GENIE_UC_SCHEMAS = ("gold", "silver")
 GENIE_UC_TABLES = (
     ("gold", "adjudication_decision_records"),
@@ -100,11 +99,6 @@ GENIE_UC_TABLES = (
     ("gold", "claims_current"),
     ("gold", "customer_heat_risk"),
     ("gold", "prior_claims_corpus"),
-    ("gold", "gold_agent_human_alignment"),
-    ("gold", "gold_failure_mode_analytics"),
-    ("gold", "gold_fraud_cluster_analytics"),
-    ("gold", "gold_supplier_recovery_analytics"),
-    ("gold", "quality_claims_metrics"),
     ("silver", "customers"),
     ("silver", "defect_codes"),
     ("silver", "heats_coils"),

@@ -50,10 +50,16 @@ from decision_record import (
     source_sha256,
     validate_narrative_conflict,
 )
+from gateway_chat import MODEL_SERVICE as REASONING_MODEL_SERVICE
 from workspace_client import workspace_client
 from writer import write_adjudication
 
-LLM_ENDPOINT = "system.ai.gpt-5-4"
+# The governed Unity Gateway model service the agent actually reasons through
+# (gateway_chat.UnityGatewayChatModel calls it). Recorded verbatim as the decision
+# record's reasoning_endpoint; single-sourced from gateway_chat so the audited label
+# can never drift from the service actually invoked. Importing the module only reads
+# this string constant — it does not instantiate a client or require a live endpoint.
+LLM_ENDPOINT = REASONING_MODEL_SERVICE
 MODEL_NAME = "fe-bar-ir.default.claims_adjudication_agent"
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -90,11 +96,11 @@ SYSTEM_PROMPT = (
     "out-of-coverage warranty claim is DENY; the settlement_estimate MUST equal the "
     "settlement authority's approved amount; you may only escalate to PEND_INVESTIGATE "
     "as a safe hold, never convert a denial into a payment. "
-    "Two ADVISORY Genie tools are available: query_claims_genie (natural-language "
-    "questions over per-claim operational history and context) and query_analytics_genie "
-    "(portfolio/KPI analytics). You MAY call them to enrich your rationale with historical "
-    "or aggregate context, but their answers are ADVISORY ONLY: they must NEVER change the "
-    "deterministic verdict, eligibility, or amount, and must not be cited as policy clauses."
+    "One ADVISORY Genie tool is available: query_claims_genie (natural-language "
+    "questions over per-claim operational history and context). You MAY call it to enrich "
+    "your rationale with historical context, but its answers are ADVISORY ONLY: they must "
+    "NEVER change the deterministic verdict, eligibility, or amount, and must not be cited "
+    "as policy clauses."
 )
 
 
@@ -245,14 +251,14 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
             return agent_tools.default_recommendation(core), False
 
     def _tools(self, core: dict):
-        """Bind the frozen echo tools PLUS the two live, model-driven Genie tools.
+        """Bind the frozen echo tools PLUS the live, model-driven Genie tool.
 
         The deterministic core has already resolved the policy snapshot and run every
         deterministic tool exactly once; the frozen wrappers let LangGraph reason with
         the named tools without re-resolving policy or giving the LLM a path to
-        rerun/change money. The Genie tools (``genie_tools``) are the ONLY live tools:
-        they query the two governed Genie Agents with model-authored questions and are
-        ADVISORY — their answers inform the rationale but never the verdict/amount
+        rerun/change money. The Genie tool (``genie_tools``) is the ONLY live tool:
+        it queries the governed operational Genie Agent with a model-authored question
+        and is ADVISORY — its answer informs the rationale but never the verdict/amount
         (``enforce_invariants`` runs afterwards and owns the money). Each Genie call is
         audited into ``core["genie_consultations"]`` for the decision record.
         """

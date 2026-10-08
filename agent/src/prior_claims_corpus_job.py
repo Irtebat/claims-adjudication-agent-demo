@@ -4,7 +4,7 @@
 Replaces the native Lakebase ``prior_claims`` table and its embed-once backfill. The
 corpus is one row per claim whose current adjudication is FINAL (latest finalized
 adjudication wins), enriched with grade/coating from the deduplicated coil master and
-embedded with the governed gateway helper (``system.ai.gte-large-en``, 1024-dim,
+embedded with the governed gateway helper (``fe-bar-ir.adjudication-agent.embedding``, 1024-dim,
 L2-normalized, cosine). The table is served down to Lakebase as the Triggered synced
 table ``reference.prior_claims_corpus``, where ``lakebase_ann`` / ``lakebase_bm25``
 indexes are built on it (see ``lakebase/scripts/synced_tables.py``).

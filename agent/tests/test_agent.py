@@ -18,6 +18,7 @@ from unittest.mock import patch
 import mlflow
 
 import agent as agent_module
+import gateway_chat
 
 CLAIM = {"claim_id": "CLAIM-1", "claim_type": "coating_warranty", "coil_id": "COIL-1"}
 
@@ -114,6 +115,25 @@ def test_root_inputs_are_the_claim_and_outputs_are_the_final_recommendation():
     assert root.outputs["invariant_violations"] == []
 
 
+# --- audit accuracy: the recorded reasoning_endpoint is the service actually called ---
+
+
+def test_reasoning_endpoint_label_is_single_sourced_from_gateway():
+    """LLM_ENDPOINT (recorded as reasoning_endpoint) must be the real governed reasoning
+    service the agent calls — derived from gateway_chat.MODEL_SERVICE so the audited
+    label can never drift from the invoked service, and never the stale system.ai name."""
+    assert agent_module.LLM_ENDPOINT == gateway_chat.MODEL_SERVICE
+    assert agent_module.LLM_ENDPOINT == "fe-bar-ir.adjudication-agent.adjudication-reasoning"
+    assert "system.ai" not in agent_module.LLM_ENDPOINT
+
+
+def test_adjudication_records_the_real_reasoning_endpoint():
+    """Every adjudication's decision record must label the reasoning model with the
+    service actually invoked, not a stale constant."""
+    outcome = _run_adjudication()
+    assert outcome["record"]["reasoning_endpoint"] == gateway_chat.MODEL_SERVICE
+
+
 # --- advisory-only: a Genie answer can never change the money decision -------------
 
 # A deterministic DENY (in-spec material): not eligible, authority amount 1234, paid 0.
@@ -203,10 +223,10 @@ def test_genie_influenced_recommendation_cannot_change_money():
 
 
 def test_genie_tools_are_bound_in_the_reasoning_loop():
-    """The two live Genie tools are part of the bound reasoning-loop tool list
+    """The live operational Genie tool is part of the bound reasoning-loop tool list
     (with the 7 frozen echo tools) — the only place model-driven tools live."""
     instance = agent_module.ClaimsAdjudicationAgent()
     names = [tool.name for tool in instance._tools(dict(CORE))]
     assert "query_claims_genie" in names
-    assert "query_analytics_genie" in names
-    assert len(names) == 9  # 7 frozen deterministic echoes + 2 live Genie tools
+    assert "query_analytics_genie" not in names  # analytics tool dropped
+    assert len(names) == 8  # 7 frozen deterministic echoes + 1 live Genie tool

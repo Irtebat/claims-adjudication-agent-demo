@@ -1,32 +1,39 @@
-"""Live, model-driven Genie tools — the agent's first NON-deterministic tools.
+"""Live, model-driven Genie tool — the agent's first NON-deterministic tool.
 
-Two governed Genie Agents (formerly Genie Spaces) are exposed to the reasoning
-LLM as natural-language query tools it MAY call while reasoning about a claim:
+One governed Genie Agent (formerly Genie Space) is exposed to the reasoning LLM
+as a natural-language query tool it MAY call while reasoning about a claim:
 
-* ``query_claims_genie``    -> the operational per-claim Genie Agent (current
+* ``query_claims_genie`` -> the operational per-claim Genie Agent (current
   claims, adjudications, persisted decision records, manufacturing context,
   advisory customer/heat risk, and prior-claim precedent).
-* ``query_analytics_genie`` -> the gold KPI / portfolio-analytics Genie Agent
-  (quality-claims metrics, failure-mode, supplier-recovery, fraud-cluster, and
-  agent/human-alignment analytics).
 
 Unlike the frozen echo tools in ``agent.ClaimsAdjudicationAgent._tools`` (which
-replay already-computed deterministic results), these call Genie live with a
+replay already-computed deterministic results), this calls Genie live with a
 model-authored question, so the question and the answer are non-deterministic.
 
-ADVISORY-ONLY INVARIANT. These tools live ONLY in the reasoning loop
-(``agent._run_graph``); they are NOT part of the deterministic core and run
-AFTER the authorities + duplicate gate have already decided the money and the
-verdict eligibility. ``decision_record.enforce_invariants`` then corrects the
-LLM's recommendation back to the deterministic outcome, so a Genie answer can
-NEVER change the verdict, the eligibility, or the amount — it only informs the
-LLM's rationale and narrative.
+ADVISORY-ONLY INVARIANT. This tool lives ONLY in the reasoning loop
+(``agent._run_graph``); it is NOT part of the deterministic core and runs AFTER
+the authorities + duplicate gate have already decided the money and the verdict
+eligibility. ``decision_record.enforce_invariants`` then corrects the LLM's
+recommendation back to the deterministic outcome, so a Genie answer can NEVER
+change the verdict, the eligibility, or the amount — it only informs the LLM's
+rationale and narrative.
 
-ROBUSTNESS. Each call is bound by a wall-clock timeout and every failure
-(timeout, 403/permission, Genie/HTTP error, empty answer) is swallowed into a
-short graceful string returned to the LLM. A Genie outage therefore never hangs
-or fails an adjudication: the reasoning simply proceeds on the deterministic +
-frozen evidence.
+ROBUSTNESS. Each call runs in its own short-lived daemon thread bounded by a
+wall-clock timeout. Because a daemon thread cannot be force-killed, the worker is
+kept from hanging forever by giving the underlying Genie client a HARD
+per-request HTTP/socket timeout AND a capped retry window (``_bound_client_http_timeout``):
+a stalled request raises instead of blocking, so the worker thread actually
+TERMINATES (returns or errors) within bounds rather than leaking a thread stuck
+on a dead socket. A module-level concurrency cap (``GENIE_MAX_INFLIGHT``) is the
+backstop: it bounds the number of simultaneously in-flight Genie threads, so even
+under repeated hangs daemon threads (and their sockets) cannot accumulate
+unbounded — once the cap is reached, a new call sheds load with a graceful
+"capacity" string instead of spawning yet another thread. Every failure (timeout,
+capacity, 403/permission, Genie/HTTP error, empty answer) is swallowed into a
+short graceful string returned to the LLM, so a Genie outage never hangs or fails
+an adjudication: the reasoning simply proceeds on the deterministic + frozen
+evidence.
 
 AUDITABILITY. Every call is captured twice: as a ``genie_<label>`` MLflow span
 (the question in; the status/answer/SQL/latency out) AND as a structured
@@ -45,13 +52,24 @@ from typing import Any, Callable
 
 import mlflow
 
-# The two governed Genie Agents. Centralised here (not in agent.py) so the live
-# space wiring lives in one auditable place alongside the tool semantics.
+# The governed Genie Agent. Centralised here (not in agent.py) so the live space
+# wiring lives in one auditable place alongside the tool semantics.
 OPERATIONAL_SPACE_ID = "01f1c269ca3c1adea7feb9f248ab3445"
-ANALYTICS_SPACE_ID = "01f1c2698a5418298f81f9e79df576ca"
 
 # Per-call wall-clock bound (seconds); override with GENIE_TIMEOUT_S on the endpoint.
 DEFAULT_TIMEOUT_S = 45.0
+
+# Hard per-request HTTP/socket timeout and retry-window cap imposed on the underlying
+# Genie client so a stalled call errors out and the worker thread terminates within
+# bounds (see _bound_client_http_timeout). Overridable with GENIE_HTTP_TIMEOUT_S; it
+# defaults to the wall-clock bound so the socket gives up around the same time.
+DEFAULT_HTTP_TIMEOUT_S = DEFAULT_TIMEOUT_S
+
+# Backstop cap on concurrently in-flight Genie worker threads so repeated hangs cannot
+# let daemon threads (and their sockets) accumulate unbounded. Overridable with
+# GENIE_MAX_INFLIGHT. Sized well above the realistic per-endpoint concurrency; a call
+# that cannot acquire a slot sheds load gracefully instead of spawning a thread.
+DEFAULT_MAX_INFLIGHT = 32
 
 # Cap the returned/persisted answer so a large Genie result table cannot bloat the
 # decision record or the LLM context.
@@ -62,11 +80,79 @@ class _GenieTimeout(Exception):
     """Raised when a single Genie call exceeds its wall-clock bound."""
 
 
+class _GenieBusy(Exception):
+    """Raised when the in-flight concurrency cap is saturated (backpressure)."""
+
+
 def _timeout_s() -> float:
     try:
         return float(os.environ.get("GENIE_TIMEOUT_S", DEFAULT_TIMEOUT_S))
     except (TypeError, ValueError):
         return DEFAULT_TIMEOUT_S
+
+
+def _http_timeout_s() -> float:
+    """Hard per-request HTTP/socket timeout for the underlying Genie client.
+
+    Defaults to the wall-clock bound so a single stalled request raises around the
+    same time the wall-clock join would abandon the thread; override independently
+    with ``GENIE_HTTP_TIMEOUT_S``.
+    """
+    raw = os.environ.get("GENIE_HTTP_TIMEOUT_S")
+    if raw is None:
+        return _timeout_s()
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return _timeout_s()
+
+
+def _max_inflight() -> int:
+    try:
+        value = int(os.environ.get("GENIE_MAX_INFLIGHT", DEFAULT_MAX_INFLIGHT))
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_INFLIGHT
+    return value if value > 0 else DEFAULT_MAX_INFLIGHT
+
+
+# Module-level backstop: a bounded semaphore capping simultaneously in-flight Genie
+# worker threads. This is NOT a worker pool (each call still gets its own isolated
+# daemon thread); it only bounds how many may run at once so repeated hangs cannot
+# accumulate threads/sockets without limit. Tests may monkeypatch this.
+_INFLIGHT = threading.BoundedSemaphore(_max_inflight())
+
+
+def _bound_client_http_timeout(client: Any, timeout_s: float | None = None) -> Any:
+    """Impose a HARD per-request HTTP/socket timeout (and a matching retry-window cap)
+    on the SDK ``WorkspaceClient`` so a stalled Genie request raises instead of hanging
+    the worker thread forever.
+
+    The databricks-sdk captures ``http_timeout_seconds`` (default 60) and
+    ``retry_timeout_seconds`` (default 300) when the low-level client is BUILT, so
+    mutating only ``config`` on an already-constructed client would not take effect for
+    the live request path. We therefore set the bound on ``config`` AND, best-effort,
+    on the live low-level client (``client.api_client`` -> ``_api_client``). Every write
+    is guarded so an unexpected client shape degrades to the SDK default rather than
+    raising — the concurrency cap remains the hard backstop regardless.
+    """
+    bound = _http_timeout_s() if timeout_s is None else timeout_s
+    config = getattr(client, "config", None)
+    if config is not None:
+        try:
+            config.http_timeout_seconds = bound
+            config.retry_timeout_seconds = bound
+        except Exception:  # noqa: BLE001 - config shape differences must not break the call
+            pass
+    api_client = getattr(client, "api_client", None)
+    base = getattr(api_client, "_api_client", None)
+    if base is not None:
+        for attr in ("_http_timeout_seconds", "_retry_timeout_seconds"):
+            if hasattr(base, attr):
+                try:
+                    setattr(base, attr, bound)
+                except Exception:  # noqa: BLE001 - internal shape differences are non-fatal
+                    pass
+    return client
 
 
 def _ask_bounded(
@@ -79,12 +165,18 @@ def _ask_bounded(
     """Run ``ask_fn`` in an ISOLATED, short-lived daemon thread, bounded by ``timeout_s``.
 
     Each Genie call gets its own daemon thread — there is NO shared worker pool to
-    exhaust, so repeated hangs cannot starve other adjudications. A call that exceeds
-    the bound is abandoned (``_GenieTimeout`` raised to the caller); the daemon thread
-    holds no shared resource, is never joined at interpreter exit, and dies with the
-    process, so Genie degradation stays fully contained while the adjudication proceeds
-    on the deterministic + frozen evidence.
+    exhaust, so repeated hangs cannot starve other adjudications. Two things keep an
+    abandoned worker from leaking forever: the underlying client carries a hard
+    HTTP/socket timeout (see ``_bound_client_http_timeout`` on the ``_ask`` path) so a
+    stalled call raises and the thread terminates within bounds, and a module-level
+    ``_INFLIGHT`` semaphore caps how many worker threads may be alive at once. A call
+    that cannot acquire a slot raises ``_GenieBusy`` (no thread is spawned); a call that
+    exceeds the wall-clock bound raises ``_GenieTimeout`` and is abandoned, but it holds
+    its slot only until the (now time-bounded) underlying call returns or errors, at
+    which point the thread releases the slot and dies.
     """
+    if not _INFLIGHT.acquire(blocking=False):
+        raise _GenieBusy()
     box: dict = {}
 
     def target() -> None:
@@ -92,9 +184,15 @@ def _ask_bounded(
             box["result"] = ask_fn(space_id, question, client_factory)
         except Exception as exc:  # re-raised in the calling thread below
             box["error"] = exc
+        finally:
+            _INFLIGHT.release()
 
     worker = threading.Thread(target=target, name="genie-ask", daemon=True)
-    worker.start()
+    try:
+        worker.start()
+    except Exception:
+        _INFLIGHT.release()  # thread never started; return the slot immediately
+        raise
     worker.join(timeout_s)
     if worker.is_alive():
         raise _GenieTimeout()
@@ -104,17 +202,20 @@ def _ask_bounded(
 
 
 def _ask(space_id: str, question: str, client_factory: Callable[[], Any]) -> dict:
-    """Call one Genie Agent once via the databricks-ai-bridge client (SP-authed).
+    """Call the Genie Agent once via the databricks-ai-bridge client (SP-authed).
 
     Imported lazily so this module imports without ``databricks-ai-bridge`` present
     (local dev / unit tests); the dependency is pinned for the serving container in
     ``register_agent.PIP_REQUIREMENTS``. ``client_factory`` yields the dedicated
     serving-SP ``WorkspaceClient`` (same auth as the rest of the agent), so Genie's
-    generated SQL runs as the SP against the space's warehouse and tables.
+    generated SQL runs as the SP against the space's warehouse and tables. The client
+    is given a hard HTTP/socket timeout first so this call cannot hang the worker
+    thread on a dead socket.
     """
     from databricks_ai_bridge.genie import Genie
 
-    response = Genie(space_id, client=client_factory()).ask_question(question)
+    client = _bound_client_http_timeout(client_factory())
+    response = Genie(space_id, client=client).ask_question(question)
     return {
         "result": getattr(response, "result", None),
         "query": getattr(response, "query", None),
@@ -139,13 +240,13 @@ def consult_genie(
     timeout_s: float | None = None,
     ask_fn: Callable[[str, str, Callable[[], Any]], dict] = _ask,
 ) -> str:
-    """Ask one Genie Agent a NL question; audit it; return a string for the LLM.
+    """Ask the Genie Agent a NL question; audit it; return a string for the LLM.
 
-    Never raises: a timeout, a 403/permission error, any Genie/HTTP error, or an
-    empty answer all become a short graceful string so the adjudication proceeds on
-    the deterministic + frozen evidence. Appends exactly one consultation row to
-    ``collector`` and emits a ``genie_<label>`` span capturing the question and the
-    outcome. ``ask_fn`` is injectable for unit testing.
+    Never raises: a timeout, a capacity rejection, a 403/permission error, any
+    Genie/HTTP error, or an empty answer all become a short graceful string so the
+    adjudication proceeds on the deterministic + frozen evidence. Appends exactly one
+    consultation row to ``collector`` and emits a ``genie_<label>`` span capturing the
+    question and the outcome. ``ask_fn`` is injectable for unit testing.
     """
     bound = _timeout_s() if timeout_s is None else timeout_s
     started = time.time()
@@ -161,6 +262,12 @@ def consult_genie(
             if not answer:
                 status = "empty"
                 answer = f"Genie ({label}) returned no answer for this question."
+        except _GenieBusy:
+            status = "busy"
+            answer = (
+                f"Genie ({label}) is at capacity ({_max_inflight()} concurrent calls); "
+                "proceeding without it."
+            )
         except _GenieTimeout:
             status = "timeout"
             answer = f"Genie ({label}) did not answer within {bound:.0f}s; proceeding without it."
@@ -191,8 +298,8 @@ def consult_genie(
     return answer
 
 
-# Tool descriptions the LLM reads to pick the right space. Explicit about scope and
-# that the answers are ADVISORY context — never the money.
+# Tool description the LLM reads. Explicit about scope and that the answers are
+# ADVISORY context — never the money.
 _OPERATIONAL_DESCRIPTION = (
     "ADVISORY. Ask a natural-language question of the operational claims Genie Agent "
     "over current claims, adjudications, persisted decision records, manufacturing "
@@ -203,25 +310,15 @@ _OPERATIONAL_DESCRIPTION = (
     "does not and must not change the deterministic verdict, eligibility, or amount, "
     "and must not be cited as a policy clause."
 )
-_ANALYTICS_DESCRIPTION = (
-    "ADVISORY. Ask a natural-language question of the gold KPI / portfolio-analytics "
-    "Genie Agent over quality-claims metrics, failure-mode, supplier-recovery, "
-    "fraud-cluster, and agent/human-alignment analytics. Use it for aggregate or "
-    "business context (for example, 'what is the recent approval rate for this failure "
-    "mode?'). Input: a single question string. The answer is ADVISORY background for "
-    "your rationale ONLY; it does not and must not change the deterministic verdict, "
-    "eligibility, or amount, and must not be cited as a policy clause."
-)
 
-# (space_id, label, tool_name, description) for the two bound tools.
+# (space_id, label, tool_name, description) for the single bound tool.
 _TOOL_SPECS = (
     (OPERATIONAL_SPACE_ID, "operational", "query_claims_genie", _OPERATIONAL_DESCRIPTION),
-    (ANALYTICS_SPACE_ID, "analytics", "query_analytics_genie", _ANALYTICS_DESCRIPTION),
 )
 
 
 def build_genie_tools(client_factory: Callable[[], Any], collector: list[dict]):
-    """Return the two Genie ``StructuredTool``s bound to the SP client + audit collector.
+    """Return the operational Genie ``StructuredTool`` bound to the SP client + audit collector.
 
     ``client_factory`` yields a fresh serving-SP ``WorkspaceClient`` per call (auth is
     refreshed the same way the rest of the agent refreshes it). ``collector`` is the
