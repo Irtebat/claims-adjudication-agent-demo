@@ -37,7 +37,10 @@ export function CopilotPanel({
         <TabsTrigger value="similar">Similar</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="ask" className="min-h-0 flex-1 data-[state=inactive]:hidden">
+      {/* overflow-hidden bounds the Genie chat to this region so it scrolls INTERNALLY
+          (the dashboard/history assistants wrap GenieAssistant in the same overflow-hidden,
+          definite-height box). Without it the chat can grow past the rail and clip the modal. */}
+      <TabsContent value="ask" className="min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden">
         <GenieAssistant
           alias={alias}
           title="Ask about the claims data"
