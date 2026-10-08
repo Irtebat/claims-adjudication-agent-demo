@@ -6,9 +6,9 @@ reasons, cites, and recommends** (PLAN §3, §6) — it can never change an auth
 number or verdict. The MLflow 3 `ResponsesAgent` (`src/agent.py`) resolves the
 claim once to a frozen policy snapshot, runs the deterministic authorities and the
 duplicate gate (which decide eligibility and the amount), gathers advisory context,
-calls the governed Unity Gateway model service `system.ai.gpt-5-4` to emit a
-structured recommendation, enforces code-level money invariants, and writes an
-atomic recommendation + canonical decision record.
+calls the governed Unity Gateway model service `fe-bar-ir.adjudication-agent.adjudication-reasoning`
+to emit a structured recommendation, enforces code-level money invariants, and writes
+an atomic recommendation + canonical decision record.
 
 ## Single source of truth
 
@@ -43,7 +43,8 @@ the `adjudications` widening are created by `lakebase/src/setup_and_seed.py`.
 
 `src/agent.py` is an MLflow 3 custom `ResponsesAgent` (implements `predict` and
 `predict_stream`). Its `UnityGatewayChatModel` adapter in `src/gateway_chat.py`
-calls `system.ai.gpt-5-4` through the OpenAI-compatible Unity Gateway chat route.
+calls `fe-bar-ir.adjudication-agent.adjudication-reasoning` through the
+OpenAI-compatible Unity Gateway chat route.
 The LangGraph loop binds the frozen-result tools to that adapter; after the loop,
 a separate non-streaming call binds the recommendation JSON Schema through
 `response_format`. The decision flow per adjudication:
@@ -182,8 +183,9 @@ resulting service principal application id:
 3. Create the Lakebase OAuth role for the service principal and grant the
    table-level read/write permissions required by the agent. The role value is the
    application service principal's application UUID.
-4. Grant the service principal `EXECUTE` on
-   `system.ai.databricks-gpt-5-4` and `system.ai.gte_large_en_v1_5`.
+4. Grant the service principal `USE CATALOG` / `USE SCHEMA` / `EXECUTE` on the two
+   governed Unity Gateway model services `fe-bar-ir.adjudication-agent.adjudication-reasoning`
+   (reasoning) and `fe-bar-ir.adjudication-agent.embedding` (embedding).
 5. Create the `claims-agent` secret scope and write `app-sp-client-id`,
    `app-sp-client-secret`, and `lakebase-db-user`. `lakebase-db-user` is the Lakebase
    OAuth role from step 3: the application service principal's application UUID.
@@ -240,8 +242,8 @@ Lakebase, governed retrieval embedding, governed reasoning, and the atomic write
 
 | File | Role |
 | --- | --- |
-| `src/gateway_chat.py` | LangChain adapter for governed reasoning through the Unity Gateway model service `system.ai.gpt-5-4`; supports bound tools and `response_format` over the OpenAI-compatible chat route with refreshed SDK OAuth authentication. |
-| `src/gateway_embed.py` | Shared GTE embedding helper via the Unity Gateway model service `system.ai.gte-large-en`; OAuth token from the SDK, ~16 per batch, 429 retry with backoff, 1024-dim L2-normalized (cosine). Used by both intake and retrieval. |
+| `src/gateway_chat.py` | LangChain adapter for governed reasoning through the Unity Gateway model service `fe-bar-ir.adjudication-agent.adjudication-reasoning`; supports bound tools and `response_format` over the OpenAI-compatible chat route with refreshed SDK OAuth authentication. |
+| `src/gateway_embed.py` | Shared GTE embedding helper via the Unity Gateway model service `fe-bar-ir.adjudication-agent.embedding`; OAuth token from the SDK, ~16 per batch, 429 retry with backoff, 1024-dim L2-normalized (cosine). Used by both intake and retrieval. |
 | `../lakebase/src/policy_intake.py` | Sole creator + populator of the four natural-key policy tables; clause tables carry `tsvector` + `lakebase_bm25` indexes. |
 | `src/authorities.py` | Pure `compute_conformance` (incl. gauge + width), `compute_coverage`, `compute_settlement` — the single source of the money math, exercised by the offline tests and called in-process. |
 | `src/authorities_runtime.py` | Runtime adapter: fetches params (`public.spec_params` / `warranty_terms`) and coil MTC (`reference.heats_coils` / `mill_test_certs`) over the Lakebase psycopg (5432) path with parameterized queries, then calls the pure authorities in-process. No warehouse on the decision path. |
@@ -253,7 +255,7 @@ Lakebase, governed retrieval embedding, governed reasoning, and the atomic write
 | `src/decision_record.py` | The money-critical spine: the Pydantic recommendation schema + JSON-Schema, the deterministic outcome, `deterministic_recommendation` (the full no-LLM baseline in the agent recommendation shape, plus `approved_amount` and a rule trace), `enforce_invariants` (the LLM never overrides an authority), and the canonical decision-record payload builder. |
 | `src/disposition_rules.py` | Pure disposition rules R1-R7 (duplicate, unknown type, advisory fraud review, ineligible, supplier-attributable REPLACEMENT, over-claim REWORK, CREDIT), documented in plain language. They set the baseline disposition and the `rule_disposition` that `enforce_invariants` records next to the agent's. Read authority outputs only; never change an amount or verdict. |
 | `src/writer.py` | Atomic transactional writer — `adjudications` recommendation + `adjudication_decision_records` canonical row in one transaction, idempotent on `(adjudication_id, record_version)`. |
-| `src/agent.py` | The MLflow 3 `ResponsesAgent` orchestrator: LangGraph tool loop and separate structured recommendation through governed `system.ai.gpt-5-4`, MLflow tracing, invariant enforcement, and persistence. |
+| `src/agent.py` | The MLflow 3 `ResponsesAgent` orchestrator: LangGraph tool loop and separate structured recommendation through governed `fe-bar-ir.adjudication-agent.adjudication-reasoning`, MLflow tracing, invariant enforcement, and persistence. |
 | `src/register_agent.py` | Log + register + isolated-uv validation + `@candidate` alias. |
 | `src/offline_validation.py` | Runs the agent on a labeled sample spanning every injected pattern and captures the evidence (recommendation vs authority, decision records, no override). |
 | `src/fraud_graph.py` + `src/fraud_graph_job.py` | Connected-components cluster risk over shared heats, scored by customer concentration, written to `gold.customer_heat_risk`. |

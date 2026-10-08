@@ -47,7 +47,7 @@ PIP_REQUIREMENTS = [
     "mlflow>=3.1.3",
     "databricks-agents>=1.1.0",
     "databricks-langchain",
-    # Genie client for the live query_claims_genie / query_analytics_genie tools
+    # Genie client for the live query_claims_genie tool
     # (genie_tools.py uses databricks_ai_bridge.genie.Genie). Pinned explicitly so the
     # served container can import it even though it is also transitive via
     # databricks-langchain.
