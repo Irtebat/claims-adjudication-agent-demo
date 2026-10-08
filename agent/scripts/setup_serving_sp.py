@@ -19,6 +19,11 @@ resource the deployed serving endpoint authenticates and reads with:
    ``app-sp-client-secret``, and ``lakebase-db-user`` — the references
    ``deploy_agent.py`` injects into the endpoint. ``lakebase-db-user`` is the
    Lakebase role, i.e. the service principal's application UUID.
+7. Genie Agent access for the two advisory Genie tools (Phase 2): CAN_RUN on each
+   of the two Genie spaces and CAN USE on their shared SQL warehouse (workspace
+   permissions API, additive), plus USE SCHEMA on ``fe-bar-ir.gold`` /
+   ``fe-bar-ir.silver`` and SELECT on the tables each space reads (SQL GRANT), so
+   Genie's generated SQL runs as the serving SP.
 
 The account steps use the account profile; the workspace, Lakebase, and Unity
 Catalog steps use the workspace profile. Lakebase grants run over psycopg with a
@@ -69,6 +74,43 @@ MODEL_SERVICE_CATALOG = "fe-bar-ir"
 MODEL_SERVICE_SCHEMA = "adjudication-agent"
 REASONING_MODEL_SERVICE = "adjudication-reasoning"
 EMBEDDING_MODEL_SERVICE = "embedding"
+
+# --- Genie Agents (Phase 2) -------------------------------------------------------
+# The two governed Genie Agents the agent consults as live, advisory tools, the SQL
+# warehouse they both run on, and the Unity Catalog tables they read. The serving SP
+# needs, via the workspace permissions API, CAN_RUN on each space and CAN USE on the
+# warehouse; and, via SQL GRANT, USE SCHEMA on each parent schema plus SELECT on each
+# table so Genie's generated SQL executes as the SP. USE CATALOG on `fe-bar-ir` is
+# already granted for the model services above and is reused here.
+GENIE_SPACES = {
+    "operational": "01f1c269ca3c1adea7feb9f248ab3445",
+    "analytics": "01f1c2698a5418298f81f9e79df576ca",
+}
+GENIE_WAREHOUSE_ID = "a323b5700ae25d85"  # both spaces are configured on this warehouse
+GENIE_SPACE_PERMISSION = "CAN_RUN"
+GENIE_WAREHOUSE_PERMISSION = "CAN_USE"
+
+# UC schemas (within MODEL_SERVICE_CATALOG) and the tables each space reads. Every
+# object is a TABLE-class securable (table, view, streaming table, materialized view,
+# or metric view), so a uniform GRANT SELECT ON TABLE covers all of them.
+GENIE_UC_SCHEMAS = ("gold", "silver")
+GENIE_UC_TABLES = (
+    ("gold", "adjudication_decision_records"),
+    ("gold", "adjudications_current"),
+    ("gold", "claims_current"),
+    ("gold", "customer_heat_risk"),
+    ("gold", "prior_claims_corpus"),
+    ("gold", "gold_agent_human_alignment"),
+    ("gold", "gold_failure_mode_analytics"),
+    ("gold", "gold_fraud_cluster_analytics"),
+    ("gold", "gold_supplier_recovery_analytics"),
+    ("gold", "quality_claims_metrics"),
+    ("silver", "customers"),
+    ("silver", "defect_codes"),
+    ("silver", "heats_coils"),
+    ("silver", "mill_test_certs"),
+    ("silver", "suppliers"),
+)
 
 # The Lakebase role's expected identity, matched when the role already exists so grants
 # never land on a role backed by a different principal or auth method.
@@ -182,6 +224,91 @@ def apply_uc_execute_grants(workspace, warehouse_id: str, principal: str) -> lis
             statement=statement, warehouse_id=warehouse_id, wait_timeout="30s"
         )
     return statements
+
+
+# --- Genie Agent access: UC table grants + workspace permissions ------------------
+
+
+def build_genie_uc_grant_statements(principal: str) -> list[str]:
+    """USE SCHEMA on each Genie schema + SELECT on each underlying table, for the SP.
+
+    Reuses ``_validate_principal`` so a non-UUID or backtick-bearing grantee can never
+    be interpolated into the backtick-quoted GRANT SQL. Every target is a TABLE-class
+    securable, so ``GRANT SELECT ON TABLE`` is uniform across tables, views,
+    materialized views, streaming tables, and the metric view.
+    """
+    grantee = f"`{_validate_principal(principal)}`"
+    catalog = MODEL_SERVICE_CATALOG
+    statements = [
+        f"GRANT USE SCHEMA ON SCHEMA `{catalog}`.`{schema}` TO {grantee}"
+        for schema in GENIE_UC_SCHEMAS
+    ]
+    statements += [
+        f"GRANT SELECT ON TABLE `{catalog}`.`{schema}`.`{table}` TO {grantee}"
+        for schema, table in GENIE_UC_TABLES
+    ]
+    return statements
+
+
+def apply_genie_uc_grants(workspace, warehouse_id: str, principal: str) -> list[str]:
+    """Run the Genie USE SCHEMA + SELECT grants for the SP on a SQL warehouse."""
+    statements = build_genie_uc_grant_statements(principal)
+    for statement in statements:
+        workspace.statement_execution.execute_statement(
+            statement=statement, warehouse_id=warehouse_id, wait_timeout="30s"
+        )
+    return statements
+
+
+def apply_genie_permissions(workspace, principal: str) -> list[dict]:
+    """Grant the SP CAN_RUN on each Genie space + CAN USE on the shared warehouse.
+
+    Uses the workspace permissions API (``update`` = additive merge, so other
+    principals' access is preserved) because a Genie space and a SQL warehouse are
+    workspace objects, not Unity Catalog securables. ``_validate_principal`` guards the
+    SP id even though the API binds it as a field rather than string-interpolating it.
+    """
+    _validate_principal(principal)
+    from databricks.sdk.service.iam import AccessControlRequest, PermissionLevel
+
+    applied: list[dict] = []
+    for label, space_id in GENIE_SPACES.items():
+        workspace.permissions.update(
+            request_object_type="genie",
+            request_object_id=space_id,
+            access_control_list=[
+                AccessControlRequest(
+                    service_principal_name=principal,
+                    permission_level=PermissionLevel.CAN_RUN,
+                )
+            ],
+        )
+        applied.append(
+            {
+                "object_type": "genie",
+                "object_id": space_id,
+                "space": label,
+                "permission": GENIE_SPACE_PERMISSION,
+            }
+        )
+    workspace.permissions.update(
+        request_object_type="warehouses",
+        request_object_id=GENIE_WAREHOUSE_ID,
+        access_control_list=[
+            AccessControlRequest(
+                service_principal_name=principal,
+                permission_level=PermissionLevel.CAN_USE,
+            )
+        ],
+    )
+    applied.append(
+        {
+            "object_type": "warehouses",
+            "object_id": GENIE_WAREHOUSE_ID,
+            "permission": GENIE_WAREHOUSE_PERMISSION,
+        }
+    )
+    return applied
 
 
 def discover_warehouse(workspace, override: str | None) -> str:
@@ -375,6 +502,8 @@ def main() -> None:
 
     warehouse_id = discover_warehouse(workspace, args.warehouse)
     uc_grants = apply_uc_execute_grants(workspace, warehouse_id, app_id)
+    genie_uc_grants = apply_genie_uc_grants(workspace, warehouse_id, app_id)
+    genie_permissions = apply_genie_permissions(workspace, app_id)
 
     secrets = ensure_secrets(account, workspace, args.scope, sp["id"], app_id)
 
@@ -387,6 +516,8 @@ def main() -> None:
                 "role_created": role_created,
                 "lakebase_grants": lakebase_grants,
                 "uc_grants": uc_grants,
+                "genie_uc_grants": genie_uc_grants,
+                "genie_permissions": genie_permissions,
                 "secrets": secrets,
             },
             indent=2,

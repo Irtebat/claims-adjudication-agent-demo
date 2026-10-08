@@ -296,6 +296,50 @@ def test_validated_narrative_conflict_is_persisted_in_flags():
     assert payload["flags"]["narrative_conflict"] == rec["narrative_conflict"]
 
 
+def test_genie_consultations_persisted_in_flags():
+    # The live Genie tool audit trail is folded into flags (JSONB) so it persists on
+    # the decision record and the adjudications row without a schema change — the same
+    # mechanism as narrative_conflict. Advisory audit only; never affects money.
+    det = deterministic_outcome(
+        "material_nonconformance", NONCONFORMS, COVERED, APPROVE_SETTLEMENT, NO_DUP
+    )
+    corrected, violations = enforce_invariants(_rec("APPROVE", "CREDIT", 5000.0), det)
+    consultations = [
+        {
+            "space": "operational",
+            "space_id": "01f1c269ca3c1adea7feb9f248ab3445",
+            "question": "how were prior claims on this heat adjudicated?",
+            "status": "ok",
+            "answer": "3 prior claims on this heat; all denied as in-spec.",
+            "generated_sql": "SELECT ...",
+            "latency_ms": 1200,
+        }
+    ]
+    kwargs = dict(
+        claim={"claim_id": "CLM-9", "coil_id": "COIL-1", "claim_type": "material_nonconformance"},
+        resolved={},
+        measured={},
+        conformance=NONCONFORMS,
+        coverage=COVERED,
+        settlement=APPROVE_SETTLEMENT,
+        duplicate=NO_DUP,
+        deterministic=det,
+        recommendation=corrected,
+        invariant_violations=violations,
+        citations=[],
+        advisory_risk=None,
+        reproducibility={"authorities_source_sha256": "deadbeef"},
+    )
+    with_genie = build_decision_record(**kwargs, genie_consultations=consultations)
+    assert with_genie["flags"]["genie_consultations"] == consultations
+    # Absent / empty consultations leave flags clean (no spurious key).
+    assert "genie_consultations" not in build_decision_record(**kwargs)["flags"]
+    assert (
+        "genie_consultations"
+        not in build_decision_record(**kwargs, genie_consultations=[])["flags"]
+    )
+
+
 def test_idempotency_key_is_stable():
     assert build_idempotency_key("CLM-9", "deadbeef", 1) == build_idempotency_key(
         "CLM-9", "deadbeef", 1

@@ -27,6 +27,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 
 CODE_MODULES = [
     "agent_tools.py",
+    "genie_tools.py",
     "decision_record.py",
     "disposition_rules.py",
     "writer.py",
@@ -46,6 +47,11 @@ PIP_REQUIREMENTS = [
     "mlflow>=3.1.3",
     "databricks-agents>=1.1.0",
     "databricks-langchain",
+    # Genie client for the live query_claims_genie / query_analytics_genie tools
+    # (genie_tools.py uses databricks_ai_bridge.genie.Genie). Pinned explicitly so the
+    # served container can import it even though it is also transitive via
+    # databricks-langchain.
+    "databricks-ai-bridge",
     "langgraph",
     "psycopg[binary]",
     "pydantic>=2",

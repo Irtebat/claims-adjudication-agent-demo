@@ -129,6 +129,99 @@ def test_apply_uc_execute_grants_runs_each_on_the_warehouse():
     assert all(c["warehouse_id"] == "wh-123" for c in calls)
 
 
+# --- Genie Agent access: UC SELECT grants + workspace permissions (Phase 2) --------
+
+
+def _expected_genie_uc(principal):
+    cat = setup.MODEL_SERVICE_CATALOG
+    stmts = [
+        f"GRANT USE SCHEMA ON SCHEMA `{cat}`.`{s}` TO `{principal}`" for s in setup.GENIE_UC_SCHEMAS
+    ]
+    stmts += [
+        f"GRANT SELECT ON TABLE `{cat}`.`{s}`.`{t}` TO `{principal}`"
+        for s, t in setup.GENIE_UC_TABLES
+    ]
+    return stmts
+
+
+def test_build_genie_uc_grant_statements_exact():
+    assert setup.build_genie_uc_grant_statements(APP_ID) == _expected_genie_uc(APP_ID)
+
+
+def test_build_genie_uc_grant_statements_cover_both_spaces_tables():
+    joined = " ".join(setup.build_genie_uc_grant_statements(APP_ID))
+    # operational space reads silver + gold; analytics space reads gold KPI tables
+    assert "`fe-bar-ir`.`silver`.`heats_coils`" in joined
+    assert "`fe-bar-ir`.`gold`.`adjudication_decision_records`" in joined
+    assert "`fe-bar-ir`.`gold`.`quality_claims_metrics`" in joined
+    # USE SCHEMA on both parent schemas is present
+    assert "GRANT USE SCHEMA ON SCHEMA `fe-bar-ir`.`gold`" in joined
+    assert "GRANT USE SCHEMA ON SCHEMA `fe-bar-ir`.`silver`" in joined
+
+
+def test_genie_uc_grants_are_read_only_never_over_grant():
+    joined = " ".join(setup.build_genie_uc_grant_statements(APP_ID))
+    for forbidden in (
+        "ALL PRIVILEGES",
+        "GRANT ALL",
+        "MODIFY",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "OWNER",
+    ):
+        assert forbidden not in joined
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["not-a-uuid", "`; DROP ROLE victim; --", f"{APP_ID}`", f"`{APP_ID}`", ""],
+)
+def test_build_genie_uc_grant_statements_rejects_invalid_principal(bad):
+    with pytest.raises(ValueError, match="not a valid service-principal"):
+        setup.build_genie_uc_grant_statements(bad)
+
+
+def test_apply_genie_uc_grants_runs_each_on_the_warehouse():
+    calls = []
+    workspace = SimpleNamespace(
+        statement_execution=SimpleNamespace(execute_statement=lambda **kw: calls.append(kw))
+    )
+    statements = setup.apply_genie_uc_grants(workspace, "wh-9", APP_ID)
+    assert [c["statement"] for c in calls] == statements == _expected_genie_uc(APP_ID)
+    assert all(c["warehouse_id"] == "wh-9" for c in calls)
+
+
+def test_apply_genie_permissions_grants_can_run_on_spaces_and_can_use_on_warehouse():
+    pytest.importorskip("databricks.sdk.service.iam")
+    calls = []
+    workspace = SimpleNamespace(permissions=SimpleNamespace(update=lambda **kw: calls.append(kw)))
+    applied = setup.apply_genie_permissions(workspace, APP_ID)
+
+    # One permissions.update per Genie space, then one for the shared warehouse.
+    assert [c["request_object_type"] for c in calls] == ["genie", "genie", "warehouses"]
+    assert {c["request_object_id"] for c in calls} == (
+        set(setup.GENIE_SPACES.values()) | {setup.GENIE_WAREHOUSE_ID}
+    )
+    # Every ACL entry targets the SP with the expected (least) permission level.
+    for call in calls:
+        acl = call["access_control_list"][0]
+        assert acl.service_principal_name == APP_ID
+    assert [c["access_control_list"][0].permission_level.value for c in calls] == [
+        "CAN_RUN",
+        "CAN_RUN",
+        "CAN_USE",
+    ]
+    assert {a["permission"] for a in applied} == {"CAN_RUN", "CAN_USE"}
+
+
+def test_apply_genie_permissions_rejects_invalid_principal():
+    # Validation happens before the SDK import, so this fails loud without the SDK.
+    workspace = SimpleNamespace(permissions=SimpleNamespace(update=lambda **kw: None))
+    with pytest.raises(ValueError, match="not a valid service-principal"):
+        setup.apply_genie_permissions(workspace, "not-a-uuid")
+
+
 # --- Warehouse discovery ----------------------------------------------------------
 
 
