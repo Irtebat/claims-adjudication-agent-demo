@@ -12,8 +12,9 @@ resource the deployed serving endpoint authenticates and reads with:
 4. The service principal's Lakebase table grants: CONNECT, schema USAGE, the
    agent read set, SELECT/INSERT/UPDATE on ``public.adjudications``, and
    SELECT/INSERT on ``public.adjudication_decision_records``.
-5. Unity Catalog ``EXECUTE`` on the governed model functions
-   ``system.ai.databricks-gpt-5-4`` and ``system.ai.gte_large_en_v1_5``.
+5. Unity Catalog ``USE CATALOG``/``USE SCHEMA``/``EXECUTE`` on the two governed
+   Unity Gateway model services ``fe-bar-ir.adjudication-agent.adjudication-reasoning``
+   (reasoning) and ``fe-bar-ir.adjudication-agent.embedding`` (embedding).
 6. The ``claims-agent`` secret scope with ``app-sp-client-id``,
    ``app-sp-client-secret``, and ``lakebase-db-user`` — the references
    ``deploy_agent.py`` injects into the endpoint. ``lakebase-db-user`` is the
@@ -58,11 +59,15 @@ SECRET_CLIENT_ID_KEY = "app-sp-client-id"
 SECRET_CLIENT_SECRET_KEY = "app-sp-client-secret"
 SECRET_DB_USER_KEY = "lakebase-db-user"
 
-# Governed model functions the agent reasons and embeds with, granted EXECUTE in
-# Unity Catalog. gte_large_en_v1_5 is a bare identifier; databricks-gpt-5-4 is
-# backtick-quoted because of its hyphens, as is the service-principal grantee.
-UC_REASONING_FUNCTION = "databricks-gpt-5-4"
-UC_EMBEDDING_FUNCTION = "gte_large_en_v1_5"
+# Governed Unity Gateway model services the agent reasons and embeds with. These are
+# UC securables of type MODEL SERVICE (invoked via the AI Gateway route), NOT UC
+# functions. The serving SP needs USE CATALOG on the parent catalog, USE SCHEMA on the
+# parent schema, and EXECUTE on each model service. Every identifier is hyphenated, so
+# each name part is backtick-quoted, as is the service-principal grantee.
+MODEL_SERVICE_CATALOG = "fe-bar-ir"
+MODEL_SERVICE_SCHEMA = "adjudication-agent"
+REASONING_MODEL_SERVICE = "adjudication-reasoning"
+EMBEDDING_MODEL_SERVICE = "embedding"
 
 # The Lakebase role's expected identity, matched when the role already exists so grants
 # never land on a role backed by a different principal or auth method.
@@ -134,13 +139,17 @@ def apply_lakebase_grants(cur: psycopg.Cursor, role: str) -> list[str]:
 
 
 def build_uc_grant_statements(principal: str) -> list[str]:
-    """Return the USE/EXECUTE grants that let the SP call the governed functions."""
+    """Return the USE/EXECUTE grants that let the SP call the governed model services."""
     grantee = f"`{principal}`"
+    catalog = f"`{MODEL_SERVICE_CATALOG}`"
+    schema = f"`{MODEL_SERVICE_CATALOG}`.`{MODEL_SERVICE_SCHEMA}`"
+    reasoning = f"`{MODEL_SERVICE_CATALOG}`.`{MODEL_SERVICE_SCHEMA}`.`{REASONING_MODEL_SERVICE}`"
+    embedding = f"`{MODEL_SERVICE_CATALOG}`.`{MODEL_SERVICE_SCHEMA}`.`{EMBEDDING_MODEL_SERVICE}`"
     return [
-        f"GRANT USE CATALOG ON CATALOG system TO {grantee}",
-        f"GRANT USE SCHEMA ON SCHEMA system.ai TO {grantee}",
-        f"GRANT EXECUTE ON FUNCTION system.ai.`{UC_REASONING_FUNCTION}` TO {grantee}",
-        f"GRANT EXECUTE ON FUNCTION system.ai.`{UC_EMBEDDING_FUNCTION}` TO {grantee}",
+        f"GRANT USE CATALOG ON CATALOG {catalog} TO {grantee}",
+        f"GRANT USE SCHEMA ON SCHEMA {schema} TO {grantee}",
+        f"GRANT EXECUTE ON MODEL SERVICE {reasoning} TO {grantee}",
+        f"GRANT EXECUTE ON MODEL SERVICE {embedding} TO {grantee}",
     ]
 
 

@@ -20,7 +20,7 @@ def test_governed_chat_request_and_response():
     def post(url, authorization, body):
         calls.append((url, authorization, body))
         return {
-            "model": "system.ai.gpt-5-4",
+            "model": "fe-bar-ir.adjudication-agent.adjudication-reasoning",
             "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
         }
 
@@ -33,7 +33,7 @@ def test_governed_chat_request_and_response():
     url, authorization, body = calls[0]
     assert url.endswith("/ai-gateway/mlflow/v1/chat/completions")
     assert authorization == "Bearer refreshed"
-    assert body["model"] == "system.ai.gpt-5-4"
+    assert body["model"] == "fe-bar-ir.adjudication-agent.adjudication-reasoning"
     assert body["temperature"] == 0.0
 
 

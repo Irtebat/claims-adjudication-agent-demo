@@ -91,10 +91,11 @@ def test_lakebase_grants_cover_the_synced_precedent_corpus():
 
 def test_build_uc_grant_statements_exact():
     assert setup.build_uc_grant_statements(APP_ID) == [
-        f"GRANT USE CATALOG ON CATALOG system TO `{APP_ID}`",
-        f"GRANT USE SCHEMA ON SCHEMA system.ai TO `{APP_ID}`",
-        f"GRANT EXECUTE ON FUNCTION system.ai.`databricks-gpt-5-4` TO `{APP_ID}`",
-        f"GRANT EXECUTE ON FUNCTION system.ai.`gte_large_en_v1_5` TO `{APP_ID}`",
+        f"GRANT USE CATALOG ON CATALOG `fe-bar-ir` TO `{APP_ID}`",
+        f"GRANT USE SCHEMA ON SCHEMA `fe-bar-ir`.`adjudication-agent` TO `{APP_ID}`",
+        "GRANT EXECUTE ON MODEL SERVICE "
+        f"`fe-bar-ir`.`adjudication-agent`.`adjudication-reasoning` TO `{APP_ID}`",
+        f"GRANT EXECUTE ON MODEL SERVICE `fe-bar-ir`.`adjudication-agent`.`embedding` TO `{APP_ID}`",
     ]
 
 

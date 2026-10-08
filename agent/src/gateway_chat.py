@@ -19,7 +19,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from gateway_embed import backoff_delay, parse_retry_after
 from workspace_client import workspace_client
 
-MODEL_SERVICE = "system.ai.gpt-5-4"
+MODEL_SERVICE = "fe-bar-ir.adjudication-agent.adjudication-reasoning"
 GATEWAY_PATH = "/ai-gateway/mlflow/v1/chat/completions"
 
 
