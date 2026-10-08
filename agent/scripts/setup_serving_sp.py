@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 
 import psycopg
 from psycopg import sql
@@ -138,9 +139,29 @@ def apply_lakebase_grants(cur: psycopg.Cursor, role: str) -> list[str]:
 # --- Unity Catalog EXECUTE grants (SQL warehouse) ---------------------------------
 
 
+# A service-principal application id is a canonical UUID. The grantee is interpolated
+# into GRANT SQL as a backtick-quoted identifier (Unity Catalog grants are not run
+# through psycopg's identifier quoting, unlike the Lakebase grants above), so its shape
+# is validated up front: a non-UUID or backtick-bearing principal here is always a bug,
+# so we fail loud rather than silently escape it.
+_PRINCIPAL_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+def _validate_principal(principal: str) -> str:
+    """Return ``principal`` if it is a canonical UUID; raise ``ValueError`` otherwise."""
+    if not _PRINCIPAL_RE.fullmatch(principal):
+        raise ValueError(
+            f"principal {principal!r} is not a valid service-principal application id "
+            "(expected a UUID); refusing to interpolate it into a GRANT statement"
+        )
+    return principal
+
+
 def build_uc_grant_statements(principal: str) -> list[str]:
     """Return the USE/EXECUTE grants that let the SP call the governed model services."""
-    grantee = f"`{principal}`"
+    grantee = f"`{_validate_principal(principal)}`"
     catalog = f"`{MODEL_SERVICE_CATALOG}`"
     schema = f"`{MODEL_SERVICE_CATALOG}`.`{MODEL_SERVICE_SCHEMA}`"
     reasoning = f"`{MODEL_SERVICE_CATALOG}`.`{MODEL_SERVICE_SCHEMA}`.`{REASONING_MODEL_SERVICE}`"

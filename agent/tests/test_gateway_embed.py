@@ -6,12 +6,19 @@ from email.message import Message
 import pytest
 
 from gateway_embed import (
+    MODEL_SERVICE,
     backoff_delay,
     chunk,
     embed_texts,
     l2_normalize,
     parse_retry_after,
 )
+
+
+def test_model_service_targets_user_owned_gateway_service():
+    # Mirror the reasoning-target assertion in test_gateway_chat: the embedding helper
+    # must call the user-owned Unity Gateway model service, not the system.ai one.
+    assert MODEL_SERVICE == "fe-bar-ir.adjudication-agent.embedding"
 
 
 def test_l2_normalize_unit_length():
