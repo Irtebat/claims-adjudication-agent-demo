@@ -141,8 +141,16 @@ export interface Sql {
   params: unknown[];
 }
 
-/** Load the current adjudication under a row lock for the finalize transaction. */
-export function selectForFinalizeSql(adjudicationId: string): Sql {
+/**
+ * Load the current adjudication under a row lock for the finalize transaction.
+ *
+ * Scoped to BOTH adjudication_id AND claim_id: the claim_id comes from the route path
+ * and the adjudication_id from the request body, so a caller cannot finalize an
+ * adjudication that belongs to a DIFFERENT claim by substituting an arbitrary
+ * adjudication_id. A mismatched (claim_id, adjudication_id) pair matches no row — the
+ * same not_found outcome as a truly-absent adjudication (no write, no outbox).
+ */
+export function selectForFinalizeSql(adjudicationId: string, claimId: string): Sql {
   return {
     text: `SELECT claim_id, recommended_verdict, recommended_disposition,
                   approved_amount, claimed_amount, decision_status,
@@ -150,14 +158,22 @@ export function selectForFinalizeSql(adjudicationId: string): Sql {
                   idempotency_key
              FROM public.adjudications
             WHERE adjudication_id = $1
+              AND claim_id = $2
             FOR UPDATE`,
-    params: [adjudicationId],
+    params: [adjudicationId, claimId],
   };
 }
 
-/** UPDATE the adjudications row to FINAL, guarded on RECOMMENDED (first-write-wins). */
+/**
+ * UPDATE the adjudications row to FINAL, guarded on RECOMMENDED (first-write-wins).
+ *
+ * Also scoped to claim_id (from the route path) in addition to adjudication_id, so the
+ * atomic write cannot touch an adjudication belonging to a different claim even if the
+ * SELECT guard were bypassed — a mismatched pair updates zero rows.
+ */
 export function finalizeUpdateSql(
   adjudicationId: string,
+  claimId: string,
   v: {
     operationalVerdict: OperationalVerdict;
     disposition: string;
@@ -178,6 +194,7 @@ export function finalizeUpdateSql(
                   decided_by = $7,
                   finalized_at = now()
             WHERE adjudication_id = $1
+              AND claim_id = $8
               AND decision_status = 'RECOMMENDED'
         RETURNING claim_id, idempotency_key, supplier_attributable,
                   recovery_supplier_id, duplicate_of_claim_id`,
@@ -189,6 +206,7 @@ export function finalizeUpdateSql(
       v.overrideFlag,
       v.overrideReason,
       v.decidedBy,
+      claimId,
     ],
   };
 }
@@ -338,13 +356,17 @@ export type FinalizeResult =
 export async function runFinalize(
   pool: Pool,
   adjudicationId: string,
+  claimId: string,
   req: FinalizeRequest,
   now: () => string = () => new Date().toISOString()
 ): Promise<FinalizeResult> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const sel = selectForFinalizeSql(adjudicationId);
+    // Scope the whole transaction to BOTH the body adjudication_id AND the path claim_id,
+    // so a caller cannot finalize an adjudication that belongs to a different claim. A
+    // mismatched pair locks no row below → not_found (no write, no outbox).
+    const sel = selectForFinalizeSql(adjudicationId, claimId);
     const cur = await client.query(sel.text, sel.params);
     if (cur.rowCount === 0) {
       await client.query('ROLLBACK');
@@ -368,7 +390,7 @@ export async function runFinalize(
     const decidedBy = req.decidedBy as string;
     const overrideReason = v.overrideFlag ? (req.overrideReason ?? null) : null;
 
-    const upd = finalizeUpdateSql(adjudicationId, {
+    const upd = finalizeUpdateSql(adjudicationId, claimId, {
       operationalVerdict: v.operationalVerdict,
       disposition: req.finalDisposition,
       approvedAmount: req.approvedAmount,

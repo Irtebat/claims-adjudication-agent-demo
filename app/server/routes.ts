@@ -251,9 +251,12 @@ export function registerRoutes(appkit: CockpitAppKit): void {
         return;
       }
       try {
-        // Finalize the specific adjudication the client acted on (NOT req.params.id, which
-        // is the claim_id). runFinalize's guarded row-locked transaction is unchanged.
-        const result = await runFinalize(lb.pool, parsed.data.adjudication_id, {
+        // Finalize the specific adjudication the client acted on, scoped to BOTH the body
+        // adjudication_id AND the path claim_id. runFinalize matches on both inside its
+        // row-locked transaction, so a caller cannot finalize an adjudication belonging to
+        // a different claim by substituting an arbitrary adjudication_id (mismatch →
+        // not_found, no write/outbox).
+        const result = await runFinalize(lb.pool, parsed.data.adjudication_id, String(req.params.id), {
           finalVerdict: parsed.data.final_verdict,
           finalDisposition: parsed.data.final_disposition,
           approvedAmount: parsed.data.approved_amount,

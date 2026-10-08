@@ -115,19 +115,20 @@ const validBody = {
 };
 
 describe('POST /api/claims/:id/finalize wiring', () => {
-  it('binds the finalize transaction to the body adjudication_id, NOT the path claim_id', async () => {
+  it('scopes the finalize transaction to BOTH the body adjudication_id and the path claim_id', async () => {
     const client = new RecordingClient();
     const handler = captureFinalizeHandler(new RecordingPool(client));
     const res = mkRes();
 
     await handler(finalizeReq({ ...validBody }), res);
 
-    // The row-locked SELECT must be bound to the ADJUDICATION id from the body...
+    // The row-locked SELECT must be scoped to BOTH the body adjudication_id AND the path
+    // claim_id — [adjudication_id, claim_id]. The adjudication_id comes from the request
+    // body (the old 404 bug passed the path claim_id here); the claim_id comes from the URL
+    // path and prevents finalizing an adjudication that belongs to a different claim.
     const sel = client.forUpdateCall();
     expect(sel, 'the FOR UPDATE select should have run').toBeTruthy();
-    expect(sel?.params).toEqual(['ADJ-9']);
-    // ...and must NEVER be bound to the claim_id from the URL path (the old 404 bug).
-    expect(sel?.params).not.toContain('CLM-1');
+    expect(sel?.params).toEqual(['ADJ-9', 'CLM-1']);
 
     // With no matching adjudication row, finalize is a 404 not_found (not a 200/500).
     expect(res.statusCode).toBe(404);
