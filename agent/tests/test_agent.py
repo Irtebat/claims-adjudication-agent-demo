@@ -112,3 +112,101 @@ def test_root_inputs_are_the_claim_and_outputs_are_the_final_recommendation():
     assert root.outputs["recommended_verdict"] == "APPROVE"
     assert root.outputs["recommendation"]["approved_amount"] == 100.0
     assert root.outputs["invariant_violations"] == []
+
+
+# --- advisory-only: a Genie answer can never change the money decision -------------
+
+# A deterministic DENY (in-spec material): not eligible, authority amount 1234, paid 0.
+DENY_DETERMINISTIC = {
+    "verdict": "DENY",
+    "disposition": "DENY",
+    "approved_amount": 0.0,
+    "settlement_authority_amount": 1234.0,
+    "eligible": False,
+    "reason": "in_spec_per_mtc",
+    "duplicate_of_claim_id": None,
+}
+
+DENY_CORE = {
+    "claim_type": "material_nonconformance",
+    "frozen": None,
+    "resolved": {},
+    "measured": {},
+    "heat_no": "H1",
+    "conformance": {"conforms": True},
+    "coverage": {"covered": False},
+    "settlement": {
+        "approved_amount": 1234.0,
+        "claimed_amount": 5000.0,
+        "over_claim_detected": False,
+    },
+    "duplicate": {"is_duplicate": False, "duplicate_of_claim_id": None},
+    "deterministic": DENY_DETERMINISTIC,
+    "clauses": [],
+    "citations": [{"citation_key": "spec/mech/1"}],
+    "precedent": [],
+    "risk": {"risk_score": 0.0, "found": False, "cluster_id": None},
+}
+
+GENIE_CONSULTATION = {
+    "space": "operational",
+    "space_id": "01f1c269ca3c1adea7feb9f248ab3445",
+    "question": "how were prior similar claims adjudicated?",
+    "status": "ok",
+    "answer": "3 similar prior claims were APPROVED with credits.",
+    "generated_sql": "SELECT ...",
+    "latency_ms": 150,
+}
+
+# What the LLM returns AFTER a Genie consultation 'influences' it to the wrong, payable
+# outcome — an APPROVE for 5000 that contradicts the deterministic DENY.
+GENIE_INFLUENCED_WRONG_REC = {
+    "recommended_verdict": "APPROVE",
+    "recommended_disposition": "CREDIT",
+    "settlement_estimate": 5000.0,
+    "approved_amount": 5000.0,
+    "cited_clause_ids": [],
+    "precedent": [],
+    "rationale": "Genie precedent shows similar claims were approved, so approve this one.",
+    "flags": {},
+    "confidence": 0.95,
+}
+
+
+def test_genie_influenced_recommendation_cannot_change_money():
+    """End-to-end advisory-only proof: a Genie-influenced APPROVE/5000 on a
+    deterministic DENY is clamped back by enforce_invariants to DENY / amount 0 /
+    authority settlement, and the Genie consultation is still recorded for audit."""
+    instance = agent_module.ClaimsAdjudicationAgent()
+
+    def fake_llm(core):
+        # Simulate the reasoning loop consulting Genie, then returning the wrong rec.
+        core["genie_consultations"].append(dict(GENIE_CONSULTATION))
+        return dict(GENIE_INFLUENCED_WRONG_REC), True
+
+    with (
+        patch("db.connect", _fake_conn),
+        patch.object(instance, "_deterministic_core", return_value=DENY_CORE),
+        patch.object(instance, "_llm_recommendation", side_effect=fake_llm),
+    ):
+        outcome = instance.adjudicate(CLAIM, persist=False)
+
+    record = outcome["record"]
+    # Money and verdict are the DETERMINISTIC result, not the Genie-influenced APPROVE.
+    assert record["recommended_verdict"] == "DENY"
+    assert record["approved_amount"] == 0.0
+    assert outcome["recommendation"]["settlement_estimate"] == 1234.0  # authority, not 5000
+    assert record["deterministic_verdict"] == "DENY"
+    assert "cannot_approve_ineligible_claim" in outcome["invariant_violations"]
+    # The consultation that 'influenced' the rec is still audited on the record.
+    assert record["flags"]["genie_consultations"] == [GENIE_CONSULTATION]
+
+
+def test_genie_tools_are_bound_in_the_reasoning_loop():
+    """The two live Genie tools are part of the bound reasoning-loop tool list
+    (with the 7 frozen echo tools) — the only place model-driven tools live."""
+    instance = agent_module.ClaimsAdjudicationAgent()
+    names = [tool.name for tool in instance._tools(dict(CORE))]
+    assert "query_claims_genie" in names
+    assert "query_analytics_genie" in names
+    assert len(names) == 9  # 7 frozen deterministic echoes + 2 live Genie tools

@@ -176,3 +176,36 @@ def test_build_genie_tools_names_count_and_advisory_descriptions():
 def test_space_ids_are_the_two_configured_agents():
     assert genie_tools.OPERATIONAL_SPACE_ID == "01f1c269ca3c1adea7feb9f248ab3445"
     assert genie_tools.ANALYTICS_SPACE_ID == "01f1c2698a5418298f81f9e79df576ca"
+
+
+# --- pool hardening: isolated per-call thread, no shared pool to exhaust ----------
+
+
+def test_no_shared_module_level_executor():
+    # Regression guard: a hung Genie call must not occupy a shared bounded pool that
+    # repeated hangs could exhaust. Each call uses its own isolated daemon thread.
+    assert not hasattr(genie_tools, "_EXECUTOR")
+
+
+def test_repeated_timeouts_stay_graceful_and_contained():
+    # Many hung calls back to back each return a graceful timeout promptly, with no
+    # shared pool to starve — each runs on its own isolated daemon thread.
+    def slow(s, q, cf):
+        time.sleep(2)  # far exceeds the 0.05s bound; the thread is abandoned
+        return {"result": "late", "query": None, "description": None}
+
+    collector: list[dict] = []
+    outs = [
+        genie_tools.consult_genie(
+            space_id="S",
+            label="operational",
+            question=f"q{i}",
+            client_factory=_client_factory,
+            collector=collector,
+            ask_fn=slow,
+            timeout_s=0.05,
+        )
+        for i in range(12)
+    ]
+    assert all("did not answer within" in out for out in outs)
+    assert [row["status"] for row in collector] == ["timeout"] * 12
