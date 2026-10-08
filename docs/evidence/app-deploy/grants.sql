@@ -34,4 +34,8 @@ GRANT SELECT ON reference.prior_claims_corpus TO "e8d1fa60-42b8-467c-8056-c4eb9a
 -- Write grants for the finalize transaction.
 GRANT INSERT, UPDATE ON public.adjudications TO "e8d1fa60-42b8-467c-8056-c4eb9ae947f0";
 GRANT INSERT, UPDATE ON public.adjudication_decision_records TO "e8d1fa60-42b8-467c-8056-c4eb9ae947f0";
-GRANT INSERT ON public.outbox TO "e8d1fa60-42b8-467c-8056-c4eb9ae947f0";
+-- outbox: SELECT is required IN ADDITION to INSERT. The finalize outbox write is
+-- `INSERT ... ON CONFLICT (event_id) DO NOTHING`, and Postgres requires SELECT on every
+-- column named in an ON CONFLICT arbiter (event_id). INSERT-only made every finalize fail
+-- with `permission denied for table outbox` (HTTP 500).
+GRANT SELECT, INSERT ON public.outbox TO "e8d1fa60-42b8-467c-8056-c4eb9ae947f0";

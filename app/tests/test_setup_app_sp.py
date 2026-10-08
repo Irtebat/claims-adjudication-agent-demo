@@ -76,7 +76,9 @@ def _expected(role):
         f'GRANT SELECT ON "reference"."prior_claims_corpus" TO "{role}"',
         f'GRANT INSERT, UPDATE ON "public"."adjudications" TO "{role}"',
         f'GRANT INSERT, UPDATE ON "public"."adjudication_decision_records" TO "{role}"',
-        f'GRANT INSERT ON "public"."outbox" TO "{role}"',
+        # outbox needs SELECT as well as INSERT — the finalize outbox write uses
+        # `ON CONFLICT (event_id) DO NOTHING`, which requires SELECT on the arbiter column.
+        f'GRANT SELECT, INSERT ON "public"."outbox" TO "{role}"',
     ]
 
 
@@ -84,6 +86,23 @@ def test_apply_grants_issues_exact_statements():
     cur = FakeCursor()
     setup.apply_grants(cur, APP_SP)
     assert cur.statements == _expected(APP_SP)
+
+
+def test_outbox_grant_includes_select_for_on_conflict():
+    """Regression for the live finalize HTTP 500 ('permission denied for table outbox').
+
+    The finalize transaction's outbox write is
+    `INSERT INTO public.outbox (...) ON CONFLICT (event_id) DO NOTHING`. Postgres
+    requires SELECT privilege on every column named in an ON CONFLICT arbiter target
+    (here `event_id`), so an INSERT-only grant makes every finalize fail with
+    `permission denied for table outbox`, roll back, and return 500. Assert the app-SP
+    grant for outbox includes SELECT so the ON CONFLICT first-write-wins write can run.
+    """
+    cur = FakeCursor()
+    setup.apply_grants(cur, APP_SP)
+    outbox_grants = [s for s in cur.statements if '"public"."outbox"' in s]
+    assert outbox_grants == [f'GRANT SELECT, INSERT ON "public"."outbox" TO "{APP_SP}"']
+    assert "SELECT" in outbox_grants[0]
 
 
 def test_grants_never_touch_delete_select_only_reads_or_ownership():
