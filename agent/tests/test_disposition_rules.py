@@ -128,6 +128,18 @@ def _det(ctx):
     )
 
 
+def _enforce(rec, ctx):
+    """``enforce_invariants`` with the deterministic ``claim_type`` + ``conformance`` the
+    invariant now requires (to make supplier_attributable deterministic), pulled from the
+    scenario context."""
+    return enforce_invariants(
+        rec,
+        _det(ctx),
+        claim_type=ctx["claim"]["claim_type"],
+        conformance=ctx["conformance"],
+    )
+
+
 def _fired(rec):
     """Deciding rules that fired (the advisory R3 entry is reported separately)."""
     return [t["rule"] for t in rec["rule_trace"] if t["fired"] and not t.get("advisory")]
@@ -350,7 +362,7 @@ def test_baseline_has_the_agent_recommendation_shape(name):
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
 def test_baseline_passes_the_agent_invariants_unchanged(name):
     rec = deterministic_recommendation(SCENARIOS[name])
-    corrected, violations = enforce_invariants(rec, _det(SCENARIOS[name]))
+    corrected, violations = _enforce(rec, SCENARIOS[name])
     assert violations == []
     assert corrected["recommended_verdict"] == rec["recommended_verdict"]
     assert corrected["recommended_disposition"] == rec["recommended_disposition"]
@@ -367,7 +379,7 @@ def test_valid_agent_disposition_is_kept_and_rule_recorded(name, rule):
         "recommended_disposition": "CREDIT",
         "settlement_estimate": rec["settlement_estimate"],
     }
-    corrected, violations = enforce_invariants(llm, _det(SCENARIOS[name]))
+    corrected, violations = _enforce(llm, SCENARIOS[name])
     assert corrected["recommended_disposition"] == "CREDIT"
     assert corrected["rule_disposition"] == rule
     assert corrected["disposition_agrees_with_rule"] is False
@@ -382,7 +394,7 @@ def test_invalid_agent_approve_disposition_is_a_violation_and_uses_the_rule():
         "recommended_disposition": "DUPLICATE",
         "settlement_estimate": rec["settlement_estimate"],
     }
-    corrected, violations = enforce_invariants(llm, _det(SCENARIOS["over_claim"]))
+    corrected, violations = _enforce(llm, SCENARIOS["over_claim"])
     assert corrected["recommended_disposition"] == "REWORK"
     assert corrected["disposition_agrees_with_rule"] is True
     assert violations == ["invalid_approve_disposition"]
@@ -400,7 +412,7 @@ def test_decision_record_carries_rule_disposition_for_analysis():
         "rationale": "agent",
         "confidence": 0.9,
     }
-    corrected, violations = enforce_invariants(llm, det)
+    corrected, violations = _enforce(llm, ctx)
     record = build_decision_record(
         claim={"claim_id": "CLM-1", "claim_type": "material_nonconformance"},
         resolved={},
@@ -458,7 +470,7 @@ def test_fallback_verdict_parity_with_main_for_ineligible_high_risk(name, risk_s
     assert rec["settlement_estimate"] == float(det["settlement_authority_amount"])
     assert rec["approved_amount"] == 0.0
     assert rec["flags"]["fraud_risk"] is (risk_score >= 0.5)
-    corrected, violations = enforce_invariants(rec, det)
+    corrected, violations = _enforce(rec, ctx)
     assert (corrected["recommended_verdict"], violations) == ("DENY", [])
 
 

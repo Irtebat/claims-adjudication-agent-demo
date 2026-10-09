@@ -412,7 +412,10 @@ class ClaimsAdjudicationAgent(ResponsesAgent):
                 )
                 with mlflow.start_span(name="enforce_invariants", span_type="TOOL") as span:
                     corrected, violations = enforce_invariants(
-                        raw_recommendation, core["deterministic"]
+                        raw_recommendation,
+                        core["deterministic"],
+                        claim_type=core["claim_type"],
+                        conformance=core["conformance"],
                     )
                     span.set_attribute("invariant_violations", violations)
                 record = build_decision_record(
