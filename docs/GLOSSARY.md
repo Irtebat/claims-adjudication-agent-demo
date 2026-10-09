@@ -23,7 +23,9 @@ engineering terms describe the platform and data design.
 - Claim: a customer request for credit, replacement, or warranty settlement on defective
   or non-conforming steel, or a field corrosion claim.
 - Adjudication: the verdict on a claim. One of APPROVE, DENY, or PEND-INVESTIGATE. An
-  APPROVE may be full or partial and carries a disposition.
+  APPROVE may be full or partial and carries a disposition. (Representation note: the
+  agent emits `PEND_INVESTIGATE` in its recommendation, while the operational
+  adjudication row stores that verdict as `PEND`; the two denote the same outcome.)
 - Disposition: how an approved claim is settled: credit (credit memo or refund),
   replacement (ship a replacement coil), or rework (pay a rework allowance).
 - Partial approval: approve part of a claim and deny the rest. Represented simply by

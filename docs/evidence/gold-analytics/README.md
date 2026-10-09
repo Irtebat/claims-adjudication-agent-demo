@@ -1,5 +1,7 @@
 # Gold analytics evidence
 
+> **Synthetic demo evidence**, captured at a point in time against a synthetic dataset — not production data or continuous monitoring. See [`../../CURRENT-STATE.md`](../../CURRENT-STATE.md) for current verification status.
+
 This folder records the deployed gold analytics validation. JSON files are direct
 SQL results captured after the pipeline and metric-view job complete.
 

@@ -63,7 +63,7 @@ compute is **scheduled serverless** (cheapest); every streaming job documents a
 
 | Job | File | What it does |
 |-----|------|--------------|
-| `fe-bar-services-migrate`   | `src/migrate.py`   | Drops `public.claims_pending`; grants the app SP the outbox/settlements/investigation/supplier-recovery privileges this layer needs. Run once. |
+| `fe-bar-services-migrate`   | `src/migrate.py`   | Grants the app SP the outbox/settlements/investigation/supplier-recovery privileges this layer needs (and retires a legacy `public.claims_pending` queue if present — a no-op on a fresh setup). Run once. |
 | `fe-bar-services-producer`  | `src/producer.py`  | Spark structured streaming, `availableNow`. CDF inserts on `fe-bar-ir.cdf.lb_claims_history` → `claim.submitted`. Checkpointed; initial snapshot replays the ~5000 seeded claims once, then only new claims stream. |
 | `fe-bar-services-worker`    | `src/worker.py`    | Consumes `claim.submitted`; skips claims that already have a human decision (`decision_status` FINAL or REVIEWED) or an `agent_recommendation` adjudication; otherwise invokes the endpoint with `persist=true`, which writes a RECOMMENDED adjudication + decision record (no outbox row). |
 | `fe-bar-services-relay`     | `src/relay.py`     | Polls unpublished `outbox` rows (written only by App finalization), publishes `claim.adjudicated`, sets `published_at` only after the broker acks. Idle until an adjuster finalizes. |
@@ -154,7 +154,7 @@ databricks bundle deploy   -t prod --profile fe-bar-ir-2026
 
 **Run (order matters the first time):**
 ```bash
-databricks bundle run migrate  -t prod --profile fe-bar-ir-2026   # drop pending queue + grants (once)
+databricks bundle run migrate  -t prod --profile fe-bar-ir-2026   # grants (+ retire legacy queue if present) (once)
 databricks bundle run producer -t prod --profile fe-bar-ir-2026   # CDF inserts -> claim.submitted
 databricks bundle run worker   -t prod --profile fe-bar-ir-2026   # RECOMMENDED adjudications (persist=true)
 # ... an adjuster finalizes claims in the App, which writes the outbox rows ...
@@ -183,6 +183,7 @@ uv run --with ruff ruff format --check services
 
 The dedup contract is proven without a broker: `tests/test_consumer_core.py`
 drives the same `claim.adjudicated` event through a consumer three times against an
-in-memory table that honours the planned `ON CONFLICT` semantics and asserts
-exactly one downstream row. End-to-end evidence (and the live-run runbook, which is
-blocked on the human secret step above) is in `docs/evidence/kafka-events/`.
+in-memory table that honours the `ON CONFLICT` semantics and asserts exactly one
+downstream row. The producer→worker path has been exercised against the live Aiven
+broker; the full relay→consumer fan-out additionally requires the Kafka secrets above
+and a human-finalized claim (see `docs/CURRENT-STATE.md`).

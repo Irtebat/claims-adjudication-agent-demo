@@ -35,7 +35,11 @@ orchestration a plain `bundle run` cannot express.
 
 ## Run orders
 
-### Fresh bootstrap (empty workspace only)
+### Core data bootstrap (empty workspace only)
+
+> This brings up the **core data layer only**. A complete environment then needs the
+> manual steps listed after the code block (principals, synced tables, metric views,
+> governance, serving endpoint, app, dashboards, services).
 
 ```bash
 uv run --with pyyaml python scripts/bootstrap.py
@@ -158,15 +162,18 @@ versions of the rows are not preserved. Run the routine refresh afterwards.
 Never use a full refresh to fix an ordinary failure. Check the pipeline event log
 first.
 
-## Precedent corpus cutover
+## Precedent corpus
 
-The precedent corpus used to be the native Lakebase table `public.prior_claims`. It is
-now `gold.prior_claims_corpus`, served down as `reference.prior_claims_corpus`. The
-agent code and the app read the new table. On an existing workspace, do this once
-before the first routine refresh (the routine re-sync expects the synced table to
-exist): deploy the agent bundle, `bundle run prior_claims_corpus`, then
-`lakebase/run.py synced-tables`, which creates only the missing corpus table, builds
-its indexes, and grants SELECT to the app and serving principals. The live serving endpoint keeps reading
-`public.prior_claims` until the next `register -> evaluate -> promote -> deploy` cycle
-packages the new `retrieval.py`. After that cycle, drop the legacy table:
-`DROP TABLE public.prior_claims;` (fresh setups no longer create it).
+The precedent corpus is `gold.prior_claims_corpus` (built from current claims and
+FINAL adjudications with governed embeddings), served down as the synced table
+`reference.prior_claims_corpus`; the agent and the app read it. Earlier iterations
+used a native Lakebase table `public.prior_claims`, now retired — fresh setups do not
+create it.
+
+On a pre-existing workspace that still has the corpus synced table missing, create it
+once before the first routine refresh (the routine re-sync expects it to exist):
+deploy the agent bundle, `bundle run prior_claims_corpus`, then
+`lakebase/run.py synced-tables` (creates only the missing corpus table, builds its
+indexes, grants SELECT to the app and serving principals). If a legacy
+`public.prior_claims` table is still present after the agent has been redeployed with
+the corpus-based retrieval, drop it: `DROP TABLE public.prior_claims;`.

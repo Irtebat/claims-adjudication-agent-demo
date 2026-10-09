@@ -76,7 +76,7 @@ The adjudications produced are **RECOMMENDED** (not yet FINAL):
   - Writes the `claim.adjudicated` outbox row
   - Triggers event fan-out to downstream systems
 
-This is distinct from the seeded baseline (`synthetic_wave_2_baseline`) which has `decision_status = 'FINAL'` and was pre-adjudicated at setup time.
+This is distinct from the seeded baseline (`synthetic_reference_baseline`) which has `decision_status = 'FINAL'` and was pre-adjudicated at setup time.
 
 ## Data Provenance
 
@@ -127,9 +127,10 @@ Apply formatting fixes:
 uv run --with ruff ruff format demo
 ```
 
-## Example Output
+## Example output
 
-When deployed and run, the job produces a JSON summary:
+When deployed and run, the job produces a JSON summary of this **shape** (illustrative
+— not a captured run result; the counts depend on `count`):
 
 ```json
 {
