@@ -6,7 +6,8 @@ NOT create the principal. It takes the app SP client id as ``--app-principal``
 and applies the least-privilege Lakebase Postgres grants the app needs: schema
 USAGE, the cockpit read set, the finalize-transaction writes
 (UPDATE ``public.adjudications``, INSERT ``public.adjudication_decision_records``,
-INSERT ``public.outbox``). The grant set mirrors
+SELECT+INSERT ``public.outbox`` — SELECT is required because the outbox write uses
+``ON CONFLICT (event_id) DO NOTHING``). The grant set mirrors
 ``docs/evidence/app-deploy/grants.sql``.
 
 The ``reference.*`` synced-table SELECTs are also reapplied by
@@ -63,7 +64,15 @@ GRANTS: list[tuple[str, tuple]] = [
     # Write grants for the finalize transaction.
     ("INSERT, UPDATE", ("table", "public", "adjudications")),
     ("INSERT, UPDATE", ("table", "public", "adjudication_decision_records")),
-    ("INSERT", ("table", "public", "outbox")),
+    # outbox needs SELECT in ADDITION to INSERT. The finalize outbox write is
+    # `INSERT ... ON CONFLICT (event_id) DO NOTHING` (first-write-wins idempotency),
+    # and Postgres requires SELECT privilege on every column named in an ON CONFLICT
+    # arbiter target — here `event_id`. With INSERT-only, every finalize failed at the
+    # outbox write with `permission denied for table outbox`, rolled back, and returned
+    # HTTP 500 (adjudications/adjudication_decision_records escaped this only because
+    # they are already in the read-grant set above). SELECT is the minimum the existing
+    # ON CONFLICT semantics require; no UPDATE/DELETE is granted.
+    ("SELECT, INSERT", ("table", "public", "outbox")),
 ]
 
 

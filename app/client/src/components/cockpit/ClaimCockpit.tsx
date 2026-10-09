@@ -326,9 +326,16 @@ export function ClaimCockpit({
                 </Section>
               </div>
 
-              {/* Decision + Copilot (fixed rail) */}
+              {/* Decision + Copilot rail: two independent scroll regions stacked in a flex
+                column. The decision/summary sits on top, CAPPED at 55% of the rail so a tall
+                decision form can't crowd out the chat — it scrolls within its cap — and the
+                Copilot fills the remaining ≥45% with its own internal scroll. The max-h cap is
+                what makes this region's overflow-auto actually engage: a plain shrink-0 region
+                keeps its full content height, so with the chat below it the form pushed its own
+                lower half and the chat past the modal edge, where DialogContent's overflow-hidden
+                clipped them (parts cut off / unreachable, chat unable to scroll). */}
               <div className="flex min-h-0 flex-col border-t border-border lg:border-l lg:border-t-0">
-                <div className="shrink-0 overflow-auto border-b border-border">
+                <div className="max-h-[55%] shrink-0 overflow-auto border-b border-border">
                   {isFinal ? (
                     <FinalizedSummary detail={current} />
                   ) : (
