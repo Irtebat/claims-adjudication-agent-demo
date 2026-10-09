@@ -6,7 +6,7 @@ contract is unit-testable in isolation.
 The worker deduplicates on the business key (``claim_id``): before invoking the
 governed endpoint it checks whether an *agent-produced* adjudication already
 exists for the claim. The check is scoped to ``data_provenance='agent_recommendation'``
-so the ~5000 seeded ``synthetic_wave_2_baseline`` adjudications never look
+so the ~5000 seeded ``synthetic_reference_baseline`` adjudications never look
 "already agent-adjudicated" — the initial snapshot is adjudicated exactly once
 and any re-delivery of a ``claim.submitted`` event is a no-op. The endpoint's
 ``agent/src/writer.py`` adds a second, deterministic guarantee (idempotent

@@ -28,10 +28,10 @@ KAFKA_KEYS = ("bootstrap-servers", "sasl-username", "sasl-password", "ssl-ca-pem
 TOPIC_CLAIM_SUBMITTED = "claim.submitted"
 TOPIC_CLAIM_ADJUDICATED = "claim.adjudicated"
 
-# Serving endpoint (Wave 6).
+# Serving endpoint.
 SERVING_ENDPOINT = "agents_fe-bar-ir-default-claims_adjudication_agent"
 
-# Lakebase (Wave 5/6).
+# Lakebase.
 LAKEBASE_ENDPOINT = "projects/fe-bar-operational-plane/branches/production/endpoints/primary"
 LAKEBASE_DATABASE = "databricks_postgres"
 

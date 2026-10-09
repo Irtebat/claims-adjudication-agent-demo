@@ -473,6 +473,22 @@ def build_decision_record(
         flags["narrative_conflict"] = narrative_conflict
     if genie_consultations:
         flags["genie_consultations"] = genie_consultations
+    # Supplier-recovery routing. When this adjudication is supplier-attributable, the
+    # recovery target is the resolved coil's coating supplier — the same derivation the
+    # seeded fixtures use (pipelines/src/generate.py maps a supplier-attributable row's
+    # coating_supplier_id to recovery_supplier_id). It is keyed off the SAME flag the
+    # writer projects onto adjudications.supplier_attributable, so the written
+    # (supplier_attributable, recovery_supplier_id) pair is always internally consistent.
+    # The App's finalize transaction sources the claim.adjudicated event's
+    # recovery_supplier_id from that adjudications row, so populating it here is what lets
+    # the supplier-recovery consumer open a case for a live agent adjudication (its
+    # predicate requires BOTH fields). Null when not attributable. Not a decision-record
+    # column (carried transiently for the adjudications projection, like
+    # defect_failure_mode_code), so no DDL change is needed.
+    coil = resolved.get("coil") or {}
+    recovery_supplier_id = (
+        coil.get("coating_supplier_id") if flags.get("supplier_attributable") else None
+    )
     return {
         "adjudication_id": adj_id,
         "claim_id": claim["claim_id"],
@@ -508,6 +524,7 @@ def build_decision_record(
         "rationale": recommendation.get("rationale"),
         "confidence": _to_float(recommendation.get("confidence")),
         "flags": flags,
+        "recovery_supplier_id": recovery_supplier_id,
         "narrative_conflict": narrative_conflict,
         "advisory_risk": advisory_risk,
         "precedent": precedent,

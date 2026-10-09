@@ -41,7 +41,7 @@ the ``reference`` synced tables already exist.
 Usage:
     uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
         python agent/scripts/setup_serving_sp.py \
-        --profile fe-bar --account-profile <account-profile>
+        --profile fe-bar-ir-2026 --account-profile <account-profile>
 """
 
 from __future__ import annotations

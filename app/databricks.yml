@@ -1,24 +1,35 @@
 bundle:
   name: steel-claims-cockpit
 
+# Submission-specific identifiers are expressed as bundle variables with their
+# current values as defaults, so a reader retargets to another workspace by
+# overriding the variables (CLI `--var` or a target `variables:` block) while the
+# bundle stays deployable as-is against the defaults below.
 variables:
   warehouse_id:
     description: SQL Warehouse ID
     default: a323b5700ae25d85
   genie_space_id:
     description: Default Genie Space ID
+    default: 01f1c269ca3c1adea7feb9f248ab3445
   genie_space_name:
     description: Genie Space display name
+    default: Steel Claims Operational Cockpit
   postgres_branch:
     description: Full Lakebase Postgres branch resource name. Obtain by running `databricks postgres list-branches {project-name}`, select the desired item from the output array and use its .name value. Requires the project resource name.
+    default: projects/fe-bar-operational-plane/branches/production
   postgres_database:
     description: Full Lakebase Postgres database resource name. Obtain by running `databricks postgres list-databases {branch-name}`, select the desired item from the output array and use its .name value. Requires the branch resource name.
+    default: projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres
   postgres_project:
     description: Full Lakebase Postgres project resource name. Obtain by running `databricks postgres list-projects`, select the desired item from the output array and use its .name value.
+    default: projects/fe-bar-operational-plane
   business_genie_space_id:
     description: Genie Space ID for the business-dashboard chat (reused gold-analytics space)
+    default: 01f1c2698a5418298f81f9e79df576ca
   business_genie_space_name:
     description: Business Genie Space display name
+    default: Steel Quality Claims Analytics
 
 resources:
   apps:
@@ -48,7 +59,7 @@ resources:
             name: ${var.genie_space_name}
             space_id: ${var.genie_space_id}
             permission: CAN_RUN
-        # Second Genie space: the reused Wave 10 gold-analytics space for business chat.
+        # Second Genie space: the reused gold-analytics space for business chat.
         - name: genie-space-business
           genie_space:
             name: ${var.business_genie_space_name}
@@ -65,12 +76,3 @@ targets:
     default: true
     workspace:
       host: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com
-
-    variables:
-      genie_space_id: 01f1c269ca3c1adea7feb9f248ab3445
-      genie_space_name: Steel Claims Operational Cockpit
-      postgres_branch: projects/fe-bar-operational-plane/branches/production
-      postgres_database: projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres
-      postgres_project: projects/fe-bar-operational-plane
-      business_genie_space_id: 01f1c2698a5418298f81f9e79df576ca
-      business_genie_space_name: Steel Quality Claims Analytics

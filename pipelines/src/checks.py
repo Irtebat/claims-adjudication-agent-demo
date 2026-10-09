@@ -5,7 +5,7 @@ policy intake), so the pipeline no longer holds those tables. The three former
 checks that cross-referenced them (warranty_version_mismatch, in_spec_not_conforming,
 exclusion_not_present) move to the deterministic-authority unit tests
 (agent/tests/test_authorities.py), which assert conformance/coverage/settlement
-against the same Wave-1 injected label patterns using the authored params.
+against the same synthetic injected label patterns using the authored params.
 """
 
 

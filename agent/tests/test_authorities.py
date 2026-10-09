@@ -1,4 +1,4 @@
-"""Deterministic authorities produce the expected tool outputs for each Wave-1 pattern.
+"""Deterministic authorities produce the expected tool outputs for each synthetic label pattern.
 
 These are the invariants that used to live in the pipeline's checks.py, now asserted
 directly against the authorities using the authored params.

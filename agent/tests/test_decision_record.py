@@ -340,6 +340,82 @@ def test_genie_consultations_persisted_in_flags():
     )
 
 
+# --- supplier-recovery derivation + routing -------------------------------- #
+# Materially-nonconforming coating-adhesion failure => supplier-attributable (R5).
+COATING_NONCONFORMS = {"conforms": False, "nonconforming_properties": ["coating_adhesion"]}
+
+
+def _supplier_record(*, attributable: bool, coating_supplier_id="SUP-00"):
+    """Build a decision record for a material-nonconformance adjudication whose coil
+    carries a coating supplier, flagging supplier_attributable per the argument."""
+    claim = {"claim_id": "CLM-9", "coil_id": "COIL-1", "claim_type": "material_nonconformance"}
+    resolved = {
+        "spec_provenance": {"grade": "G", "spec_edition": "E", "region": "NA"},
+        "warranty_provenance": {"product_line": "galvanized", "region": "NA", "version": "V1"},
+        "spec_params": {},
+        "warranty_terms": {},
+        "coil": {"ship_date": "2020-01-01", "coating_supplier_id": coating_supplier_id},
+        "freight_cap": 500.0,
+    }
+    det = deterministic_outcome(
+        "material_nonconformance", COATING_NONCONFORMS, COVERED, APPROVE_SETTLEMENT, NO_DUP
+    )
+    rec = _rec("APPROVE", "REPLACEMENT", 5000.0)
+    rec["flags"] = {"supplier_attributable": attributable, "fraud_risk": False, "over_claim": True}
+    corrected, violations = enforce_invariants(rec, det)
+    return build_decision_record(
+        claim=claim,
+        resolved=resolved,
+        measured={},
+        conformance=COATING_NONCONFORMS,
+        coverage=COVERED,
+        settlement=APPROVE_SETTLEMENT,
+        duplicate=NO_DUP,
+        deterministic=det,
+        recommendation=corrected,
+        invariant_violations=violations,
+        citations=[],
+        advisory_risk=None,
+        reproducibility={"authorities_source_sha256": "deadbeef"},
+    )
+
+
+def test_supplier_attributable_adjudication_routes_recovery_to_coil_coating_supplier():
+    """supplier-attributable -> recovery_supplier_id populated from the coil's coating
+    supplier, projected onto the adjudications row the finalize event sources from, and
+    the supplier-recovery consumer predicate passes. Mirrors the seeded derivation."""
+    import writer
+
+    record = _supplier_record(attributable=True)
+    # (1) Derivation: the coil's coating supplier becomes the recovery target.
+    assert record["recovery_supplier_id"] == "SUP-00"
+
+    # (2) Persistence: the writer projects it (and the matching supplier_attributable
+    # flag) onto the adjudications row — the exact row the App's finalize transaction
+    # reads to build the claim.adjudicated outbox event's recovery_supplier_id.
+    adj = writer._adjudication_row(record)
+    assert adj["supplier_attributable"] is True
+    assert adj["recovery_supplier_id"] == "SUP-00"
+
+    # (3) Consumer-path predicate (services/src/consumer_core.py SUPPLIER_RECOVERY guard:
+    # `supplier_attributable AND recovery_supplier_id`) fires -> a case is opened.
+    assert bool(adj["supplier_attributable"] and adj["recovery_supplier_id"]) is True
+
+
+def test_non_attributable_adjudication_leaves_recovery_null_and_consumer_skips():
+    """not supplier-attributable -> recovery_supplier_id is None even though the coil has
+    a coating supplier, so the supplier-recovery consumer correctly skips the event."""
+    import writer
+
+    record = _supplier_record(attributable=False)
+    assert record["recovery_supplier_id"] is None
+
+    adj = writer._adjudication_row(record)
+    assert adj["supplier_attributable"] is False
+    assert adj["recovery_supplier_id"] is None
+    assert bool(adj["supplier_attributable"] and adj["recovery_supplier_id"]) is False
+
+
 def test_idempotency_key_is_stable():
     assert build_idempotency_key("CLM-9", "deadbeef", 1) == build_idempotency_key(
         "CLM-9", "deadbeef", 1
