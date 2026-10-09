@@ -130,7 +130,7 @@ need. Order:
      --app-principal <app-sp-client-id>
    ```
 
-   The grant set mirrors `docs/evidence/app-deploy/grants.sql`:
+   The grant set:
    - `USAGE` on `public` + `reference`.
    - `SELECT` on `public.claims`, `adjudications`, `adjudication_decision_records`,
      `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`, and
@@ -140,8 +140,8 @@ need. Order:
      synced-tables`) when a synced table is created or recreated.
    - `INSERT, UPDATE` on `public.adjudications` and
      `public.adjudication_decision_records` (finalize UPDATE + new record_version).
-   - **`INSERT` on `public.outbox`** ← REQUIRED for finalize; not in the serving SP's
-     documented grants (`docs/evidence/serving-endpoint/README.md`) — a NEW grant.
+   - **`INSERT` on `public.outbox`** ← REQUIRED for finalize; not part of the serving
+     SP's grant set — a grant specific to the app SP.
 3. Enable **user authorization** with scopes `dashboards.genie` + `sql` (in
    `databricks.yml`, applied on deploy) so OBO works for Genie + the warehouse.
 4. Set the role config (plain app env vars — no resource/grant needed):
@@ -159,4 +159,4 @@ need. Order:
    scoped-token case is the only bit that can only be verified live.
 
 Steps 2–4 need the deployed app SP id (step 1 creates it); some sub-steps need
-account-admin (see `docs/evidence/copilot-app-backend/`).
+account-admin rights.

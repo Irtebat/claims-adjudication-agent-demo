@@ -1,5 +1,7 @@
 # Evidence — synthetic data and governance
 
+> **Synthetic demo evidence**, captured at a point in time against a synthetic dataset — not production data or continuous monitoring. See [`../../CURRENT-STATE.md`](../../CURRENT-STATE.md) for current verification status.
+
 Live evidence that the synthetic steel-claims dataset was generated, governed, and
 landed correctly in Unity Catalog `fe-bar-ir`. Captured against the `fe-bar`
 profile with real query text, UTC capture times, and result rows.

@@ -1,5 +1,7 @@
 # Evidence — native CDF SCD2 cutover
 
+> **Synthetic demo evidence**, captured at a point in time against a synthetic dataset — not production data or continuous monitoring. See [`../../CURRENT-STATE.md`](../../CURRENT-STATE.md) for current verification status.
+
 Live evidence that claims and adjudications history is maintained incrementally from
 Lakebase via native Change Data Feed and AUTO CDC (SCD Type 2). Captured against the
 `fe-bar` profile after a normal `refresh_medallion` run with no full refresh. The

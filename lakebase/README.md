@@ -22,7 +22,7 @@ Native Postgres tables in schema `public`:
 
 | Group | Tables | Notes |
 | --- | --- | --- |
-| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite). The pending/retry queue is deferred to the future services wave. |
+| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite). The pending/retry queue is deferred to the future services layer. |
 | Decision record (created by `src/setup_and_seed.py`) | `adjudication_decision_records` | Append-only canonical record per adjudication, PK `(adjudication_id, record_version)`, JSONB payload, `REPLICA IDENTITY FULL`; UPDATE/DELETE revoked (immutability by access) |
 | Policy (created by `agent/` intake) | `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses` | Natural-key policy params + citable clauses |
 
@@ -79,13 +79,12 @@ Secret scope `fe-bar-lakebase` — keys `database`, `endpoint`, `host`, `port`,
     path only. Delete + drop + create makes the table owned by a different role and
     drops its grants, so after the same ONLINE wait it rebuilds indexes and re-grants.
   The re-grant applies `SELECT` on the `reference.*` synced tables to the documented
-  consumers — the app SP (`docs/evidence/app-deploy/grants.sql`) and the serving SP
-  (`docs/evidence/serving-endpoint/README.md`) — so a create/recreate is reproducible
-  without a manual `GRANT` (the app-SP losing SELECT on `reference.customer_heat_risk`
-  500'd the cockpit on the go-live run). Override the SP ids via `APP_SP_PRINCIPAL` /
-  `SERVING_SP_PRINCIPAL` if they are rotated.
+  consumers — the app SP and the serving SP (`claims-adjudication-serving`) — so a
+  create/recreate is reproducible without a manual `GRANT` (the app-SP losing SELECT
+  on `reference.customer_heat_risk` once 500'd the cockpit). Override the SP ids via
+  `APP_SP_PRINCIPAL` / `SERVING_SP_PRINCIPAL` if they are rotated.
 - The one-time seed tags every synthetic row with
-  `data_provenance = 'synthetic_wave_2_baseline'` and is idempotent; it must not be
+  `data_provenance = 'synthetic_reference_baseline'` and is idempotent; it must not be
   rerun after CDF is active (use `scripts/bootstrap.py`, or `lakebase/run.py
   setup-and-seed`, for the guarded sequence).
 
@@ -189,4 +188,4 @@ to the synced-table actions. `setup-and-seed` refuses before its own
 Lakebase bundle deploy or seed if native CDF already exists. When run through
 `scripts/bootstrap.py`, the pipelines deploy and `generate` steps have already run
 by the time this guard is checked (see `scripts/README.md`).
-The pending/retry queue remains a future services-wave responsibility.
+The pending/retry queue remains a future services-layer responsibility.

@@ -15,13 +15,14 @@ databricks:
     ops: ops                            # analytics mirror of operational tables
   warehouse_name: Serverless Starter Warehouse
 
-# Foundation model / embedding choices.
+# Reasoning + embedding are served as Unity Gateway model services (governed,
+# auditable, no self-managed endpoints). The agent calls them via the AI Gateway.
 models:
-  agent_llm_endpoint: "TBD_AGENT_LLM"
-  # Governed GTE embeddings via the Unity Gateway model service (GA, no provisioning).
-  # 1024-dim, NOT normalized -> we L2-normalize and use cosine. No dimensions param.
-  embedding_model_service: "system.ai.gte-large-en"
+  reasoning_model_service: "fe-bar-ir.adjudication-agent.adjudication-reasoning"
+  reasoning_gateway_path: "/ai-gateway/mlflow/v1/chat/completions"
+  embedding_model_service: "fe-bar-ir.adjudication-agent.embedding"
   embedding_gateway_path: "/ai-gateway/mlflow/v1/embeddings"
+  # 1024-dim, NOT normalized -> we L2-normalize and use cosine. No dimensions param.
   embedding_dim: 1024
   embedding_normalization: "l2"
 
@@ -30,8 +31,10 @@ policy:
   source: lakebase/src/policy_source.json      # single source of truth
   param_tables: [spec_params, warranty_terms]  # read by the deterministic authorities
   clause_tables: [spec_clauses, warranty_clauses]  # embedded + tsvector, hybrid retrieval
-  # Deterministic UC-function authorities (governed, auditable) in <catalog>.silver.
-  authorities: [compute_conformance, compute_coverage, compute_settlement]
+  # The deterministic authorities (compute_conformance, compute_coverage,
+  # compute_settlement, duplicate detection) run IN-PROCESS in the agent as plain
+  # Python — they are NOT registered UC functions. They read the structured params
+  # from the Lakebase policy tables above (via the read-only UC mirror).
 
 # Lakebase Autoscaling (Postgres, OLTP). Non-secret identifiers only; the OAuth
 # credential is minted at runtime by the SDK, never stored here.
@@ -59,10 +62,6 @@ kafka:
   # SASL creds + CA cert live ONLY in this scope, referenced by name, never inline.
   secret_scope: fe-bar-aiven-kafka
   secret_keys: [bootstrap-servers, sasl-username, sasl-password, ssl-ca-pem]
-  # Services auth to the endpoint/Lakebase AS the Wave 6 app SP (claims-agent scope).
+  # Services authenticate to the endpoint/Lakebase AS the application service
+  # principal (credentials in the claims-agent secret scope).
   app_sp_secret_scope: claims-agent
-
-# Google Slides — living architecture/value walkthrough deck.
-slides:
-  presentation_id: "TBD"
-  drive_folder_id: "TBD"

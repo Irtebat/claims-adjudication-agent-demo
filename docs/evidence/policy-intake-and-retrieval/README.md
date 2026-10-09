@@ -1,5 +1,7 @@
 # Evidence — policy intake and retrieval
 
+> **Synthetic demo evidence**, captured at a point in time against a synthetic dataset — not production data or continuous monitoring. See [`../../CURRENT-STATE.md`](../../CURRENT-STATE.md) for current verification status.
+
 Live evidence that the authored policy JSON was parsed into Lakebase params and
 clause tables, that resolution and the in-process deterministic authorities produce
 correct outputs, and that clause and prior-claim retrieval work. Captured against

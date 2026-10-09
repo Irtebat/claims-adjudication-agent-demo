@@ -1,5 +1,7 @@
 # Evidence — claims-adjudication agent
 
+> **Synthetic demo evidence**, captured at a point in time against a synthetic dataset — not production data. See [`../../CURRENT-STATE.md`](../../CURRENT-STATE.md) for current verification status. The money-safety invariant guarantees shown here are enforced in code and are independent of the reasoning-model version (the agent now calls the Unity Gateway service `fe-bar-ir.adjudication-agent.adjudication-reasoning`).
+
 Proof for the claims-adjudication agent workstream: the deterministic authorities
 decide money and the LLM never overrides them, the append-only decision record
 reaches UC gold via the reused native CDF, and the agent is registered in Unity

@@ -1,5 +1,7 @@
 # Evidence — Lakebase provisioning and serve-down
 
+> **Synthetic demo evidence**, captured at a point in time against a synthetic dataset — not production data or continuous monitoring. See [`../../CURRENT-STATE.md`](../../CURRENT-STATE.md) for current verification status.
+
 Live evidence that the Lakebase operational plane was provisioned and that Unity
 Catalog reference data serves down into it. Captured against the `fe-bar` profile.
 
