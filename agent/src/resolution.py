@@ -22,8 +22,8 @@ class PolicyResolver:
     def resolve(self, coil_id: str) -> dict:
         coil = self._one(
             "SELECT coil_id, grade, spec_edition, region, product_line, coating_class, "
-            "ship_date, shipped_tonnage, unit_price FROM reference.heats_coils "
-            "WHERE coil_id = %(coil_id)s",
+            "coating_supplier_id, ship_date, shipped_tonnage, unit_price "
+            "FROM reference.heats_coils WHERE coil_id = %(coil_id)s",
             {"coil_id": coil_id},
         )
         spec = self._one(

@@ -1,5 +1,5 @@
 /**
- * Server-side authorization for the claims cockpit (Wave 7, Stage A).
+ * Server-side authorization for the claims cockpit.
  *
  * Two roles, enforced on EVERY backend route (never in the client):
  *   - `adjuster`      — queue, cockpit detail, decision/finalize, claims history,

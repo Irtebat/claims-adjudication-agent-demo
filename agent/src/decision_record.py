@@ -264,7 +264,13 @@ def _amounts_equal(a: Any, b: Any) -> bool:
         return False
 
 
-def enforce_invariants(recommendation: dict, deterministic: dict) -> tuple[dict, list[str]]:
+def enforce_invariants(
+    recommendation: dict,
+    deterministic: dict,
+    *,
+    claim_type: str | None,
+    conformance: dict,
+) -> tuple[dict, list[str]]:
     """Correct the LLM recommendation to the deterministic outcome; the LLM never wins.
 
     Enforces: (i) a duplicate cannot be recommended for payment (duplicate =>
@@ -272,13 +278,19 @@ def enforce_invariants(recommendation: dict, deterministic: dict) -> tuple[dict,
     output exactly and the persisted ``approved_amount`` is the authority amount
     when APPROVE else 0, (iii) the verdict is consistent with conformance/coverage
     eligibility — an ineligible claim can never be recommended for APPROVE, and an
-    eligible claim can never be silently denied (only held as PEND_INVESTIGATE).
-    Only money and eligibility are enforced: a valid APPROVE disposition
-    (CREDIT/REPLACEMENT/REWORK) is the agent's call and is kept; an invalid one is
-    a violation and falls back to the rule disposition. The rule disposition
+    eligible claim can never be silently denied (only held as PEND_INVESTIGATE),
+    (iv) ``flags['supplier_attributable']`` is the deterministic predicate's output
+    (``disposition_rules.supplier_attributable`` on ``claim_type`` + the deterministic
+    ``conformance``), overwriting whatever the LLM supplied — supplier-recovery routing
+    is money-adjacent, so the LLM can neither create nor suppress it.
+    Only money, eligibility, and recovery routing are enforced: a valid APPROVE
+    disposition (CREDIT/REPLACEMENT/REWORK) is the agent's call and is kept; an invalid
+    one is a violation and falls back to the rule disposition. The rule disposition
     (``disposition_rules`` via the deterministic outcome) is recorded alongside as
     ``rule_disposition`` / ``disposition_agrees_with_rule`` for agent-vs-rules
-    analysis. Returns (corrected_recommendation, violations).
+    analysis. ``claim_type`` and the deterministic ``conformance`` are the same inputs
+    that produced ``deterministic`` (see ``deterministic_outcome``). Returns
+    (corrected_recommendation, violations).
     """
     corrected = dict(recommendation)
     violations: list[str] = []
@@ -338,6 +350,24 @@ def enforce_invariants(recommendation: dict, deterministic: dict) -> tuple[dict,
     # The persisted approved amount is deterministic: the authority amount only when
     # the corrected verdict is APPROVE, otherwise zero.
     corrected["approved_amount"] = authority_amount if verdict == "APPROVE" else 0.0
+
+    # (iv) Supplier-recovery routing is money-adjacent and must be deterministic. The
+    # LLM supplies ``flags['supplier_attributable']``, but ``build_decision_record``
+    # derives ``recovery_supplier_id`` from that flag, so trusting the LLM would let it
+    # create or suppress recovery routing. Overwrite the flag with the deterministic
+    # predicate's output here — BEFORE that derivation runs — so both the persisted
+    # ``supplier_attributable`` flag and ``recovery_supplier_id`` are deterministic.
+    det_supplier_attributable = supplier_attributable(claim_type, conformance)
+    flags = dict(corrected.get("flags") or {})
+    # Record a violation only when the LLM actually supplied a conflicting value (same
+    # audit semantics as ``settlement_estimate_overridden``); the flag is overwritten
+    # deterministically regardless, so recovery routing is deterministic either way.
+    if "supplier_attributable" in flags and (
+        bool(flags["supplier_attributable"]) != det_supplier_attributable
+    ):
+        violations.append("supplier_attributable_overridden")
+    flags["supplier_attributable"] = det_supplier_attributable
+    corrected["flags"] = flags
     return corrected, violations
 
 
@@ -473,6 +503,22 @@ def build_decision_record(
         flags["narrative_conflict"] = narrative_conflict
     if genie_consultations:
         flags["genie_consultations"] = genie_consultations
+    # Supplier-recovery routing. When this adjudication is supplier-attributable, the
+    # recovery target is the resolved coil's coating supplier — the same derivation the
+    # seeded fixtures use (pipelines/src/generate.py maps a supplier-attributable row's
+    # coating_supplier_id to recovery_supplier_id). It is keyed off the SAME flag the
+    # writer projects onto adjudications.supplier_attributable, so the written
+    # (supplier_attributable, recovery_supplier_id) pair is always internally consistent.
+    # The App's finalize transaction sources the claim.adjudicated event's
+    # recovery_supplier_id from that adjudications row, so populating it here is what lets
+    # the supplier-recovery consumer open a case for a live agent adjudication (its
+    # predicate requires BOTH fields). Null when not attributable. Not a decision-record
+    # column (carried transiently for the adjudications projection, like
+    # defect_failure_mode_code), so no DDL change is needed.
+    coil = resolved.get("coil") or {}
+    recovery_supplier_id = (
+        coil.get("coating_supplier_id") if flags.get("supplier_attributable") else None
+    )
     return {
         "adjudication_id": adj_id,
         "claim_id": claim["claim_id"],
@@ -508,6 +554,7 @@ def build_decision_record(
         "rationale": recommendation.get("rationale"),
         "confidence": _to_float(recommendation.get("confidence")),
         "flags": flags,
+        "recovery_supplier_id": recovery_supplier_id,
         "narrative_conflict": narrative_conflict,
         "advisory_risk": advisory_risk,
         "precedent": precedent,

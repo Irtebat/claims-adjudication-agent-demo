@@ -1,5 +1,5 @@
 /**
- * Backend JSON routes for the claims cockpit (Wave 7, Stage A — headless).
+ * Backend JSON routes for the claims cockpit (headless backend).
  *
  * Adjuster surfaces: queue, cockpit detail, finalize, claims history.
  * Business surface: business dashboard metadata (analytics data is served by the

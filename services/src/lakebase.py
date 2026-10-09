@@ -2,7 +2,7 @@
 
 Mirrors ``agent/src/db.py`` + ``agent/src/workspace_client.py``: when
 ``APP_SP_CLIENT_ID`` / ``APP_SP_CLIENT_SECRET`` are set (exported from the
-``claims-agent`` scope) the Databricks SDK authenticates as the Wave 6 service
+``claims-agent`` scope) the Databricks SDK authenticates as the application service
 principal, and ``LAKEBASE_DB_USER`` selects its Postgres role. The SP therefore
 carries the grants that gate every write in this layer (see migrate.py).
 """

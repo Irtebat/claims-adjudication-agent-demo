@@ -192,7 +192,7 @@ def rows(frame, columns):
     for row in frame.select(*columns).toLocalIterator():
         values = row.asDict(recursive=True)
         yield tuple(values[column] for column in columns) + (
-            "synthetic_wave_2_baseline",
+            "synthetic_reference_baseline",
         )
 
 
@@ -217,11 +217,11 @@ with psycopg.connect(
         # from real intake retain their independent provenance.
         cursor.execute(
             "DELETE FROM adjudications WHERE data_provenance = %s",
-            ("synthetic_wave_2_baseline",),
+            ("synthetic_reference_baseline",),
         )
         cursor.execute(
             "DELETE FROM claims WHERE data_provenance = %s",
-            ("synthetic_wave_2_baseline",),
+            ("synthetic_reference_baseline",),
         )
         cursor.executemany(
             upsert_sql("claims", CLAIM_COLUMNS, "claim_id"),
@@ -279,7 +279,7 @@ result = {
     ),
     "extensions": extensions,
     "native_cdf_enabled": native_cdf_enabled,
-    "provenance": "synthetic_wave_2_baseline",
+    "provenance": "synthetic_reference_baseline",
     "tables": table_identity,
 }
 dbutils.notebook.exit(json.dumps(result, sort_keys=True))

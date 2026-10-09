@@ -1,5 +1,5 @@
 """The recommendation writer: atomic (adjudication + decision record), idempotent,
-correct verdict mapping, and — post Wave 7 — NO recommendation-time outbox row.
+correct verdict mapping, and NO recommendation-time outbox row.
 
 The ``claim.adjudicated`` fan-out now fires only when an adjuster finalizes the claim
 in the App, so the recommendation transaction must write exactly two rows and never

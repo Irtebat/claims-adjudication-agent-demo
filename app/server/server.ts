@@ -1,5 +1,5 @@
 /**
- * Steel Claims Cockpit — AppKit backend entry (Wave 7, Stage A, headless).
+ * Steel Claims Cockpit — AppKit backend entry (headless backend).
  *
  * Data access:
  *   - Lakebase (operational OLTP: queue, cockpit, finalize, history) runs as the
@@ -22,7 +22,7 @@ import { makeDatabricksRoleResolver } from './identity';
 import { registerRoutes } from './routes';
 
 // Operational cockpit space (injected as DATABRICKS_GENIE_SPACE_ID by the
-// genie-space app resource) and the reused Wave 10 gold-analytics space.
+// genie-space app resource) and the reused gold-analytics space.
 const OPERATIONAL_GENIE_SPACE = process.env.DATABRICKS_GENIE_SPACE_ID ?? '';
 const BUSINESS_GENIE_SPACE = process.env.DATABRICKS_BUSINESS_GENIE_SPACE_ID ?? '01f1bac20bf6119f84fa99c7ba438ba4';
 

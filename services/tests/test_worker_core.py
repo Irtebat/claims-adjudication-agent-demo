@@ -63,7 +63,7 @@ def test_dedup_params_carry_final_statuses_provenance_and_claim():
 
 @pytest.mark.parametrize("status", ["FINAL", "REVIEWED"])
 def test_claim_with_human_decision_is_skipped_and_committed(status):
-    table = _Adjudications([("CLM-1", status, "synthetic_wave_2_baseline")])
+    table = _Adjudications([("CLM-1", status, "synthetic_reference_baseline")])
     outcome, invoked, commits = _handle(table, "CLM-1")
     assert outcome == worker_core.SKIP_FINAL
     assert invoked == []  # no LLM call, no write
@@ -95,7 +95,7 @@ def test_claim_with_only_agent_recommendation_is_still_skipped():
 
 
 def test_baseline_recommendation_without_human_decision_is_invoked():
-    table = _Adjudications([("CLM-1", "RECOMMENDED", "synthetic_wave_2_baseline")])
+    table = _Adjudications([("CLM-1", "RECOMMENDED", "synthetic_reference_baseline")])
     assert _handle(table, "CLM-1")[0] == worker_core.ADJUDICATE
 
 

@@ -1,5 +1,5 @@
 /**
- * Human finalization transaction (Wave 7, Task 3) — the App is the finalizer.
+ * Human finalization transaction — the App is the finalizer.
  *
  * Given a human decision, ONE Postgres transaction (App-SP pool):
  *   1. UPDATE public.adjudications -> decision_status='FINAL' with the human verdict,

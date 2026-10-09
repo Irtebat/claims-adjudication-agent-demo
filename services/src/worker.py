@@ -33,7 +33,7 @@ topic = dbutils.widgets.get("topic")
 max_messages = int(dbutils.widgets.get("max_messages"))
 poll_timeout_s = float(dbutils.widgets.get("poll_timeout_s"))
 
-# Auth AS the Wave 6 application SP for both the endpoint call and Lakebase.
+# Auth AS the application SP for both the endpoint call and Lakebase.
 os.environ.setdefault(
     "DATABRICKS_HOST", "https://" + spark.conf.get("spark.databricks.workspaceUrl")
 )

@@ -44,7 +44,7 @@ CLAIM_FIELDS = (
 )
 
 # Provenance tag written by the agent path; the worker dedup is scoped to it so the
-# seeded ``synthetic_wave_2_baseline`` adjudications never look "already agent-adjudicated".
+# seeded ``synthetic_reference_baseline`` adjudications never look "already agent-adjudicated".
 AGENT_PROVENANCE = "agent_recommendation"
 
 
