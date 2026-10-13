@@ -167,7 +167,8 @@ app from the uploaded source; run it after every code change.
      `reference.heats_coils`, `mill_test_certs`, `customers`, `customer_heat_risk`,
      `prior_claims_corpus`. The `reference.*` SELECTs are also reapplied by
      `lakebase/scripts/regrant_synced_table_selects.py` (via `lakebase/run.py
-     synced-tables`) when a synced table is created or recreated. On a fresh
+     synced-tables`, with `APP_SP_PRINCIPAL=<app-sp-id>` exported) when a synced
+     table is created or recreated. On a fresh
      workspace, `reference.*` grants whose table does not exist yet are skipped. The
      script warns, reports them under `skipped` in its JSON summary, and exits 0.
      Create the synced tables, then re-run the script.
@@ -177,9 +178,6 @@ app from the uploaded source; run it after every code change.
      write uses `ON CONFLICT (event_id) DO NOTHING`, which needs `SELECT`. Without
      it finalize fails with `permission denied for table outbox`.
 
-   The `reference.*` SELECTs are reapplied by
-   `lakebase/scripts/regrant_synced_table_selects.py` whenever a synced table is
-   created or recreated; export `APP_SP_PRINCIPAL=<app-sp-id>` for those runs.
 3. Set the role config in `app.yaml` `env` (plain env vars, see `server/identity.ts`):
    `ADJUSTER_GROUPS` / `BUSINESS_GROUPS` (comma-separated group display names or
    ids) are the primary mechanism; `ADJUSTER_USERS` / `BUSINESS_USERS`
