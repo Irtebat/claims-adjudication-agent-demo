@@ -8,6 +8,7 @@ module is loaded by file path so it imports without the Databricks SDK installed
 """
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -23,17 +24,32 @@ APP_SP = "d5309ee7-a8ea-499f-99d4-4ccbd8369d93"
 
 
 class FakeCursor:
-    """Records rendered SQL, matching the psycopg rendering the script emits."""
+    """Records rendered GRANT SQL, matching the psycopg rendering the script emits.
 
-    def __init__(self, fail_on=None):
+    Existence probes (``to_regclass`` / ``to_regnamespace``) are recorded separately in
+    ``probes`` and answer "exists" unless the probed name is in ``missing``. A GRANT
+    containing ``fail_on`` raises, like a Postgres error.
+    """
+
+    def __init__(self, fail_on=None, missing=()):
         self.statements = []
+        self.probes = []
         self._fail_on = fail_on
+        self._missing = set(missing)
+        self._row = None
 
     def execute(self, query, params=None):
         rendered = query.as_string(None) if hasattr(query, "as_string") else str(query)
+        if rendered.startswith("SELECT to_reg"):
+            self.probes.append(params[0])
+            self._row = (params[0] not in self._missing,)
+            return
         self.statements.append(rendered)
         if self._fail_on and self._fail_on in rendered:
             raise RuntimeError(f"postgres error executing: {rendered}")
+
+    def fetchone(self):
+        return self._row
 
     def __enter__(self):
         return self
@@ -140,7 +156,73 @@ def test_main_grants_when_principal_supplied(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["setup_app_sp", "--app-principal", APP_SP])
     setup.main()
     assert cur.statements == _expected(APP_SP)
-    assert '"granted": true' in capsys.readouterr().out
+    out = capsys.readouterr()
+    summary = json.loads(out.out)
+    assert summary["complete"] is True
+    assert summary["skipped"] == []
+    assert len(summary["granted"]) == len(setup.GRANTS)
+    assert APP_SP in out.err
+
+
+# --- Fresh workspace: missing synced (reference.*) targets are skipped -------------
+
+
+def test_missing_reference_table_is_skipped_and_warned_not_raised(monkeypatch, capsys):
+    cur = FakeCursor(missing={'"reference"."customers"'})
+    monkeypatch.setattr(setup, "_connect", lambda *a, **k: FakeConn(cur))
+    monkeypatch.setattr(sys, "argv", ["setup_app_sp", "--app-principal", APP_SP])
+    setup.main()  # exits normally (0), does not raise
+    assert cur.statements == [
+        s for s in _expected(APP_SP) if '"reference"."customers"' not in s
+    ]
+    out = capsys.readouterr()
+    summary = json.loads(out.out)
+    assert summary["skipped"] == ["SELECT on reference.customers"]
+    assert summary["complete"] is False
+    assert "reference.customers" in out.err
+    assert "create synced tables, then re-run this script" in out.err.lower()
+
+
+def test_missing_reference_schema_skips_all_synced_grants():
+    synced = [t for _, t in setup.GRANTS if t[1] == "reference"]
+    missing = {'"reference"'} | {
+        f'"{t[1]}"."{t[2]}"' for t in synced if t[0] == "table"
+    }
+    cur = FakeCursor(missing=missing)
+    result = setup.apply_grants(cur, APP_SP)
+    assert len(result["skipped"]) == len(synced)
+    assert all('"reference"' not in s for s in cur.statements)
+
+
+def test_present_reference_tables_are_granted_and_probed():
+    cur = FakeCursor()
+    result = setup.apply_grants(cur, APP_SP)
+    assert result["skipped"] == []
+    assert cur.statements == _expected(APP_SP)
+    assert cur.probes and all(p.startswith('"reference"') for p in cur.probes)
+
+
+def test_non_reference_grant_failure_still_raises():
+    cur = FakeCursor(fail_on='"public"."outbox"')
+    with pytest.raises(RuntimeError, match="postgres error"):
+        setup.apply_grants(cur, APP_SP)
+
+
+def test_existing_reference_grant_failure_still_raises():
+    cur = FakeCursor(fail_on='"reference"."heats_coils"')
+    with pytest.raises(RuntimeError, match="postgres error"):
+        setup.apply_grants(cur, APP_SP)
+
+
+def test_main_prints_principal_before_any_grant(monkeypatch, capsys):
+    def failing_connect(*args, **kwargs):
+        raise RuntimeError("lakebase unreachable")
+
+    monkeypatch.setattr(setup, "_connect", failing_connect)
+    monkeypatch.setattr(sys, "argv", ["setup_app_sp", "--app-principal", APP_SP])
+    with pytest.raises(RuntimeError, match="lakebase unreachable"):
+        setup.main()
+    assert APP_SP in capsys.readouterr().err
 
 
 def test_main_requires_app_principal_and_grants_nothing(monkeypatch):

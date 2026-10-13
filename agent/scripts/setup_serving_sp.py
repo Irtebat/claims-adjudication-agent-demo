@@ -30,13 +30,17 @@ Catalog steps use the workspace profile. Lakebase grants run over psycopg with a
 databricks-sdk-minted database credential (``sslmode=require``); the Postgres
 role name is the service principal's application UUID. Unity Catalog EXECUTE
 grants run as SQL on a serverless warehouse. Each resource is detected first and
-skipped when it already exists; GRANTs are idempotent. The resulting service
-principal application id is printed at the end.
+skipped when it already exists; GRANTs are idempotent. The service principal
+application id is printed to stderr as soon as it is known (before any grant), and
+a JSON summary of granted vs skipped grants is printed at the end.
 
-The ``reference.*`` synced-table SELECTs this script grants are also reapplied by
+The ``reference`` schema and its synced tables only exist once synced tables are
+created, which itself needs this SP's id. On a fresh workspace the ``reference.*``
+grants whose target is missing are therefore skipped with a warning (the run still
+exits 0); create the synced tables, then re-run this script. Every other grant fails
+loud. The ``reference.*`` SELECTs are also reapplied by
 ``lakebase/scripts/regrant_synced_table_selects.py`` whenever a synced table is
-created or recreated; this script establishes the full initial grant and assumes
-the ``reference`` synced tables already exist.
+created or recreated.
 
 Usage:
     uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
@@ -49,6 +53,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 
 import psycopg
 from psycopg import sql
@@ -111,11 +116,15 @@ GENIE_UC_TABLES = (
 ROLE_IDENTITY_TYPE = "SERVICE_PRINCIPAL"
 ROLE_AUTH_METHOD = "LAKEBASE_OAUTH_V1"
 
+# The Lakebase schema holding the synced tables; grants on it are existence-checked.
+SYNCED_SCHEMA = "reference"
+
 # The serving SP Lakebase grant set, following docs/evidence/serving-endpoint/README.md
 # for the public reads and writes and the serving read set in
 # lakebase/scripts/regrant_synced_table_selects.py (SERVING_TABLES) for the reference.*
 # synced tables, which includes the precedent corpus prior_claims_corpus that
-# find_similar_prior_claims reads. Each entry is (privileges, target) where target is
+# find_similar_prior_claims reads (the retired native public.prior_claims table is not
+# granted; it does not exist on fresh workspaces). Each entry is (privileges, target) where target is
 # one of ("database", <db>), ("schema", <schema>), or ("table", <schema>, <table>).
 GRANTS: list[tuple[str, tuple]] = [
     ("CONNECT", ("database", DATABASE)),
@@ -126,7 +135,6 @@ GRANTS: list[tuple[str, tuple]] = [
     ("SELECT", ("table", "public", "warranty_terms")),
     ("SELECT", ("table", "public", "spec_clauses")),
     ("SELECT", ("table", "public", "warranty_clauses")),
-    ("SELECT", ("table", "public", "prior_claims")),
     ("SELECT", ("table", "reference", "heats_coils")),
     ("SELECT", ("table", "reference", "mill_test_certs")),
     ("SELECT", ("table", "reference", "customer_heat_risk")),
@@ -163,13 +171,50 @@ def _grant(cur: psycopg.Cursor, role: str, privileges: str, target: tuple) -> No
     )
 
 
-def apply_lakebase_grants(cur: psycopg.Cursor, role: str) -> list[str]:
-    """Issue every Lakebase GRANT for the serving SP and return the applied labels."""
-    applied = []
+def _is_synced(target: tuple) -> bool:
+    # The reference schema and its tables are created by synced-table creation, which
+    # itself needs this SP's id, so on a fresh workspace they may not exist yet.
+    return target[0] in ("schema", "table") and target[1] == SYNCED_SCHEMA
+
+
+def _exists(cur: psycopg.Cursor, target: tuple) -> bool:
+    # to_regnamespace / to_regclass return NULL (never raise) for a missing object,
+    # independent of the connecting user's privileges on it.
+    if target[0] == "schema":
+        cur.execute("SELECT to_regnamespace(%s) IS NOT NULL", (f'"{target[1]}"',))
+    else:
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", (f'"{target[1]}"."{target[2]}"',))
+    return bool(cur.fetchone()[0])
+
+
+def apply_lakebase_grants(cur: psycopg.Cursor, role: str) -> dict:
+    """Issue every Lakebase GRANT for the serving SP; return granted and skipped labels.
+
+    A ``reference.*`` (synced-table) target that does not exist yet is skipped rather
+    than aborting the run; every other grant, and any grant on an existing synced
+    table, fails loud.
+    """
+    granted, skipped = [], []
     for privileges, target in GRANTS:
+        label = f"{privileges} on {'.'.join(target[1:])}"
+        if _is_synced(target) and not _exists(cur, target):
+            skipped.append(label)
+            continue
         _grant(cur, role, privileges, target)
-        applied.append(f"{privileges} on {'.'.join(target[1:])}")
-    return applied
+        granted.append(label)
+    return {"granted": granted, "skipped": skipped}
+
+
+def warn_skipped(skipped: list[str]) -> None:
+    """Warn on stderr about synced-table grants skipped because the target is missing."""
+    if not skipped:
+        return
+    print(
+        f"WARNING: skipped {len(skipped)} grant(s) on missing synced-table targets: "
+        f"{', '.join(skipped)}. Create synced tables, then re-run this script.",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 # --- Unity Catalog EXECUTE grants (SQL warehouse) ---------------------------------
@@ -484,6 +529,9 @@ def main() -> None:
 
     sp = ensure_service_principal(account, args.display_name)
     app_id = sp["application_id"]
+    # Surface the id before any grant: synced-table creation needs it, so a later
+    # failure must never hide it.
+    print(f"serving SP application_id: {app_id}", file=sys.stderr, flush=True)
 
     ensure_workspace_assignment(account, workspace.get_workspace_id(), sp["id"])
     role_created = ensure_lakebase_role(workspace, BRANCH, args.role_id, postgres_role=app_id)
@@ -493,6 +541,7 @@ def main() -> None:
         conn.cursor() as cur,
     ):
         lakebase_grants = apply_lakebase_grants(cur, app_id)
+    warn_skipped(lakebase_grants["skipped"])
 
     warehouse_id = discover_warehouse(workspace, args.warehouse)
     uc_grants = apply_uc_execute_grants(workspace, warehouse_id, app_id)
@@ -508,7 +557,9 @@ def main() -> None:
                 "service_principal_created": sp["created"],
                 "role_id": args.role_id,
                 "role_created": role_created,
-                "lakebase_grants": lakebase_grants,
+                "lakebase_grants": lakebase_grants["granted"],
+                "lakebase_grants_skipped": lakebase_grants["skipped"],
+                "complete": not lakebase_grants["skipped"],
                 "uc_grants": uc_grants,
                 "genie_uc_grants": genie_uc_grants,
                 "genie_permissions": genie_permissions,

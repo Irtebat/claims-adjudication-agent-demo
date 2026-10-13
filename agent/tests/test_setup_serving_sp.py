@@ -27,14 +27,32 @@ FAKE_MINTED = uuid.uuid4().hex
 
 
 class FakeCursor:
-    """Records rendered SQL, matching the psycopg rendering the script emits."""
+    """Records rendered GRANT SQL, matching the psycopg rendering the script emits.
 
-    def __init__(self):
+    Existence probes (``to_regclass`` / ``to_regnamespace``) are recorded separately in
+    ``probes`` and answer "exists" unless the probed name is in ``missing``. A GRANT
+    containing ``fail_on`` raises, like a Postgres error.
+    """
+
+    def __init__(self, missing=(), fail_on=None):
         self.statements = []
+        self.probes = []
+        self._missing = set(missing)
+        self._fail_on = fail_on
+        self._row = None
 
     def execute(self, query, params=None):
         rendered = query.as_string(None) if hasattr(query, "as_string") else str(query)
+        if rendered.startswith("SELECT to_reg"):
+            self.probes.append(params[0])
+            self._row = (params[0] not in self._missing,)
+            return
         self.statements.append(rendered)
+        if self._fail_on and self._fail_on in rendered:
+            raise RuntimeError(f"postgres error executing: {rendered}")
+
+    def fetchone(self):
+        return self._row
 
 
 # --- Lakebase grants: exact statements, right order, no over-grant ----------------
@@ -50,7 +68,6 @@ def _expected_lakebase(role):
         f'GRANT SELECT ON "public"."warranty_terms" TO "{role}"',
         f'GRANT SELECT ON "public"."spec_clauses" TO "{role}"',
         f'GRANT SELECT ON "public"."warranty_clauses" TO "{role}"',
-        f'GRANT SELECT ON "public"."prior_claims" TO "{role}"',
         f'GRANT SELECT ON "reference"."heats_coils" TO "{role}"',
         f'GRANT SELECT ON "reference"."mill_test_certs" TO "{role}"',
         f'GRANT SELECT ON "reference"."customer_heat_risk" TO "{role}"',
@@ -87,6 +104,69 @@ def test_lakebase_grants_cover_the_synced_precedent_corpus():
     cur = FakeCursor()
     setup.apply_lakebase_grants(cur, APP_ID)
     assert f'GRANT SELECT ON "reference"."prior_claims_corpus" TO "{APP_ID}"' in cur.statements
+
+
+def test_lakebase_grants_skip_the_retired_native_prior_claims_table():
+    # public.prior_claims was retired for reference.prior_claims_corpus and does not exist
+    # on fresh workspaces, so granting on it would fail the whole provisioning run.
+    assert ("SELECT", ("table", "reference", "prior_claims_corpus")) in setup.GRANTS
+    assert all(target != ("table", "public", "prior_claims") for _, target in setup.GRANTS)
+    cur = FakeCursor()
+    setup.apply_lakebase_grants(cur, APP_ID)
+    assert not any('"public"."prior_claims"' in s for s in cur.statements)
+
+
+# --- Fresh workspace: missing synced (reference.*) targets are skipped -------------
+
+
+def test_missing_reference_table_is_skipped_and_warned_not_raised(capsys):
+    cur = FakeCursor(missing={'"reference"."prior_claims_corpus"'})
+    result = setup.apply_lakebase_grants(cur, APP_ID)
+    assert result["skipped"] == ["SELECT on reference.prior_claims_corpus"]
+    assert '"reference"."prior_claims_corpus"' not in " ".join(cur.statements)
+    # Every other grant (public and the present reference tables) is still issued.
+    expected = [s for s in _expected_lakebase(APP_ID) if "prior_claims_corpus" not in s]
+    assert cur.statements == expected
+    setup.warn_skipped(result["skipped"])
+    err = capsys.readouterr().err
+    assert "reference.prior_claims_corpus" in err
+    assert "create synced tables, then re-run this script" in err.lower()
+
+
+def test_missing_reference_schema_skips_all_synced_grants():
+    synced = [t for _, t in setup.GRANTS if t[0] in ("schema", "table") and t[1] == "reference"]
+    missing = {'"reference"'} | {f'"{t[1]}"."{t[2]}"' for t in synced if t[0] == "table"}
+    cur = FakeCursor(missing=missing)
+    result = setup.apply_lakebase_grants(cur, APP_ID)
+    assert len(result["skipped"]) == len(synced)
+    assert all('"reference"' not in s for s in cur.statements)
+    assert result["granted"][0] == "CONNECT on databricks_postgres"
+
+
+def test_present_reference_tables_are_granted_and_probed():
+    cur = FakeCursor()
+    result = setup.apply_lakebase_grants(cur, APP_ID)
+    assert result["skipped"] == []
+    assert cur.statements == _expected_lakebase(APP_ID)
+    # Only synced targets are existence-checked; public/database grants are not.
+    assert cur.probes and all(p.startswith('"reference"') for p in cur.probes)
+
+
+def test_non_reference_grant_failure_still_raises():
+    cur = FakeCursor(fail_on='"public"."claims"')
+    with pytest.raises(RuntimeError, match="postgres error"):
+        setup.apply_lakebase_grants(cur, APP_ID)
+
+
+def test_existing_reference_grant_failure_still_raises():
+    cur = FakeCursor(fail_on='"reference"."heats_coils"')
+    with pytest.raises(RuntimeError, match="postgres error"):
+        setup.apply_lakebase_grants(cur, APP_ID)
+
+
+def test_warn_skipped_is_silent_when_nothing_skipped(capsys):
+    setup.warn_skipped([])
+    assert capsys.readouterr().err == ""
 
 
 # --- Unity Catalog EXECUTE grants: exact statements, backtick-quoted ---------------
@@ -399,6 +479,31 @@ def test_ensure_secrets_skips_minting_when_secret_present():
 
 
 # --- Required-arg validation ------------------------------------------------------
+
+
+def test_main_prints_application_id_before_any_grant(monkeypatch, capsys):
+    # A failing grant must never hide the SP id: synced-table creation needs it.
+    fake_sdk = SimpleNamespace(
+        AccountClient=lambda profile: SimpleNamespace(),
+        WorkspaceClient=lambda profile: SimpleNamespace(get_workspace_id=lambda: 1),
+    )
+    monkeypatch.setitem(sys.modules, "databricks.sdk", fake_sdk)
+    monkeypatch.setattr(
+        setup,
+        "ensure_service_principal",
+        lambda account, name: {"application_id": APP_ID, "id": "7", "created": False},
+    )
+    monkeypatch.setattr(setup, "ensure_workspace_assignment", lambda *a: None)
+    monkeypatch.setattr(setup, "ensure_lakebase_role", lambda *a, **k: False)
+
+    def failing_connect(*args):
+        raise RuntimeError("grant failed")
+
+    monkeypatch.setattr(setup, "_connect", failing_connect)
+    monkeypatch.setattr(sys, "argv", ["setup_serving_sp", "--account-profile", "acct"])
+    with pytest.raises(RuntimeError, match="grant failed"):
+        setup.main()
+    assert APP_ID in capsys.readouterr().err
 
 
 def test_main_requires_account_profile(monkeypatch):

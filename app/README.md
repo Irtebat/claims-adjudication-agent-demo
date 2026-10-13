@@ -114,8 +114,9 @@ databricks bundle validate --profile fe-bar-ir-2026   # Validation OK
 
 ## Prerequisites
 
-- Lakebase seeded and the `reference.*` synced tables ONLINE (`lakebase/README.md`);
-  the app's context query reads them.
+- To **start** the app: Lakebase seeded and the `reference.*` synced tables ONLINE
+  (`lakebase/README.md`); the app's context query reads them. Deploying the bundle to
+  obtain the app SP id does not need them.
 - Both Genie spaces and the dashboard deployed (`dashboards/README.md`). Their IDs
   are bundle variables in `databricks.yml` (`genie_space_id`,
   `business_genie_space_id`, `warehouse_id`) and `DATABRICKS_DASHBOARD_ID` in
@@ -129,8 +130,12 @@ Working directory: `app/`. The app bundle uses target `default`.
 ```bash
 databricks bundle validate --strict -t default --profile fe-bar-ir-2026
 databricks bundle deploy -t default --profile fe-bar-ir-2026
-databricks bundle run app -t default --profile fe-bar-ir-2026
+databricks bundle run app -t default --profile fe-bar-ir-2026   # see note below
 ```
+
+On a fresh environment, defer `bundle run app` until `setup_app_sp.py` (and
+`setup_serving_sp.py`) report `complete: true` — the two-pass order in
+`docs/RUNBOOK.md`.
 
 `bundle deploy` creates the app and its service principal, applies the
 `user_api_scopes` (`dashboards.genie`, `sql`) and resources, and injects
@@ -160,7 +165,12 @@ app from the uploaded source; run it after every code change.
    - `SELECT` on `public.claims`, `adjudications`, `adjudication_decision_records`,
      `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`, and
      `reference.heats_coils`, `mill_test_certs`, `customers`, `customer_heat_risk`,
-     `prior_claims_corpus`.
+     `prior_claims_corpus`. The `reference.*` SELECTs are also reapplied by
+     `lakebase/scripts/regrant_synced_table_selects.py` (via `lakebase/run.py
+     synced-tables`) when a synced table is created or recreated. On a fresh
+     workspace, `reference.*` grants whose table does not exist yet are skipped. The
+     script warns, reports them under `skipped` in its JSON summary, and exits 0.
+     Create the synced tables, then re-run the script.
    - `INSERT, UPDATE` on `public.adjudications` and
      `public.adjudication_decision_records` (finalize UPDATE + new record_version).
    - **`SELECT, INSERT` on `public.outbox`** — required by finalize; the outbox

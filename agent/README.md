@@ -154,7 +154,7 @@ legitimate direct-`uv run python` exception**:
   services (`src/gateway_chat.py`, `src/gateway_embed.py`), never a foundation-model
   endpoint directly.
 - Lakebase seeded, the policy tables loaded, and the `reference.*` synced tables
-  ONLINE (`lakebase/README.md`).
+  ONLINE (`lakebase/README.md`) before the agent is deployed.
 - The serving service principal, provisioned once by a workspace administrator with
   `agent/scripts/setup_serving_sp.py`. Pass `--profile` explicitly (the script's
   default is not this workspace); `--account-profile` is required for the account-SP
@@ -184,7 +184,12 @@ legitimate direct-`uv run python` exception**:
   6. Grant the advisory Genie tool access: CAN_RUN on the operational Genie space,
      CAN USE on its warehouse, and the UC `USE SCHEMA` / `SELECT` its SQL needs.
 
-  The `reference.*` SELECTs are reapplied by
+  The application id is printed to stderr before any grant. On a fresh workspace the
+  `reference` synced tables don't exist yet: the script skips those `reference.*`
+  grants, lists them in a warning and in its JSON summary (`lakebase_grants_skipped`,
+  `complete: false`), and exits 0. Create the synced tables, then re-run it until it
+  reports `complete: true` (see the two-pass order in `docs/RUNBOOK.md`). Every other
+  grant still fails loud. The `reference.*` SELECTs are also reapplied by
   `lakebase/scripts/regrant_synced_table_selects.py` whenever a synced table is
   created or recreated; export `SERVING_SP_PRINCIPAL=<serving-sp-app-id>` for those
   runs.
