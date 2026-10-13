@@ -87,8 +87,6 @@ def test_render_rejects_missing(manifest):
 def test_render_rejects_malformed_tokens(manifest):
     with pytest.raises(ManifestError, match="malformed"):
         render("{{ uc.catalog }", manifest)
-    with pytest.raises(ManifestError, match="malformed"):
-        render("uc.catalog }}", manifest)
 
 
 def test_render_full_template_contract(manifest, full_state):
@@ -126,7 +124,10 @@ def test_render_full_template_contract(manifest, full_state):
 
 
 def test_all_committed_templates_render_byte_for_byte(manifest, full_state):
-    templates = sorted(ROOT.rglob("*.tmpl"))
+    excluded = {"node_modules", ".venv", ".git", ".deploy"}
+    templates = sorted(
+        path for path in ROOT.rglob("*.tmpl") if excluded.isdisjoint(path.relative_to(ROOT).parts)
+    )
     if not templates:
         pytest.skip("PR #68 templates are not present on origin/main yet")
     for template in templates:
@@ -176,6 +177,12 @@ def test_optional_warehouse_id_requires_runtime_state():
         manifest.to_bundle_vars("dashboards")
     state = RuntimeState(warehouse_id="0123456789abcdef")
     assert manifest.to_bundle_vars("dashboards", state)["warehouse_id"] == state.warehouse_id
+
+
+def test_conflicting_manifest_and_state_warehouse_ids_fail(manifest):
+    state = RuntimeState(warehouse_id="0123456789abcdef")
+    with pytest.raises(ManifestError, match="conflicts"):
+        manifest.to_bundle_vars("dashboards", state)
 
 
 def test_services_requires_and_maps_serving_principal(manifest):

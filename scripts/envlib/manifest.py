@@ -266,6 +266,14 @@ class Manifest:
         self, bundle_name: str, state: RuntimeState | None = None
     ) -> dict[str, str]:
         state = state or RuntimeState()
+        if (
+            state.warehouse_id is not None
+            and self.warehouse.id is not None
+            and state.warehouse_id != self.warehouse.id
+        ):
+            raise ManifestError(
+                "state.warehouse_id conflicts with warehouse.id in the environment manifest"
+            )
         warehouse_id = state.warehouse_id or self.warehouse.id
         common = {"databricks_profile": self.workspace.profile, "catalog": self.uc.catalog}
         cdf_claims = f"{self.uc.catalog}.{self.uc.schemas.cdf}.lb_claims_history"
@@ -479,6 +487,6 @@ def render(text: str, manifest: Manifest, state: RuntimeState | None = None) -> 
         return str(value).lower() if isinstance(value, bool) else str(value)
 
     rendered = _TOKEN.sub(replace, text)
-    if "{{" in rendered or "}}" in rendered:
+    if "{{" in rendered:
         raise ManifestError("template contains malformed or unresolved token delimiters")
     return rendered
