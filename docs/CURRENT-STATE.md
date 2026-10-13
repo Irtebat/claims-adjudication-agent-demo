@@ -2,8 +2,8 @@
 
 The single source of truth for *what exists now* and *what has been verified*. It
 draws the line between what is implemented in code, what is proven by committed
-(synthetic) evidence, and what is code-complete but not live-re-verified in the
-current workspace. Read this before trusting any claim in a layer README or an
+(synthetic) evidence, what is proven by live capture in the current workspace, and
+which gaps that capture recorded. Read this before trusting any claim in a layer README or an
 evidence folder.
 
 > **This is a proof of concept on synthetic data.** Not a production system, not an
@@ -49,23 +49,41 @@ commit and commands:
 - **Deterministic-rules vs. agent ablation** — the measured evidence for where
   reasoning adds value over rules (`ablation-eval/`).
 
-### Proven in code and unit/integration tests (not a committed live capture)
-- The finalize transaction (FINAL adjudication + decision record + outbox row,
-  scoped to `claim_id` + `adjudication_id`), server-side authorization, and the
-  consumer dedup/skip logic.
-- The producer→worker Kafka path has been exercised against the live Aiven broker.
+### Proven by live capture in `fe-bar-ir-2026` (`docs/evidence/live-verification-2026-10-13/`)
+Read-only captures from 2026-10-13 (see that folder's README):
+- **Genie:** both spaces answer live Conversation API questions with generated SQL
+  and result rows (`genie.json`).
+- **AI/BI dashboard:** deployed and published; all 9 dataset queries succeed on the
+  warehouse (`dashboard.json`).
+- **App:** `steel-claims-cockpit` running; authenticated `/api/whoami`, `/api/queue`,
+  cockpit detail (decision record + citations), `/api/history` all return 200 (`app.json`).
+- **Serving:** the agent endpoint is `READY` on v6 (`@prod`, 100% traffic). A
+  `persist=false` invocation returns a verdict and amount that match the
+  deterministic authority, with no invariant violations (`serving.json`).
+- **Lakebase + Lakeflow:** live OLTP counts, 7 synced tables online, pipeline update
+  history, cdf/silver/gold counts (`lakebase-and-pipeline.json`).
+- **End to end** for `CLM-DEMO-000006` (`e2e-trace.json`): the claim's human
+  finalize produced a FINAL adjudication, decision record v2, and outbox row. The
+  relay then set `published_at`, and the settlement consumer wrote
+  `STL-CLM-DEMO-000006`. Native CDF captured all of these rows. The app's history
+  and cockpit return the claim.
 
-### Code-complete but NOT live-re-verified in the current workspace
-These are implemented and consistent in source, but this submission does **not**
-include a fresh live capture for them in `fe-bar-ir-2026`:
-- The reasoning/embedding **model-service switch** (the agent code targets the
-  `fe-bar-ir.adjudication-agent.*` Unity Gateway services). Committed deployment
-  evidence from the retired workspace / earlier reasoning models was removed rather
-  than re-captured; treat the live endpoint's exact served version as unverified here.
-- The AI/BI dashboard and Genie-space deployments (the definitions are in
-  `dashboards/`; the specific deployed IDs are workspace-specific and parameterized).
-- The full Kafka fan-out (relay → the four downstream consumer stubs) end to end,
-  which additionally requires user-provided Aiven secrets and a human-finalized claim.
+### Live gaps recorded by that capture
+- **Silver/gold lag:** the `steel-claims` pipeline last completed on 2026-10-07,
+  before the demo claims were finalized. Those claims are in `cdf.lb_*` but not
+  yet in silver/gold, so the operational Genie cannot see them yet. For the same
+  reason `gold.adjudication_decision_records` and the citation KPIs are empty.
+  The next pipeline update brings them in.
+- **Reasoning endpoint label:** all persisted decision records (latest one
+  2026-10-09) record `system.ai.gpt-5-4`. The source targets the
+  `fe-bar-ir.adjudication-agent.*` Unity Gateway services. The `persist=false`
+  response does not expose which endpoint the served v6 called.
+
+### Proven in code and unit/integration tests (not a committed live capture)
+- Server-side authorization and the consumer dedup/skip logic.
+- The investigation and supplier-recovery consumers: both of their Lakebase tables
+  have 0 rows, because no finalized claim has routed to either one yet.
+- The producer→worker Kafka path has been exercised against the live Aiven broker.
 
 ## Known limitations
 

@@ -1,0 +1,632 @@
+{
+  "purpose": "Databricks App steel-claims-cockpit: deployment status + authenticated HTTP smoke against the live app URL",
+  "profile": "fe-bar-ir-2026",
+  "workspace": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+  "captured_at": "2026-10-13T07:53:49+00:00",
+  "capture_tool": "databricks CLI v1.17.0 + psycopg (Lakebase) + urllib (app HTTP)",
+  "steps": [
+    {
+      "label": "apps get",
+      "command": "databricks apps get steel-claims-cockpit --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:53:49+00:00",
+      "exit_code": 0,
+      "output": {
+        "active_deployment": {
+          "create_time": "2026-10-08T18:05:57Z",
+          "creator": "<user>",
+          "deployment_artifacts": {
+            "source_code_path": "/Workspace/Users/e8d1fa60-42b8-467c-8056-c4eb9ae947f0/src/01f1c342e95719e0b4df3dec33824330"
+          },
+          "deployment_id": "01f1c342e95719e0b4df3dec33824330",
+          "mode": "SNAPSHOT",
+          "source_code_path": "/Workspace/Users/<user>/.bundle/steel-claims-cockpit/default/files",
+          "status": {
+            "message": "App started successfully",
+            "state": "SUCCEEDED"
+          },
+          "update_time": "2026-10-08T18:06:54Z"
+        },
+        "app_status": {
+          "message": "App has status: App is running",
+          "state": "RUNNING"
+        },
+        "compute_size": "MEDIUM",
+        "compute_status": {
+          "message": "App compute is running.",
+          "state": "ACTIVE"
+        },
+        "create_time": "2026-10-07T16:18:31Z",
+        "creator": "<user>",
+        "default_source_code_path": "/Workspace/Users/<user>/.bundle/steel-claims-cockpit/default/files",
+        "description": "Steel warranty claims adjudication cockpit (adjuster + business user)",
+        "effective_budget_policy_id": "b29cd2c3-3d18-3920-88dc-62a4bccb2682",
+        "effective_usage_policy_id": "b29cd2c3-3d18-3920-88dc-62a4bccb2682",
+        "effective_user_api_scopes": [
+          "dashboards.genie",
+          "iam.access-control:read",
+          "iam.current-user:read",
+          "sql"
+        ],
+        "id": "e8d1fa60-42b8-467c-8056-c4eb9ae947f0",
+        "name": "steel-claims-cockpit",
+        "oauth2_app_client_id": "ffc443d5-f522-40c3-9bdd-a5924bec93d6",
+        "oauth2_app_integration_id": "ffc443d5-f522-40c3-9bdd-a5924bec93d6",
+        "resources": [
+          {
+            "name": "sql-warehouse",
+            "sql_warehouse": {
+              "id": "a323b5700ae25d85",
+              "permission": "CAN_USE"
+            }
+          },
+          {
+            "genie_space": {
+              "name": "Steel Claims Operational Cockpit",
+              "permission": "CAN_RUN",
+              "space_id": "01f1c269ca3c1adea7feb9f248ab3445"
+            },
+            "name": "genie-space"
+          },
+          {
+            "genie_space": {
+              "name": "Steel Quality Claims Analytics",
+              "permission": "CAN_RUN",
+              "space_id": "01f1c2698a5418298f81f9e79df576ca"
+            },
+            "name": "genie-space-business"
+          },
+          {
+            "name": "postgres",
+            "postgres": {
+              "branch": "projects/fe-bar-operational-plane/branches/production",
+              "database": "projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres",
+              "permission": "CAN_CONNECT_AND_CREATE"
+            }
+          }
+        ],
+        "service_principal_client_id": "e8d1fa60-42b8-467c-8056-c4eb9ae947f0",
+        "service_principal_id": 73321022478780,
+        "service_principal_name": "app-4ykrrx steel-claims-cockpit",
+        "thumbnail_url": "",
+        "update_time": "2026-10-08T18:05:57Z",
+        "updater": "<user>",
+        "url": "https://steel-claims-cockpit-7474646906749000.aws.databricksapps.com",
+        "user_api_scopes": [
+          "dashboards.genie",
+          "sql"
+        ]
+      }
+    },
+    {
+      "label": "GET /api/whoami",
+      "command": "HTTP GET https://steel-claims-cockpit-7474646906749000.aws.databricksapps.com/api/whoami (Authorization: Bearer <user OAuth token from `databricks auth token --profile fe-bar-ir-2026`>)",
+      "timestamp": "2026-10-13T07:53:50+00:00",
+      "http_status": 200,
+      "body": {
+        "email": "<user>",
+        "user": "77590582545175@7474646906749000",
+        "roles": [
+          "adjuster",
+          "business_user"
+        ],
+        "defaultRole": "adjuster"
+      }
+    },
+    {
+      "label": "GET /api/queue",
+      "command": "HTTP GET https://steel-claims-cockpit-7474646906749000.aws.databricksapps.com/api/queue (Authorization: Bearer <user OAuth token from `databricks auth token --profile fe-bar-ir-2026`>)",
+      "timestamp": "2026-10-13T07:53:52+00:00",
+      "http_status": 200,
+      "body": {
+        "items": [
+          {
+            "adjudication_id": "ADJ-0c5218f14eef2431ff77",
+            "claim_id": "CLM-DEMO-000099",
+            "customer_id": "CUST-0197",
+            "claim_type": "material_nonconformance",
+            "claim_date": "2026-01-01T00:00:00.000Z",
+            "defect_code": "MECH_TENSILE",
+            "defect_narrative": "Identical edge failure across delivered coils; request full replacement urgently.",
+            "claimed_tonnage": "10.000",
+            "claimed_freight": "0.00",
+            "verdict": "DENY",
+            "recommended_verdict": "DENY",
+            "recommended_disposition": "DUPLICATE",
+            "approved_amount": "0.00",
+            "claimed_amount": "9690.00",
+            "confidence": "0.98",
+            "duplicate_of_claim_id": "CLM-0000099",
+            "fraud_cluster_id": "CLM-0000095",
+            "supplier_attributable": false,
+            "recommended_at": "2026-10-07T21:06:55.471Z",
+            "high_risk": false,
+            "risk_reason": null
+          },
+          {
+            "adjudication_id": "ADJ-375828f202aef9cc84fa",
+            "claim_id": "CLM-DEMO-000098",
+            "customer_id": "CUST-0199",
+            "claim_type": "material_nonconformance",
+            "claim_date": "2026-01-01T00:00:00.000Z",
+            "defect_code": "MECH_TENSILE",
+            "defect_narrative": "Identical edge failure across delivered coils; request full replacement urgently.",
+            "claimed_tonnage": "24.000",
+            "claimed_freight": "0.00",
+            "verdict": "DENY",
+            "recommended_verdict": "DENY",
+            "recommended_disposition": "DUPLICATE",
+            "approved_amount": "0.00",
+            "claimed_amount": "22512.00",
+            "confidence": "0.99",
+            "duplicate_of_claim_id": "CLM-0000098",
+            "fraud_cluster_id": "CLM-0000095",
+            "supplier_attributable": false,
+            "recommended_at": "2026-10-07T21:06:44.481Z",
+            "high_risk": false,
+            "risk_reason": null
+          },
+          {
+            "adjudication_id": "ADJ-cf825424fcf050fe9049",
+            "claim_id": "CLM-DEMO-000097",
+            "customer_id": "CUST-0198",
+            "claim_type": "material_nonconformance",
+            "claim_date": "2026-01-01T00:00:00.000Z",
+            "defect_code": "MECH_TENSILE",
+            "defect_narrative": "Identical edge failure across delivered coils; request full replacement urgently.",
+            "claimed_tonnage": "17.000",
+            "claimed_freight": "0.00",
+            "verdict": "DENY",
+            "recommended_verdict": "DENY",
+            "recommended_disposition": "DUPLICATE",
+            "approved_amount": "0.00",
+            "claimed_amount": "15419.00",
+            "confidence": "0.99",
+            "duplicate_of_claim_id": "CLM-0000097",
+            "fraud_cluster_id": "CLM-0000095",
+            "supplier_attributable": false,
+            "recommended_at": "2026-10-07T21:06:34.980Z",
+            "high_risk": false,
+            "risk_reason": null
+          }
+        ],
+        "count": 50,
+        "items_total_returned": 50,
+        "items_trimmed_to": 3
+      }
+    },
+    {
+      "label": "GET /api/claims/CLM-DEMO-000099 (cockpit)",
+      "command": "HTTP GET https://steel-claims-cockpit-7474646906749000.aws.databricksapps.com/api/claims/CLM-DEMO-000099?adjudication_id=ADJ-0c5218f14eef2431ff77 (Authorization: Bearer <user OAuth token from `databricks auth token --profile fe-bar-ir-2026`>)",
+      "timestamp": "2026-10-13T07:53:53+00:00",
+      "http_status": 200,
+      "body": {
+        "adjudication": {
+          "adjudication_id": "ADJ-0c5218f14eef2431ff77",
+          "claim_id": "CLM-DEMO-000099",
+          "verdict": "DENY",
+          "recommended_verdict": "DENY",
+          "disposition": "DUPLICATE",
+          "claimed_amount": "9690.00",
+          "approved_amount": "0.00",
+          "covered_tonnage": "10.000",
+          "freight_covered": false,
+          "supplier_attributable": false,
+          "recovery_supplier_id": null,
+          "defect_failure_mode_code": null,
+          "override_flag": false,
+          "decision_status": "RECOMMENDED",
+          "rationale": "Authoritative duplicate screening identifies this claim as a duplicate of CLM-0000099; per rule, a duplicate must be denied as DUPLICATE and is never payable. Conformance also shows the material is in spec against the cited chemistry, dimensions, and mechanical clauses, which independently aligns with denial for a material nonconformance allegation. Coverage is within term, but duplicate status controls. No narrative conflict with structured fields and no retrieved written exclusion is triggered by the narrative.",
+          "cited_clause_ids": [
+            "ASTM A653 CS Type B/NA/DEMO-1990/chemistry",
+            "ASTM A653 CS Type B/NA/DEMO-1990/dimensions",
+            "ASTM A653 CS Type B/NA/DEMO-1990/mechanical"
+          ],
+          "finalized_at": null,
+          "duplicate_of_claim_id": "CLM-0000099",
+          "fraud_cluster_id": "CLM-0000095",
+          "decided_by": null,
+          "override_reason": null,
+          "data_provenance": "agent_recommendation",
+          "baseline_loaded_at": "2026-10-07T21:06:55.471Z",
+          "recommended_disposition": "DUPLICATE",
+          "confidence": "0.98",
+          "flags": {
+            "fraud_risk": true,
+            "over_claim": false,
+            "supplier_attributable": false
+          },
+          "advisory_risk": {
+            "found": true,
+            "heat_no": "HEAT-000019",
+            "cluster_id": "CLM-0000095",
+            "risk_score": 0.6,
+            "computed_at": "2026-10-07T11:49:00.767481+00:00",
+            "customer_id": "CUST-0197",
+            "cluster_size": 5,
+            "repeat_customers": true,
+            "distinct_heats_in_cluster": 1,
+            "distinct_customers_in_cluster": 3
+          },
+          "precedent": [
+            {
+              "verdict": "PEND",
+              "claim_id": "CLM-0000999",
+              "rrf_score": 0.031319,
+              "approved_amount": 0
+            },
+            {
+              "verdict": "PEND",
+              "claim_id": "CLM-0001095",
+              "rrf_score": 0.030835,
+              "approved_amount": 0
+            },
+            {
+              "verdict": "PEND",
+              "claim_id": "CLM-0001197",
+              "rrf_score": 0.030159,
+              "approved_amount": 0
+            },
+            {
+              "verdict": "PEND",
+              "claim_id": "CLM-0000696",
+              "rrf_score": 0.016393,
+              "approved_amount": 0
+            },
+            {
+              "verdict": "PEND",
+              "claim_id": "CLM-0000699",
+              "rrf_score": 0.016129,
+              "approved_amount": 0
+            }
+          ],
+          "idempotency_key": "0c5218f14eef2431ff776ae4d140e292c61ba4ce16801982f4a4a126683814b9",
+          "decision_record_version": 1,
+          "recommended_at": "2026-10-07T21:06:55.471Z",
+          "coil_id": "COIL-0000099",
+          "customer_id": "CUST-0197",
+          "claim_type": "material_nonconformance",
+          "claim_date": "2026-01-01T00:00:00.000Z",
+          "install_date": "1999-01-31T00:00:00.000Z",
+          "environment": "inland",
+          "installation": "ventilated",
+          "coast_distance_km": "25.0",
+          "defect_code": "MECH_TENSILE",
+          "defect_narrative": "Identical edge failure across delivered coils; request full replacement urgently.",
+          "claimed_tonnage": "10.000",
+          "claimed_freight": "0.00"
+        },
+        "decision_records": [
+          {
+            "record_version": 1,
+            "deterministic_verdict": "DENY",
+            "deterministic_disposition": "DUPLICATE",
+            "recommended_verdict": "DENY",
+            "recommended_disposition": "DUPLICATE",
+            "approved_amount": "0",
+            "over_claim_flag": false,
+            "duplicate_flag": true,
+            "conformance": {
+              "conforms": true,
+              "nonconforming_properties": []
+            },
+            "coverage": {
+              "covered": true,
+              "elapsed_months": 1,
+              "exclusions_hit": [],
+              "proration_factor": 1
+            },
+            "settlement": {
+              "is_partial": false,
+              "claimed_amount": 9690,
+              "freight_amount": 0,
+              "approved_amount": 9690,
+              "covered_tonnage": 10,
+              "freight_covered": false,
+              "over_claim_detected": false
+            },
+            "duplicate": {
+              "reasons": [],
+              "verdict": "DENY",
+              "disposition": "DUPLICATE",
+              "is_duplicate": true,
+              "date_diff_days": 0,
+              "decision_status": "FINAL",
+              "narrative_similarity": 1,
+              "candidates_considered": 1,
+              "duplicate_of_claim_id": "CLM-0000099"
+            },
+            "citations": [
+              {
+                "section_ref": "chemistry",
+                "citation_key": "ASTM A653 CS Type B/NA/DEMO-1990/chemistry",
+                "clause_text_sha256": "3782883a5e418fdc869ec3fdc162e1de0d2ef2153bca4b0eef98bc50c764695a"
+              },
+              {
+                "section_ref": "dimensions",
+                "citation_key": "ASTM A653 CS Type B/NA/DEMO-1990/dimensions",
+                "clause_text_sha256": "6b1c10840a0d890f31aa60750c668eb788fe865fdbf0d7baf0b00551c2f4eaff"
+              },
+              {
+                "section_ref": "mechanical",
+                "citation_key": "ASTM A653 CS Type B/NA/DEMO-1990/mechanical",
+                "clause_text_sha256": "2a418512ae0648ad2de59b8b6bdbffc9fc93d73de06c05c45fbfdcbe44b42b82"
+              }
+            ],
+            "cited_clause_ids": [
+              "ASTM A653 CS Type B/NA/DEMO-1990/chemistry",
+              "ASTM A653 CS Type B/NA/DEMO-1990/dimensions",
+              "ASTM A653 CS Type B/NA/DEMO-1990/mechanical"
+            ],
+            "precedent": [
+              {
+                "verdict": "PEND",
+                "claim_id": "CLM-0000999",
+                "rrf_score": 0.031319,
+                "approved_amount": 0
+              },
+              {
+                "verdict": "PEND",
+                "claim_id": "CLM-0001095",
+                "rrf_score": 0.030835,
+                "approved_amount": 0
+              },
+              {
+                "verdict": "PEND",
+                "claim_id": "CLM-0001197",
+                "rrf_score": 0.030159,
+                "approved_amount": 0
+              },
+              {
+                "verdict": "PEND",
+                "claim_id": "CLM-0000696",
+                "rrf_score": 0.016393,
+                "approved_amount": 0
+              },
+              {
+                "verdict": "PEND",
+                "claim_id": "CLM-0000699",
+                "rrf_score": 0.016129,
+                "approved_amount": 0
+              }
+            ],
+            "advisory_risk": {
+              "found": true,
+              "heat_no": "HEAT-000019",
+              "cluster_id": "CLM-0000095",
+              "risk_score": 0.6,
+              "computed_at": "2026-10-07T11:49:00.767481+00:00",
+              "customer_id": "CUST-0197",
+              "cluster_size": 5,
+              "repeat_customers": true,
+              "distinct_heats_in_cluster": 1,
+              "distinct_customers_in_cluster": 3
+            },
+            "rationale": "Authoritative duplicate screening identifies this claim as a duplicate of CLM-0000099; per rule, a duplicate must be denied as DUPLICATE and is never payable. Conformance also shows the material is in spec against the cited chemistry, dimensions, and mechanical clauses, which independently aligns with denial for a material nonconformance allegation. Coverage is within term, but duplicate status controls. No narrative conflict with structured fields and no retrieved written exclusion is triggered by the narrative.",
+            "confidence": "0.98",
+            "invariant_violations": [],
+            "decided_by": null,
+            "override_reason": null,
+            "created_at": "2026-10-07T21:06:55.471Z"
+          }
+        ],
+        "context": {
+          "heats_coils": {
+            "line": "LINE-1",
+            "grade": "ASTM A653 CS Type B",
+            "region": "NA",
+            "coil_id": "COIL-0000099",
+            "heat_no": "HEAT-000019",
+            "gauge_mm": 1.01,
+            "width_mm": 1201,
+            "prod_date": "2025-11-21",
+            "ship_date": "2025-12-01",
+            "unit_price": 969,
+            "customer_id": "CUST-0197",
+            "product_line": "galvanized",
+            "spec_edition": "DEMO-1990",
+            "coating_class": "G90",
+            "shipped_tonnage": 10,
+            "ordered_gauge_mm": 1,
+            "ordered_width_mm": 1200,
+            "raw_material_lot": "RAW-HEAT-000019",
+            "coating_supplier_id": "SUP-00",
+            "coating_weight_g_m2": 280,
+            "coating_supplier_lot": "COAT-SUP-00-0",
+            "raw_material_supplier_id": "SUP-07"
+          },
+          "mill_test_cert": {
+            "cert_id": "MTC-COIL-0000099",
+            "coil_id": "COIL-0000099",
+            "heat_no": "HEAT-000019",
+            "cert_date": "2025-11-26",
+            "yield_mpa": 250,
+            "carbon_pct": 0.08,
+            "tensile_mpa": 400,
+            "manganese_pct": 0.4,
+            "elongation_pct": 30,
+            "coating_adhesion_pass": true
+          },
+          "customer": {
+            "email": "<user>",
+            "segment": "service_center",
+            "customer_id": "CUST-0197",
+            "customer_name": "Lee Ltd"
+          },
+          "customer_heat_risk": {
+            "heat_no": "HEAT-000019",
+            "high_risk": false,
+            "cluster_id": "CLM-0000095",
+            "risk_score": 0.6,
+            "computed_at": "2026-10-07T11:49:00.767481+00:00",
+            "customer_id": "CUST-0197",
+            "n_customers": 3,
+            "risk_reason": null,
+            "cluster_size": 5,
+            "repeat_customers": true,
+            "distinct_heats_in_cluster": 1,
+            "distinct_customers_in_cluster": 3
+          }
+        },
+        "prior_claims": [
+          {
+            "claim_id": "CLM-0000696",
+            "coil_id": "COIL-0000696",
+            "grade": "ASTM A653 CS Type B",
+            "coating_class": "G90",
+            "defect_code": "MECH_TENSILE",
+            "defect_narrative": "Identical edge failure across delivered coils; request full replacement urgently.",
+            "claim_date": "2026-01-07T00:00:00.000Z",
+            "verdict": "PEND",
+            "approved_amount": "0.00"
+          },
+          {
+            "claim_id": "CLM-0000699",
+            "coil_id": "COIL-0000699",
+            "grade": "ASTM A653 CS Type B",
+            "coating_class": "G90",
+            "defect_code": "MECH_TENSILE",
+            "defect_narrative": "Identical edge failure across delivered coils; request full replacement urgently.",
+            "claim_date": "2026-01-07T00:00:00.000Z",
+            "verdict": "PEND",
+            "approved_amount": "0.00"
+          },
+          {
+            "claim_id": "CLM-0000999",
+            "coil_id": "COIL-0000999",
+            "grade": "ASTM A653 CS Type B",
+            "coating_class": "G90",
+            "defect_code": "MECH_TENSILE",
+            "defect_narrative": "Identical edge failure across delivered coils; request full replacement urgently.",
+            "claim_date": "2026-01-10T00:00:00.000Z",
+            "verdict": "PEND",
+            "approved_amount": "0.00"
+          }
+        ],
+        "check_evidence_and_citations": {
+          "decision_record_count": 1,
+          "latest_citations_count": 3,
+          "latest_cited_clause_ids": [
+            "ASTM A653 CS Type B/NA/DEMO-1990/chemistry",
+            "ASTM A653 CS Type B/NA/DEMO-1990/dimensions",
+            "ASTM A653 CS Type B/NA/DEMO-1990/mechanical"
+          ],
+          "has_conformance": true,
+          "has_coverage": true,
+          "has_settlement": true,
+          "context_keys": [
+            "customer",
+            "customer_heat_risk",
+            "heats_coils",
+            "mill_test_cert"
+          ],
+          "prior_claims_count": 5
+        }
+      }
+    },
+    {
+      "label": "GET /api/history",
+      "command": "HTTP GET https://steel-claims-cockpit-7474646906749000.aws.databricksapps.com/api/history?limit=5 (Authorization: Bearer <user OAuth token from `databricks auth token --profile fe-bar-ir-2026`>)",
+      "timestamp": "2026-10-13T07:53:55+00:00",
+      "http_status": 200,
+      "body": {
+        "items": [
+          {
+            "adjudication_id": "ADJ-1cc726b50ab680d4ad08",
+            "claim_id": "CLM-DEMO-000007",
+            "customer_id": "CUST-0119",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-01-01T00:00:00.000Z",
+            "defect_code": "RED_RUST",
+            "verdict": "APPROVE",
+            "disposition": "CREDIT",
+            "approved_amount": "14739.00",
+            "claimed_amount": "14739.00",
+            "override_flag": false,
+            "override_reason": null,
+            "decided_by": "<user>",
+            "finalized_at": "2026-10-09T07:59:26.480Z",
+            "recommended_verdict": "APPROVE",
+            "recommended_disposition": "CREDIT"
+          },
+          {
+            "adjudication_id": "ADJ-03cec259986537abef5b",
+            "claim_id": "CLM-DEMO-000006",
+            "customer_id": "CUST-0102",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-01-01T00:00:00.000Z",
+            "defect_code": "RED_RUST",
+            "verdict": "APPROVE",
+            "disposition": "CREDIT",
+            "approved_amount": "8360.00",
+            "claimed_amount": "8360.00",
+            "override_flag": false,
+            "override_reason": null,
+            "decided_by": "<user>",
+            "finalized_at": "2026-10-09T07:30:49.980Z",
+            "recommended_verdict": "APPROVE",
+            "recommended_disposition": "CREDIT"
+          },
+          {
+            "adjudication_id": "ADJ-68afded6fed8219c6d11",
+            "claim_id": "CLM-DEMO-000005",
+            "customer_id": "CUST-0085",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-01-01T00:00:00.000Z",
+            "defect_code": "RED_RUST",
+            "verdict": "APPROVE",
+            "disposition": "CREDIT",
+            "approved_amount": "19320.00",
+            "claimed_amount": "19320.00",
+            "override_flag": false,
+            "override_reason": null,
+            "decided_by": "<user>",
+            "finalized_at": "2026-10-08T16:32:05.389Z",
+            "recommended_verdict": "APPROVE",
+            "recommended_disposition": "CREDIT"
+          },
+          {
+            "adjudication_id": "ADJ-CLM-0004958",
+            "claim_id": "CLM-0004958",
+            "customer_id": "CUST-0020",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-02-20T00:00:00.000Z",
+            "defect_code": "RED_RUST",
+            "verdict": "DENY",
+            "disposition": "DUPLICATE",
+            "approved_amount": "0.00",
+            "claimed_amount": "14331.00",
+            "override_flag": false,
+            "override_reason": null,
+            "decided_by": null,
+            "finalized_at": "2026-02-22T00:00:00.000Z",
+            "recommended_verdict": "DENY",
+            "recommended_disposition": null
+          },
+          {
+            "adjudication_id": "ADJ-CLM-0004956",
+            "claim_id": "CLM-0004956",
+            "customer_id": "CUST-0183",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-02-20T00:00:00.000Z",
+            "defect_code": "RED_RUST",
+            "verdict": "DENY",
+            "disposition": "DUPLICATE",
+            "approved_amount": "0.00",
+            "claimed_amount": "18744.00",
+            "override_flag": false,
+            "override_reason": null,
+            "decided_by": null,
+            "finalized_at": "2026-02-22T00:00:00.000Z",
+            "recommended_verdict": "DENY",
+            "recommended_disposition": null
+          }
+        ],
+        "count": 5,
+        "items_total_returned": 5,
+        "items_trimmed_to": 5
+      }
+    }
+  ],
+  "completed_at": "2026-10-13T07:53:56+00:00",
+  "note": "Token is the signed-in user's OAuth U2M access token (never recorded). Route for claims history in source is /api/history (app/server/routes.ts)."
+}

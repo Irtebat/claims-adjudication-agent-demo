@@ -1,0 +1,456 @@
+{
+  "purpose": "Model serving: claims adjudication agent endpoint state + one live invocation with custom_inputs.persist=false (no Lakebase write)",
+  "profile": "fe-bar-ir-2026",
+  "workspace": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+  "captured_at": "2026-10-13T07:56:52+00:00",
+  "capture_tool": "databricks CLI v1.17.0 + psycopg (Lakebase) + urllib (app HTTP)",
+  "steps": [
+    {
+      "label": "serving-endpoints get",
+      "command": "databricks serving-endpoints get agents_fe-bar-ir-default-claims_adjudication_agent --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:56:52+00:00",
+      "exit_code": 0,
+      "output": {
+        "ai_gateway": {
+          "inference_table_config": {
+            "catalog_name": "fe-bar-ir",
+            "enabled": true,
+            "schema_name": "default",
+            "table_name_prefix": "claims_adjudication_agent_3"
+          },
+          "usage_tracking_config": {
+            "enabled": false
+          }
+        },
+        "config": {
+          "config_version": 2,
+          "served_entities": [
+            {
+              "creation_timestamp": 1791455286000,
+              "creator": "<user>",
+              "entity_name": "fe-bar-ir.default.claims_adjudication_agent",
+              "entity_version": "5",
+              "environment_vars": {
+                "APP_SP_CLIENT_ID": "{{secrets/claims-agent/app-sp-client-id}}",
+                "APP_SP_CLIENT_SECRET": "{{secrets/claims-agent/app-sp-client-secret}}",
+                "DATABRICKS_HOST": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+                "ENABLE_LANGCHAIN_STREAMING": "true",
+                "ENABLE_MLFLOW_TRACING": "true",
+                "LAKEBASE_DB_USER": "{{secrets/claims-agent/lakebase-db-user}}",
+                "RETURN_REQUEST_ID_IN_RESPONSE": "true"
+              },
+              "name": "fe-bar-ir-default-claims_adjudication_agent_5",
+              "scale_to_zero_enabled": true,
+              "state": {
+                "deployment": "DEPLOYMENT_READY",
+                "deployment_state_message": "Scaled to zero"
+              },
+              "workload_size": "Small",
+              "workload_type": "CPU"
+            },
+            {
+              "creation_timestamp": 1791455286000,
+              "creator": "<user>",
+              "entity_name": "fe-bar-ir.default.claims_adjudication_agent",
+              "entity_version": "6",
+              "environment_vars": {
+                "APP_SP_CLIENT_ID": "{{secrets/claims-agent/app-sp-client-id}}",
+                "APP_SP_CLIENT_SECRET": "{{secrets/claims-agent/app-sp-client-secret}}",
+                "DATABRICKS_HOST": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+                "ENABLE_LANGCHAIN_STREAMING": "true",
+                "ENABLE_MLFLOW_TRACING": "true",
+                "LAKEBASE_DB_USER": "{{secrets/claims-agent/lakebase-db-user}}",
+                "RETURN_REQUEST_ID_IN_RESPONSE": "true"
+              },
+              "name": "fe-bar-ir-default-claims_adjudication_agent_6",
+              "scale_to_zero_enabled": true,
+              "state": {
+                "deployment": "DEPLOYMENT_READY",
+                "deployment_state_message": ""
+              },
+              "workload_size": "Small",
+              "workload_type": "CPU"
+            }
+          ],
+          "served_models": [
+            {
+              "creation_timestamp": 1791455286000,
+              "creator": "<user>",
+              "environment_vars": {
+                "APP_SP_CLIENT_ID": "{{secrets/claims-agent/app-sp-client-id}}",
+                "APP_SP_CLIENT_SECRET": "{{secrets/claims-agent/app-sp-client-secret}}",
+                "DATABRICKS_HOST": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+                "ENABLE_LANGCHAIN_STREAMING": "true",
+                "ENABLE_MLFLOW_TRACING": "true",
+                "LAKEBASE_DB_USER": "{{secrets/claims-agent/lakebase-db-user}}",
+                "RETURN_REQUEST_ID_IN_RESPONSE": "true"
+              },
+              "model_name": "fe-bar-ir.default.claims_adjudication_agent",
+              "model_version": "5",
+              "name": "fe-bar-ir-default-claims_adjudication_agent_5",
+              "scale_to_zero_enabled": true,
+              "state": {
+                "deployment": "DEPLOYMENT_READY",
+                "deployment_state_message": "Scaled to zero"
+              },
+              "workload_size": "Small",
+              "workload_type": "CPU"
+            },
+            {
+              "creation_timestamp": 1791455286000,
+              "creator": "<user>",
+              "environment_vars": {
+                "APP_SP_CLIENT_ID": "{{secrets/claims-agent/app-sp-client-id}}",
+                "APP_SP_CLIENT_SECRET": "{{secrets/claims-agent/app-sp-client-secret}}",
+                "DATABRICKS_HOST": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+                "ENABLE_LANGCHAIN_STREAMING": "true",
+                "ENABLE_MLFLOW_TRACING": "true",
+                "LAKEBASE_DB_USER": "{{secrets/claims-agent/lakebase-db-user}}",
+                "RETURN_REQUEST_ID_IN_RESPONSE": "true"
+              },
+              "model_name": "fe-bar-ir.default.claims_adjudication_agent",
+              "model_version": "6",
+              "name": "fe-bar-ir-default-claims_adjudication_agent_6",
+              "scale_to_zero_enabled": true,
+              "state": {
+                "deployment": "DEPLOYMENT_READY",
+                "deployment_state_message": ""
+              },
+              "workload_size": "Small",
+              "workload_type": "CPU"
+            }
+          ],
+          "traffic_config": {
+            "routes": [
+              {
+                "served_entity_name": "fe-bar-ir-default-claims_adjudication_agent_6",
+                "served_model_name": "fe-bar-ir-default-claims_adjudication_agent_6",
+                "traffic_percentage": 100
+              },
+              {
+                "served_entity_name": "fe-bar-ir-default-claims_adjudication_agent_5",
+                "served_model_name": "fe-bar-ir-default-claims_adjudication_agent_5",
+                "traffic_percentage": 0
+              }
+            ]
+          }
+        },
+        "creation_timestamp": 1791383856000,
+        "creator": "<user>",
+        "description": "",
+        "id": "7af11629234045cfb9adf3b8ea57ecfd",
+        "last_updated_timestamp": 1791455286000,
+        "name": "agents_fe-bar-ir-default-claims_adjudication_agent",
+        "permission_level": "CAN_MANAGE",
+        "route_optimized": false,
+        "state": {
+          "config_update": "NOT_UPDATING",
+          "ready": "READY"
+        },
+        "task": "agent/v1/responses"
+      }
+    },
+    {
+      "label": "model version alias @prod",
+      "command": "databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_agent prod --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:56:54+00:00",
+      "exit_code": 0,
+      "output": {
+        "catalog_name": "fe-bar-ir",
+        "created_at": 1791452209454,
+        "created_by": "<user>",
+        "id": "ff4f8fff-989b-4647-8ff0-778b4822bd3b",
+        "metastore_id": "85d5656c-5d67-4718-93ed-c2d0ce7b92d5",
+        "model_name": "claims_adjudication_agent",
+        "run_id": "7cad2b5e9bcc4728bdc191d45f04a9ec",
+        "run_workspace_id": 7474646906749000,
+        "schema_name": "default",
+        "source": "models:/m-b93e146611f44b2e8cdd09ed477de4d1",
+        "status": "READY",
+        "storage_location": "s3://fe-bar-ir-bucket/models/0207b1ab-af09-4fd1-baff-b691c8e95422/versions/ff4f8fff-989b-4647-8ff0-778b4822bd3b",
+        "updated_at": 1791452222864,
+        "updated_by": "<user>",
+        "version": 6
+      }
+    },
+    {
+      "label": "pick a queued (RECOMMENDED) APPROVE claim as the representative input",
+      "command": "psycopg (read-only SELECT) -> Lakebase projects/fe-bar-operational-plane/branches/production, db databricks_postgres, OAuth credential from `databricks postgres generate-database-credential`",
+      "statement": "select c.* from public.claims c join public.adjudications a on a.claim_id=c.claim_id where a.decision_status='RECOMMENDED' and a.recommended_verdict='APPROVE' order by c.claim_id limit 1",
+      "params": null,
+      "timestamp": "2026-10-13T07:57:01+00:00",
+      "exit_code": 0,
+      "output": {
+        "row_count": 1,
+        "rows": [
+          {
+            "claim_id": "CLM-0000002",
+            "coil_id": "COIL-0000002",
+            "customer_id": "CUST-0034",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-01-01",
+            "install_date": "2014-01-31",
+            "environment": "inland",
+            "installation": "ventilated",
+            "coast_distance_km": "25.0",
+            "defect_code": "RED_RUST",
+            "defect_narrative": "Premature red rust and perforation observed on installed roofing.",
+            "claimed_tonnage": "24.000",
+            "claimed_freight": "0.00",
+            "data_provenance": "synthetic_wave_2_baseline",
+            "baseline_loaded_at": "2026-10-07 11:09:14.804442+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "label": "invoke (persist=false)",
+      "command": "databricks api post /serving-endpoints/agents_fe-bar-ir-default-claims_adjudication_agent/invocations --json <request_body> --profile fe-bar-ir-2026",
+      "timestamp": "2026-10-13T07:57:06+00:00",
+      "exit_code": 0,
+      "output": {
+        "custom_outputs": {
+          "adjudication_id": "ADJ-c5b5328de3983e7a142b",
+          "cited_clause_ids": [
+            "prepainted/NA/V1/exclusions",
+            "prepainted/NA/V1/coverage",
+            "prepainted/NA/V1/proration"
+          ],
+          "deterministic": {
+            "approved_amount": 9113.59,
+            "disposition": "CREDIT",
+            "disposition_rule": "R7_credit",
+            "duplicate_of_claim_id": null,
+            "eligible": true,
+            "reason": "covered",
+            "settlement_authority_amount": 9113.59,
+            "verdict": "APPROVE"
+          },
+          "genie_consultations": [],
+          "invariant_violations": [],
+          "llm_used": true,
+          "recommendation": {
+            "approved_amount": 9113.59,
+            "cited_clause_ids": [
+              "prepainted/NA/V1/coverage",
+              "prepainted/NA/V1/proration",
+              "prepainted/NA/V1/exclusions"
+            ],
+            "confidence": 0.78,
+            "disposition_agrees_with_rule": true,
+            "flags": {
+              "fraud_risk": true,
+              "over_claim": false,
+              "supplier_attributable": false
+            },
+            "precedent": [
+              {
+                "approved_amount": 24744,
+                "claim_id": "CLM-0000101",
+                "rrf_score": 0.016393,
+                "verdict": "APPROVE"
+              },
+              {
+                "approved_amount": 0,
+                "claim_id": "CLM-0000641",
+                "rrf_score": 0.016393,
+                "verdict": "DENY"
+              },
+              {
+                "approved_amount": 14387.2,
+                "claim_id": "CLM-0000104",
+                "rrf_score": 0.016129,
+                "verdict": "APPROVE"
+              },
+              {
+                "approved_amount": 0,
+                "claim_id": "CLM-0000644",
+                "rrf_score": 0.016129,
+                "verdict": "DENY"
+              },
+              {
+                "approved_amount": 0,
+                "claim_id": "CLM-0000146",
+                "rrf_score": 0.015873,
+                "verdict": "DENY"
+              }
+            ],
+            "rationale": "Deterministic gates support approval: claim is not a duplicate and is eligible/covered. Warranty duration applies through 240 months per prepainted/NA/V1/coverage; elapsed time is 144 months, so within term. Proration applies beyond the full-coverage window per prepainted/NA/V1/proration, yielding a partial credit consistent with the authority amount (freight excluded; freight claimed is $0). Exclusions listed in prepainted/NA/V1/exclusions (marine/industrial aggressive, unventilated, standing water, or <2.0 km to coast) are not indicated by structured fields (inland, ventilated, 25 km from coast) and are not asserted in the narrative. Advisory risk score is elevated, but does not override deterministic eligibility or amount.",
+            "recommended_disposition": "CREDIT",
+            "recommended_verdict": "APPROVE",
+            "rule_disposition": "CREDIT",
+            "settlement_estimate": 9113.59
+          },
+          "write_result": {
+            "persisted": false
+          }
+        },
+        "databricks_output": {
+          "databricks_request_id": "38f49970-8515-46ef-801f-c4304356de29"
+        },
+        "id": "38f49970-8515-46ef-801f-c4304356de29",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "text": "Recommendation for claim CLM-0000002: APPROVE / CREDIT (approved 9113.59). Deterministic verdict APPROVE; invariant violations: none.",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_recommendation",
+            "role": "assistant",
+            "type": "message"
+          }
+        ]
+      }
+    },
+    {
+      "label": "reasoning endpoint + agent version recorded on the most recent persisted decision records (read-only)",
+      "command": "psycopg (read-only SELECT) -> Lakebase projects/fe-bar-operational-plane/branches/production, db databricks_postgres, OAuth credential from `databricks postgres generate-database-credential`",
+      "statement": "select claim_id, record_version, reasoning_endpoint, agent_model_name, agent_model_version, prompt_version, schema_version, created_at from public.adjudication_decision_records order by created_at desc limit 5",
+      "params": null,
+      "timestamp": "2026-10-13T07:57:24+00:00",
+      "exit_code": 0,
+      "output": {
+        "row_count": 5,
+        "rows": [
+          {
+            "claim_id": "CLM-DEMO-000007",
+            "record_version": 2,
+            "reasoning_endpoint": "system.ai.gpt-5-4",
+            "agent_model_name": "fe-bar-ir.default.claims_adjudication_agent",
+            "agent_model_version": null,
+            "prompt_version": "claims-adjudication-prompt/v2-narrative-escalation",
+            "schema_version": "adjudication-decision-record/v2",
+            "created_at": "2026-10-09 07:59:26.480290+00:00"
+          },
+          {
+            "claim_id": "CLM-DEMO-000006",
+            "record_version": 2,
+            "reasoning_endpoint": "system.ai.gpt-5-4",
+            "agent_model_name": "fe-bar-ir.default.claims_adjudication_agent",
+            "agent_model_version": null,
+            "prompt_version": "claims-adjudication-prompt/v2-narrative-escalation",
+            "schema_version": "adjudication-decision-record/v2",
+            "created_at": "2026-10-09 07:30:49.980308+00:00"
+          },
+          {
+            "claim_id": "CLM-DEMO-000005",
+            "record_version": 2,
+            "reasoning_endpoint": "system.ai.gpt-5-4",
+            "agent_model_name": "fe-bar-ir.default.claims_adjudication_agent",
+            "agent_model_version": null,
+            "prompt_version": "claims-adjudication-prompt/v2-narrative-escalation",
+            "schema_version": "adjudication-decision-record/v2",
+            "created_at": "2026-10-08 16:32:05.389204+00:00"
+          },
+          {
+            "claim_id": "CLM-DEMO-000099",
+            "record_version": 1,
+            "reasoning_endpoint": "system.ai.gpt-5-4",
+            "agent_model_name": "fe-bar-ir.default.claims_adjudication_agent",
+            "agent_model_version": null,
+            "prompt_version": "claims-adjudication-prompt/v2-narrative-escalation",
+            "schema_version": "adjudication-decision-record/v2",
+            "created_at": "2026-10-07 21:06:55.471286+00:00"
+          },
+          {
+            "claim_id": "CLM-DEMO-000098",
+            "record_version": 1,
+            "reasoning_endpoint": "system.ai.gpt-5-4",
+            "agent_model_name": "fe-bar-ir.default.claims_adjudication_agent",
+            "agent_model_version": null,
+            "prompt_version": "claims-adjudication-prompt/v2-narrative-escalation",
+            "schema_version": "adjudication-decision-record/v2",
+            "created_at": "2026-10-07 21:06:44.481194+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "label": "reasoning endpoints across all persisted decision records (read-only)",
+      "command": "psycopg (read-only SELECT) -> Lakebase projects/fe-bar-operational-plane/branches/production, db databricks_postgres, OAuth credential from `databricks postgres generate-database-credential`",
+      "statement": "select reasoning_endpoint, agent_model_version, count(*) as records, max(created_at) as latest from public.adjudication_decision_records group by 1,2 order by latest desc nulls last",
+      "params": null,
+      "timestamp": "2026-10-13T07:57:24+00:00",
+      "exit_code": 0,
+      "output": {
+        "row_count": 1,
+        "rows": [
+          {
+            "reasoning_endpoint": "system.ai.gpt-5-4",
+            "agent_model_version": null,
+            "records": 104,
+            "latest": "2026-10-09 07:59:26.480290+00:00"
+          }
+        ]
+      }
+    }
+  ],
+  "completed_at": "2026-10-13T07:57:24+00:00",
+  "request_body": {
+    "input": [
+      {
+        "role": "user",
+        "content": "{\"claim_id\": \"CLM-0000002\", \"coil_id\": \"COIL-0000002\", \"customer_id\": \"CUST-0034\", \"claim_type\": \"coating_warranty\", \"claim_date\": \"2026-01-01\", \"install_date\": \"2014-01-31\", \"environment\": \"inland\", \"installation\": \"ventilated\", \"coast_distance_km\": 25.0, \"defect_code\": \"RED_RUST\", \"defect_narrative\": \"Premature red rust and perforation observed on installed roofing.\", \"claimed_tonnage\": 24.0, \"claimed_freight\": 0.0, \"data_provenance\": \"synthetic_wave_2_baseline\", \"baseline_loaded_at\": \"2026-10-07 11:09:14.804442+00:00\"}"
+      }
+    ],
+    "custom_inputs": {
+      "persist": false,
+      "claim": {
+        "claim_id": "CLM-0000002",
+        "coil_id": "COIL-0000002",
+        "customer_id": "CUST-0034",
+        "claim_type": "coating_warranty",
+        "claim_date": "2026-01-01",
+        "install_date": "2014-01-31",
+        "environment": "inland",
+        "installation": "ventilated",
+        "coast_distance_km": 25.0,
+        "defect_code": "RED_RUST",
+        "defect_narrative": "Premature red rust and perforation observed on installed roofing.",
+        "claimed_tonnage": 24.0,
+        "claimed_freight": 0.0,
+        "data_provenance": "synthetic_wave_2_baseline",
+        "baseline_loaded_at": "2026-10-07 11:09:14.804442+00:00"
+      }
+    }
+  },
+  "summary": {
+    "claim_id": "CLM-0000002",
+    "output_text": [
+      [
+        {
+          "annotations": [],
+          "text": "Recommendation for claim CLM-0000002: APPROVE / CREDIT (approved 9113.59). Deterministic verdict APPROVE; invariant violations: none.",
+          "type": "output_text"
+        }
+      ]
+    ],
+    "recommended_verdict": "APPROVE",
+    "recommended_disposition": "CREDIT",
+    "deterministic": {
+      "approved_amount": 9113.59,
+      "disposition": "CREDIT",
+      "disposition_rule": "R7_credit",
+      "duplicate_of_claim_id": null,
+      "eligible": true,
+      "reason": "covered",
+      "settlement_authority_amount": 9113.59,
+      "verdict": "APPROVE"
+    },
+    "invariant_violations": [],
+    "cited_clause_ids": [
+      "prepainted/NA/V1/exclusions",
+      "prepainted/NA/V1/coverage",
+      "prepainted/NA/V1/proration"
+    ],
+    "llm_used": true,
+    "genie_consultations_count": 0,
+    "write_result": {
+      "persisted": false
+    }
+  }
+}

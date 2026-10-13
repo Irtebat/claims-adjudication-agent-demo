@@ -1,0 +1,617 @@
+{
+  "purpose": "Lakebase + Lakeflow: live OLTP row counts, synced-table states, steel-claims pipeline latest update, UC cdf/silver/gold counts",
+  "profile": "fe-bar-ir-2026",
+  "workspace": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+  "captured_at": "2026-10-13T07:59:03+00:00",
+  "capture_tool": "databricks CLI v1.17.0 + psycopg (Lakebase) + urllib (app HTTP)",
+  "steps": [
+    {
+      "label": "list base tables in public/reference",
+      "command": "psycopg (read-only SELECT) -> Lakebase projects/fe-bar-operational-plane/branches/production, db databricks_postgres, OAuth credential from `databricks postgres generate-database-credential`",
+      "statement": "select table_schema, table_name from information_schema.tables where table_schema in ('public','reference') and table_type='BASE TABLE' order by 1,2",
+      "params": null,
+      "timestamp": "2026-10-13T07:59:03+00:00",
+      "exit_code": 0,
+      "output": {
+        "row_count": 18,
+        "rows": [
+          {
+            "table_schema": "public",
+            "table_name": "adjudication_decision_records"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "adjudications"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "claims"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "investigation_cases"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "outbox"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "settlements"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "spec_clauses"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "spec_params"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "supplier_recovery_cases"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "warranty_clauses"
+          },
+          {
+            "table_schema": "public",
+            "table_name": "warranty_terms"
+          },
+          {
+            "table_schema": "reference",
+            "table_name": "customer_heat_risk"
+          },
+          {
+            "table_schema": "reference",
+            "table_name": "customers"
+          },
+          {
+            "table_schema": "reference",
+            "table_name": "defect_codes"
+          },
+          {
+            "table_schema": "reference",
+            "table_name": "heats_coils"
+          },
+          {
+            "table_schema": "reference",
+            "table_name": "mill_test_certs"
+          },
+          {
+            "table_schema": "reference",
+            "table_name": "prior_claims_corpus"
+          },
+          {
+            "table_schema": "reference",
+            "table_name": "suppliers"
+          }
+        ]
+      }
+    },
+    {
+      "label": "row counts, all public/reference base tables",
+      "command": "psycopg (read-only SELECT) -> Lakebase projects/fe-bar-operational-plane/branches/production, db databricks_postgres, OAuth credential from `databricks postgres generate-database-credential`",
+      "statement": "select 'public.adjudication_decision_records' as tbl, count(*) as n from public.\"adjudication_decision_records\" union all select 'public.adjudications' as tbl, count(*) as n from public.\"adjudications\" union all select 'public.claims' as tbl, count(*) as n from public.\"claims\" union all select 'public.investigation_cases' as tbl, count(*) as n from public.\"investigation_cases\" union all select 'public.outbox' as tbl, count(*) as n from public.\"outbox\" union all select 'public.settlements' as tbl, count(*) as n from public.\"settlements\" union all select 'public.spec_clauses' as tbl, count(*) as n from public.\"spec_clauses\" union all select 'public.spec_params' as tbl, count(*) as n from public.\"spec_params\" union all select 'public.supplier_recovery_cases' as tbl, count(*) as n from public.\"supplier_recovery_cases\" union all select 'public.warranty_clauses' as tbl, count(*) as n from public.\"warranty_clauses\" union all select 'public.warranty_terms' as tbl, count(*) as n from public.\"warranty_terms\" union all select 'reference.customer_heat_risk' as tbl, count(*) as n from reference.\"customer_heat_risk\" union all select 'reference.customers' as tbl, count(*) as n from reference.\"customers\" union all select 'reference.defect_codes' as tbl, count(*) as n from reference.\"defect_codes\" union all select 'reference.heats_coils' as tbl, count(*) as n from reference.\"heats_coils\" union all select 'reference.mill_test_certs' as tbl, count(*) as n from reference.\"mill_test_certs\" union all select 'reference.prior_claims_corpus' as tbl, count(*) as n from reference.\"prior_claims_corpus\" union all select 'reference.suppliers' as tbl, count(*) as n from reference.\"suppliers\" order by 1",
+      "params": null,
+      "timestamp": "2026-10-13T07:59:08+00:00",
+      "exit_code": 0,
+      "output": {
+        "row_count": 18,
+        "rows": [
+          {
+            "tbl": "public.adjudication_decision_records",
+            "n": 104
+          },
+          {
+            "tbl": "public.adjudications",
+            "n": 5101
+          },
+          {
+            "tbl": "public.claims",
+            "n": 5100
+          },
+          {
+            "tbl": "public.investigation_cases",
+            "n": 0
+          },
+          {
+            "tbl": "public.outbox",
+            "n": 3
+          },
+          {
+            "tbl": "public.settlements",
+            "n": 3
+          },
+          {
+            "tbl": "public.spec_clauses",
+            "n": 18
+          },
+          {
+            "tbl": "public.spec_params",
+            "n": 6
+          },
+          {
+            "tbl": "public.supplier_recovery_cases",
+            "n": 0
+          },
+          {
+            "tbl": "public.warranty_clauses",
+            "n": 36
+          },
+          {
+            "tbl": "public.warranty_terms",
+            "n": 12
+          },
+          {
+            "tbl": "reference.customer_heat_risk",
+            "n": 4400
+          },
+          {
+            "tbl": "reference.customers",
+            "n": 200
+          },
+          {
+            "tbl": "reference.defect_codes",
+            "n": 3
+          },
+          {
+            "tbl": "reference.heats_coils",
+            "n": 4500
+          },
+          {
+            "tbl": "reference.mill_test_certs",
+            "n": 4500
+          },
+          {
+            "tbl": "reference.prior_claims_corpus",
+            "n": 5000
+          },
+          {
+            "tbl": "reference.suppliers",
+            "n": 12
+          }
+        ]
+      }
+    },
+    {
+      "label": "adjudications by decision_status",
+      "command": "psycopg (read-only SELECT) -> Lakebase projects/fe-bar-operational-plane/branches/production, db databricks_postgres, OAuth credential from `databricks postgres generate-database-credential`",
+      "statement": "select decision_status, count(*) as n from public.adjudications group by 1 order by 1",
+      "params": null,
+      "timestamp": "2026-10-13T07:59:09+00:00",
+      "exit_code": 0,
+      "output": {
+        "row_count": 2,
+        "rows": [
+          {
+            "decision_status": "FINAL",
+            "n": 5003
+          },
+          {
+            "decision_status": "RECOMMENDED",
+            "n": 98
+          }
+        ]
+      }
+    },
+    {
+      "label": "outbox publish state",
+      "command": "psycopg (read-only SELECT) -> Lakebase projects/fe-bar-operational-plane/branches/production, db databricks_postgres, OAuth credential from `databricks postgres generate-database-credential`",
+      "statement": "select event_type, count(*) as n, count(published_at) as published, max(published_at) as latest_published from public.outbox group by 1",
+      "params": null,
+      "timestamp": "2026-10-13T07:59:09+00:00",
+      "exit_code": 0,
+      "output": {
+        "row_count": 1,
+        "rows": [
+          {
+            "event_type": "claim.adjudicated",
+            "n": 3,
+            "published": 3,
+            "latest_published": "2026-10-09 08:00:49.894410+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "label": "synced table customers",
+      "command": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.customers --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:09+00:00",
+      "exit_code": 0,
+      "output": {
+        "name": "synced_tables/fe_bar_operational.reference.customers",
+        "status": {
+          "detailed_state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+          "last_sync": {
+            "delta_table_sync_info": {
+              "delta_commit_time": "2026-10-07T11:34:42Z",
+              "delta_commit_version": 2
+            },
+            "sync_end_time": "2026-10-07T12:02:15.749072Z",
+            "sync_start_time": "2026-10-07T12:02:04.174079Z"
+          },
+          "message": "Synced table creation succeeded using Delta Live Tables: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com#joblist/pipelines/2dcf7835-289c-48e1-8b1f-b8ce831ca85b/updates/b5cc899a-76a1-453f-8c2e-13ae1e2edd60.",
+          "pipeline_id": "2dcf7835-289c-48e1-8b1f-b8ce831ca85b",
+          "project": "projects/fe-bar-operational-plane",
+          "unity_catalog_provisioning_state": "ACTIVE"
+        },
+        "synced_table_id": "fe_bar_operational.reference.customers",
+        "uid": "6a6fed50-0b5b-4bb2-a759-2c2be75d4a93"
+      }
+    },
+    {
+      "label": "synced table suppliers",
+      "command": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.suppliers --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:11+00:00",
+      "exit_code": 0,
+      "output": {
+        "name": "synced_tables/fe_bar_operational.reference.suppliers",
+        "status": {
+          "detailed_state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+          "last_sync": {
+            "delta_table_sync_info": {
+              "delta_commit_time": "2026-10-07T11:35:03Z",
+              "delta_commit_version": 2
+            },
+            "sync_end_time": "2026-10-07T12:02:21.474873Z",
+            "sync_start_time": "2026-10-07T12:02:12.686891Z"
+          },
+          "message": "Synced table creation succeeded using Delta Live Tables: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com#joblist/pipelines/64dc4c5c-f9a3-44d5-9563-badb3fadb50b/updates/8ea129dc-6d3c-4b22-87ad-41176c6efa89.",
+          "pipeline_id": "64dc4c5c-f9a3-44d5-9563-badb3fadb50b",
+          "project": "projects/fe-bar-operational-plane",
+          "unity_catalog_provisioning_state": "ACTIVE"
+        },
+        "synced_table_id": "fe_bar_operational.reference.suppliers",
+        "uid": "c28037ee-6e79-4be8-9024-7fa0bb59190e"
+      }
+    },
+    {
+      "label": "synced table defect_codes",
+      "command": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.defect_codes --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:13+00:00",
+      "exit_code": 0,
+      "output": {
+        "name": "synced_tables/fe_bar_operational.reference.defect_codes",
+        "status": {
+          "detailed_state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+          "last_sync": {
+            "delta_table_sync_info": {
+              "delta_commit_time": "2026-10-07T11:35:19Z",
+              "delta_commit_version": 2
+            },
+            "sync_end_time": "2026-10-07T12:02:32.760358Z",
+            "sync_start_time": "2026-10-07T12:02:22.061042Z"
+          },
+          "message": "Synced table creation succeeded using Delta Live Tables: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com#joblist/pipelines/ef044d0e-ef73-4c41-af77-c81f5e8cc703/updates/fff3c4b5-79f5-49d5-b883-cc72413be823.",
+          "pipeline_id": "ef044d0e-ef73-4c41-af77-c81f5e8cc703",
+          "project": "projects/fe-bar-operational-plane",
+          "unity_catalog_provisioning_state": "ACTIVE"
+        },
+        "synced_table_id": "fe_bar_operational.reference.defect_codes",
+        "uid": "4c0fb7cf-7ce7-4aa5-9bbf-a953bf5f63a6"
+      }
+    },
+    {
+      "label": "synced table heats_coils",
+      "command": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.heats_coils --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:15+00:00",
+      "exit_code": 0,
+      "output": {
+        "name": "synced_tables/fe_bar_operational.reference.heats_coils",
+        "status": {
+          "detailed_state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+          "last_sync": {
+            "delta_table_sync_info": {
+              "delta_commit_time": "2026-10-07T11:35:30Z",
+              "delta_commit_version": 2
+            },
+            "sync_end_time": "2026-10-07T12:01:58.161612Z",
+            "sync_start_time": "2026-10-07T12:01:46.272942Z"
+          },
+          "message": "Synced table creation succeeded using Delta Live Tables: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com#joblist/pipelines/d45b0aa9-2a68-4ff0-aa90-31648768b31e/updates/bfc020f6-1a9d-402d-95aa-10cd61f8dc42.",
+          "pipeline_id": "d45b0aa9-2a68-4ff0-aa90-31648768b31e",
+          "project": "projects/fe-bar-operational-plane",
+          "unity_catalog_provisioning_state": "ACTIVE"
+        },
+        "synced_table_id": "fe_bar_operational.reference.heats_coils",
+        "uid": "7c7b1d94-d31b-4647-b8f6-1528a30f4ed0"
+      }
+    },
+    {
+      "label": "synced table mill_test_certs",
+      "command": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.mill_test_certs --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:17+00:00",
+      "exit_code": 0,
+      "output": {
+        "name": "synced_tables/fe_bar_operational.reference.mill_test_certs",
+        "status": {
+          "detailed_state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+          "last_sync": {
+            "delta_table_sync_info": {
+              "delta_commit_time": "2026-10-07T11:34:47Z",
+              "delta_commit_version": 2
+            },
+            "sync_end_time": "2026-10-07T12:02:03.163900Z",
+            "sync_start_time": "2026-10-07T12:01:53.751968Z"
+          },
+          "message": "Synced table creation succeeded using Delta Live Tables: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com#joblist/pipelines/74412a42-2fd3-4304-b0da-9edc573155b3/updates/a97792b4-18d2-4022-9333-f64692716c8c.",
+          "pipeline_id": "74412a42-2fd3-4304-b0da-9edc573155b3",
+          "project": "projects/fe-bar-operational-plane",
+          "unity_catalog_provisioning_state": "ACTIVE"
+        },
+        "synced_table_id": "fe_bar_operational.reference.mill_test_certs",
+        "uid": "bceb3616-f4fd-47db-985a-df582f8f9cbc"
+      }
+    },
+    {
+      "label": "synced table customer_heat_risk",
+      "command": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.customer_heat_risk --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:18+00:00",
+      "exit_code": 0,
+      "output": {
+        "name": "synced_tables/fe_bar_operational.reference.customer_heat_risk",
+        "status": {
+          "detailed_state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+          "last_sync": {
+            "delta_table_sync_info": {
+              "delta_commit_time": "2026-10-07T11:49:14Z",
+              "delta_commit_version": 5
+            },
+            "sync_end_time": "2026-10-07T12:02:43.704277Z",
+            "sync_start_time": "2026-10-07T12:02:31.527317Z"
+          },
+          "message": "Synced table creation succeeded using Delta Live Tables: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com#joblist/pipelines/0129c55c-ff49-4c0c-b1c0-b1685c4eb545/updates/461b0e51-9300-4fd9-b829-437eda7a8e25.",
+          "pipeline_id": "0129c55c-ff49-4c0c-b1c0-b1685c4eb545",
+          "project": "projects/fe-bar-operational-plane",
+          "unity_catalog_provisioning_state": "ACTIVE"
+        },
+        "synced_table_id": "fe_bar_operational.reference.customer_heat_risk",
+        "uid": "4a1c6422-5c53-4380-91ee-748298c6faa5"
+      }
+    },
+    {
+      "label": "synced table prior_claims_corpus",
+      "command": "databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.prior_claims_corpus --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:20+00:00",
+      "exit_code": 0,
+      "output": {
+        "name": "synced_tables/fe_bar_operational.reference.prior_claims_corpus",
+        "status": {
+          "detailed_state": "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+          "last_sync": {
+            "delta_table_sync_info": {
+              "delta_commit_time": "2026-10-07T11:51:17Z",
+              "delta_commit_version": 4
+            },
+            "sync_end_time": "2026-10-07T12:02:56.882880Z",
+            "sync_start_time": "2026-10-07T12:02:41.112257Z"
+          },
+          "message": "Synced table creation succeeded using Delta Live Tables: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com#joblist/pipelines/28d0c102-1a35-4fff-b010-a3d561c6621f/updates/d815d519-fcb5-4eed-a83a-769cfebdce4d.",
+          "pipeline_id": "28d0c102-1a35-4fff-b010-a3d561c6621f",
+          "project": "projects/fe-bar-operational-plane",
+          "unity_catalog_provisioning_state": "ACTIVE"
+        },
+        "synced_table_id": "fe_bar_operational.reference.prior_claims_corpus",
+        "uid": "29daf288-8319-4435-88f8-10c46f884739"
+      }
+    },
+    {
+      "label": "pipeline get steel-claims",
+      "command": "databricks pipelines get 736c9bbe-b9b0-4c8c-8478-54d0c6c0e578 --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:22+00:00",
+      "exit_code": 0,
+      "output": {
+        "creator_user_name": "<user>",
+        "effective_budget_policy_id": "b29cd2c3-3d18-3920-88dc-62a4bccb2682",
+        "effective_publishing_mode": "DEFAULT_PUBLISHING_MODE",
+        "effective_serverless_compute_id": "4df662d0-bd4b-3b2c-b9af-b2ab3c600df1",
+        "last_modified": 1791371969046,
+        "latest_updates": [
+          {
+            "creation_time": "2026-10-07T11:27:36.364Z",
+            "state": "COMPLETED",
+            "update_id": "189fc19f-ac9e-4eee-a215-38b55ebc2910"
+          },
+          {
+            "creation_time": "2026-10-07T11:24:29.847Z",
+            "state": "FAILED",
+            "update_id": "3b5e4749-a523-49e5-b0ea-d4b23b45218b"
+          },
+          {
+            "creation_time": "2026-10-07T11:22:42.052Z",
+            "state": "FAILED",
+            "update_id": "bba12e00-8b5a-4e4c-a7d4-7b8e59e0f9ca"
+          },
+          {
+            "creation_time": "2026-10-07T11:21:35.409Z",
+            "state": "FAILED",
+            "update_id": "94ac160b-8c23-450f-a7e6-f21377ff51f6"
+          },
+          {
+            "creation_time": "2026-10-07T11:20:49.183Z",
+            "state": "FAILED",
+            "update_id": "76d3f61f-98f5-4a1b-ade8-2d4d71506bdd"
+          }
+        ],
+        "name": "steel-claims",
+        "pipeline_id": "736c9bbe-b9b0-4c8c-8478-54d0c6c0e578",
+        "run_as_user_name": "<user>",
+        "spec": {
+          "name": "steel-claims",
+          "catalog": "fe-bar-ir",
+          "schema": "silver",
+          "serverless": true,
+          "continuous": false,
+          "development": false,
+          "channel": "CURRENT",
+          "edition": "ADVANCED"
+        },
+        "state": "IDLE"
+      }
+    },
+    {
+      "label": "pipeline list-updates steel-claims (latest 3)",
+      "command": "databricks pipelines list-updates 736c9bbe-b9b0-4c8c-8478-54d0c6c0e578 --max-results 3 --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T07:59:23+00:00",
+      "exit_code": 0,
+      "output": {
+        "next_page_token": "CAIQhOjnsJE0GiRiYmExMmUwMC04YjVhLTRlNGMtYTdkNC03YjhlNTllMGY5Y2E=",
+        "updates": [
+          {
+            "cause": "RETRY_ON_FAILURE",
+            "creation_time": 1791372456364,
+            "full_refresh": false,
+            "pipeline_id": "736c9bbe-b9b0-4c8c-8478-54d0c6c0e578",
+            "state": "COMPLETED",
+            "update_id": "189fc19f-ac9e-4eee-a215-38b55ebc2910",
+            "validate_only": false
+          },
+          {
+            "cause": "RETRY_ON_FAILURE",
+            "creation_time": 1791372269847,
+            "full_refresh": false,
+            "pipeline_id": "736c9bbe-b9b0-4c8c-8478-54d0c6c0e578",
+            "state": "FAILED",
+            "update_id": "3b5e4749-a523-49e5-b0ea-d4b23b45218b",
+            "validate_only": false
+          },
+          {
+            "cause": "RETRY_ON_FAILURE",
+            "creation_time": 1791372162052,
+            "full_refresh": false,
+            "pipeline_id": "736c9bbe-b9b0-4c8c-8478-54d0c6c0e578",
+            "state": "FAILED",
+            "update_id": "bba12e00-8b5a-4e4c-a7d4-7b8e59e0f9ca",
+            "validate_only": false
+          }
+        ]
+      }
+    },
+    {
+      "label": "UC row counts: cdf / silver / gold",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
+      "statement": "select 'cdf.lb_claims_history' as tbl, count(*) as n from `fe-bar-ir`.cdf.lb_claims_history union all select 'cdf.lb_adjudications_history' as tbl, count(*) as n from `fe-bar-ir`.cdf.lb_adjudications_history union all select 'cdf.lb_adjudication_decision_records_history' as tbl, count(*) as n from `fe-bar-ir`.cdf.lb_adjudication_decision_records_history union all select 'cdf.lb_outbox_history' as tbl, count(*) as n from `fe-bar-ir`.cdf.lb_outbox_history union all select 'cdf.lb_settlements_history' as tbl, count(*) as n from `fe-bar-ir`.cdf.lb_settlements_history union all select 'cdf.lb_investigation_cases_history' as tbl, count(*) as n from `fe-bar-ir`.cdf.lb_investigation_cases_history union all select 'cdf.lb_supplier_recovery_cases_history' as tbl, count(*) as n from `fe-bar-ir`.cdf.lb_supplier_recovery_cases_history union all select 'silver.claims_history' as tbl, count(*) as n from `fe-bar-ir`.silver.claims_history union all select 'silver.adjudications_history' as tbl, count(*) as n from `fe-bar-ir`.silver.adjudications_history union all select 'silver.customers' as tbl, count(*) as n from `fe-bar-ir`.silver.customers union all select 'silver.suppliers' as tbl, count(*) as n from `fe-bar-ir`.silver.suppliers union all select 'silver.defect_codes' as tbl, count(*) as n from `fe-bar-ir`.silver.defect_codes union all select 'silver.heats_coils' as tbl, count(*) as n from `fe-bar-ir`.silver.heats_coils union all select 'silver.mill_test_certs' as tbl, count(*) as n from `fe-bar-ir`.silver.mill_test_certs union all select 'gold.claims_current' as tbl, count(*) as n from `fe-bar-ir`.gold.claims_current union all select 'gold.adjudications_current' as tbl, count(*) as n from `fe-bar-ir`.gold.adjudications_current union all select 'gold.adjudication_decision_records' as tbl, count(*) as n from `fe-bar-ir`.gold.adjudication_decision_records union all select 'gold.gold_claim_adjudication_fact' as tbl, count(*) as n from `fe-bar-ir`.gold.gold_claim_adjudication_fact union all select 'gold.gold_quality_kpis' as tbl, count(*) as n from `fe-bar-ir`.gold.gold_quality_kpis union all select 'gold.gold_failure_mode_analytics' as tbl, count(*) as n from `fe-bar-ir`.gold.gold_failure_mode_analytics union all select 'gold.gold_fraud_cluster_analytics' as tbl, count(*) as n from `fe-bar-ir`.gold.gold_fraud_cluster_analytics union all select 'gold.gold_supplier_recovery_analytics' as tbl, count(*) as n from `fe-bar-ir`.gold.gold_supplier_recovery_analytics union all select 'gold.gold_agent_human_alignment' as tbl, count(*) as n from `fe-bar-ir`.gold.gold_agent_human_alignment union all select 'gold.gold_retrieval_citation_kpis' as tbl, count(*) as n from `fe-bar-ir`.gold.gold_retrieval_citation_kpis union all select 'gold.customer_heat_risk' as tbl, count(*) as n from `fe-bar-ir`.gold.customer_heat_risk union all select 'gold.prior_claims_corpus' as tbl, count(*) as n from `fe-bar-ir`.gold.prior_claims_corpus",
+      "timestamp": "2026-10-13T07:59:25+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6dc-0350-1b64-920a-47676404c290",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 26,
+        "columns": [
+          "tbl",
+          "n"
+        ],
+        "rows": [
+          {
+            "tbl": "silver.claims_history",
+            "n": "5000"
+          },
+          {
+            "tbl": "silver.adjudications_history",
+            "n": "5000"
+          },
+          {
+            "tbl": "silver.heats_coils",
+            "n": "4500"
+          },
+          {
+            "tbl": "gold.claims_current",
+            "n": "5000"
+          },
+          {
+            "tbl": "gold.adjudications_current",
+            "n": "5000"
+          },
+          {
+            "tbl": "gold.adjudication_decision_records",
+            "n": "0"
+          },
+          {
+            "tbl": "cdf.lb_claims_history",
+            "n": "5100"
+          },
+          {
+            "tbl": "cdf.lb_adjudications_history",
+            "n": "5107"
+          },
+          {
+            "tbl": "cdf.lb_adjudication_decision_records_history",
+            "n": "104"
+          },
+          {
+            "tbl": "cdf.lb_outbox_history",
+            "n": "9"
+          },
+          {
+            "tbl": "cdf.lb_settlements_history",
+            "n": "3"
+          },
+          {
+            "tbl": "cdf.lb_investigation_cases_history",
+            "n": "0"
+          },
+          {
+            "tbl": "cdf.lb_supplier_recovery_cases_history",
+            "n": "0"
+          },
+          {
+            "tbl": "silver.customers",
+            "n": "200"
+          },
+          {
+            "tbl": "silver.suppliers",
+            "n": "12"
+          },
+          {
+            "tbl": "silver.defect_codes",
+            "n": "3"
+          },
+          {
+            "tbl": "silver.mill_test_certs",
+            "n": "4500"
+          },
+          {
+            "tbl": "gold.gold_claim_adjudication_fact",
+            "n": "5000"
+          },
+          {
+            "tbl": "gold.gold_quality_kpis",
+            "n": "2400"
+          },
+          {
+            "tbl": "gold.gold_failure_mode_analytics",
+            "n": "2706"
+          },
+          {
+            "tbl": "gold.gold_fraud_cluster_analytics",
+            "n": "4400"
+          },
+          {
+            "tbl": "gold.gold_supplier_recovery_analytics",
+            "n": "3"
+          },
+          {
+            "tbl": "gold.gold_agent_human_alignment",
+            "n": "2"
+          },
+          {
+            "tbl": "gold.gold_retrieval_citation_kpis",
+            "n": "0"
+          },
+          {
+            "tbl": "gold.customer_heat_risk",
+            "n": "4400"
+          },
+          {
+            "tbl": "gold.prior_claims_corpus",
+            "n": "5000"
+          }
+        ]
+      }
+    }
+  ],
+  "completed_at": "2026-10-13T07:59:49+00:00"
+}
