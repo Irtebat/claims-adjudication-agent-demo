@@ -9,7 +9,7 @@ import shlex
 from pathlib import Path
 
 import yaml
-from envlib import ManifestError, load_manifest
+from envlib import ManifestError, load_manifest, load_state
 
 ROOT = Path(__file__).resolve().parents[1]
 ENVIRONMENTS = ROOT / "config" / "envs"
@@ -71,7 +71,8 @@ def main() -> int:
         elif args.command == "show":
             print(yaml.safe_dump(manifest.resolved(), sort_keys=False).rstrip())
         elif args.command == "vars":
-            values = manifest.to_bundle_vars(args.bundle)
+            state = load_state(ROOT / ".deploy" / args.env / "state.json")
+            values = manifest.to_bundle_vars(args.bundle, state)
             print(" ".join(shlex.quote(f"--var={key}={value}") for key, value in values.items()))
         elif args.command == "plan":
             print_plan(args.env, manifest.workspace.release_environment)

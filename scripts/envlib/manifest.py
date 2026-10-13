@@ -36,6 +36,12 @@ def _nonempty(value: str, path: str) -> None:
         raise ManifestError(f"{path} must be a non-empty single-line string")
 
 
+def _json_text(value: str, path: str) -> None:
+    _nonempty(value, path)
+    if '"' in value or "\\" in value:
+        raise ManifestError(f"{path} may not contain quotes or backslashes")
+
+
 @dataclass(frozen=True)
 class Workspace:
     profile: str
@@ -159,8 +165,8 @@ class Genie:
     business_title: str
 
     def validate(self) -> None:
-        _nonempty(self.operational_title, "genie.operational_title")
-        _nonempty(self.business_title, "genie.business_title")
+        _json_text(self.operational_title, "genie.operational_title")
+        _json_text(self.business_title, "genie.business_title")
 
 
 @dataclass(frozen=True)
@@ -168,7 +174,7 @@ class Dashboard:
     display_name: str
 
     def validate(self) -> None:
-        _nonempty(self.display_name, "dashboard.display_name")
+        _json_text(self.display_name, "dashboard.display_name")
 
 
 @dataclass(frozen=True)
@@ -183,7 +189,7 @@ class App:
         _identifier(self.name, "app.name")
         for key in ("adjuster_users", "adjuster_groups", "business_users", "business_groups"):
             for value in getattr(self, key):
-                _nonempty(value, f"app.{key}")
+                _json_text(value, f"app.{key}")
 
 
 @dataclass(frozen=True)
@@ -256,7 +262,11 @@ class Manifest:
         data["models"]["registered_model_fqn"] = self.registered_model_fqn
         return data
 
-    def to_bundle_vars(self, bundle_name: str) -> dict[str, str]:
+    def to_bundle_vars(
+        self, bundle_name: str, state: RuntimeState | None = None
+    ) -> dict[str, str]:
+        state = state or RuntimeState()
+        warehouse_id = state.warehouse_id or self.warehouse.id
         common = {"databricks_profile": self.workspace.profile, "catalog": self.uc.catalog}
         cdf_claims = f"{self.uc.catalog}.{self.uc.schemas.cdf}.lb_claims_history"
         mappings: dict[str, dict[str, str | None]] = {
@@ -269,7 +279,7 @@ class Manifest:
                 "cdf_decision_records_table": (
                     f"{self.uc.catalog}.{self.uc.schemas.cdf}.lb_adjudication_decision_records_history"
                 ),
-                "warehouse_id": self.warehouse.id,
+                "warehouse_id": warehouse_id,
             },
             "lakebase": {
                 **common,
@@ -286,6 +296,7 @@ class Manifest:
                     f"/Volumes/{self.uc.catalog}/{self.uc.schemas.bronze}/"
                     "raw_landing/_kafka_checkpoints/claim_submitted"
                 ),
+                "sp_role": state.serving_service_principal_id,
             },
             "demo": {
                 **common,
@@ -295,11 +306,13 @@ class Manifest:
             "dashboards": {
                 **common,
                 "schema": self.uc.schemas.gold,
-                "warehouse_id": self.warehouse.id,
+                "warehouse_id": warehouse_id,
             },
             "app": {
-                "warehouse_id": self.warehouse.id,
+                "warehouse_id": warehouse_id,
+                "genie_space_id": state.operational_genie_id,
                 "genie_space_name": self.genie.operational_title,
+                "business_genie_space_id": state.business_genie_id,
                 "business_genie_space_name": self.genie.business_title,
                 "postgres_project": self.lakebase.project_path,
                 "postgres_branch": self.lakebase.branch_path,
@@ -308,6 +321,11 @@ class Manifest:
         }
         if bundle_name not in mappings:
             raise ManifestError(f"unknown bundle: {bundle_name}")
+        missing = [key for key, value in mappings[bundle_name].items() if value is None]
+        if missing:
+            raise ManifestError(
+                f"bundle {bundle_name} requires unresolved values: {', '.join(missing)}"
+            )
         return {key: value for key, value in mappings[bundle_name].items() if value is not None}
 
     def to_env(self) -> dict[str, str]:
@@ -357,6 +375,19 @@ class RuntimeState:
                     raise ManifestError("state.model_version must be a positive integer")
             elif not _DISCOVERED_ID.fullmatch(value):
                 raise ManifestError(f"state.{item.name} is not an id")
+
+    def render_context(self) -> dict[str, Any]:
+        return {
+            "genie": {
+                "operational_id": self.operational_genie_id,
+                "business_id": self.business_genie_id,
+            },
+            "dashboard": {"id": self.dashboard_id},
+            "app": {"service_principal_id": self.app_service_principal_id},
+            "serving": {"service_principal_id": self.serving_service_principal_id},
+            "warehouse": {"id": self.warehouse_id},
+            "model": {"version": self.model_version},
+        }
 
 
 T = TypeVar("T")
@@ -434,7 +465,7 @@ def save_state(path: str | Path, state: RuntimeState) -> None:
 
 def render(text: str, manifest: Manifest, state: RuntimeState | None = None) -> str:
     context = manifest.resolved()
-    context["state"] = asdict(state or RuntimeState())
+    context["state"] = (state or RuntimeState()).render_context()
 
     def replace(match: re.Match[str]) -> str:
         value: Any = context
@@ -447,4 +478,7 @@ def render(text: str, manifest: Manifest, state: RuntimeState | None = None) -> 
             raise ManifestError(f"template value is not scalar: {path}")
         return str(value).lower() if isinstance(value, bool) else str(value)
 
-    return _TOKEN.sub(replace, text)
+    rendered = _TOKEN.sub(replace, text)
+    if "{{" in rendered or "}}" in rendered:
+        raise ManifestError("template contains malformed or unresolved token delimiters")
+    return rendered
