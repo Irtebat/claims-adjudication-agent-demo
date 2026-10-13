@@ -3,7 +3,7 @@
 The single source of truth for *what exists now* and *what has been verified*. It
 draws the line between what is implemented in code, what is proven by committed
 (synthetic) evidence, what is proven by live capture in the current workspace, and
-which gaps that capture recorded. Read this before trusting any claim in a layer README or an
+the remaining known limitations. Read this before trusting any claim in a layer README or an
 evidence folder.
 
 > **This is a proof of concept on synthetic data.** Not a production system, not an
@@ -51,33 +51,28 @@ commit and commands:
 
 ### Proven by live capture in `fe-bar-ir-2026` (`docs/evidence/live-verification-2026-10-13/`)
 Read-only captures from 2026-10-13 (see that folder's README):
+- **Lakeflow:** the incremental routine refresh (`scripts/refresh.py routine`, no full
+  refresh) completed. Medallion updates `f0857233…` and `002f10ae…` both reached
+  `COMPLETED` (`routine-refresh.log`).
 - **Genie:** both spaces answer live Conversation API questions with generated SQL
-  and result rows (`genie.json`).
+  and result rows. The operational space returns `CLM-DEMO-000006` as FINAL /
+  APPROVE / 8360.00 (`genie.json`).
 - **AI/BI dashboard:** deployed and published; all 9 dataset queries succeed on the
-  warehouse (`dashboard.json`).
+  warehouse, including citation coverage (`dashboard.json`).
 - **App:** `steel-claims-cockpit` running; authenticated `/api/whoami`, `/api/queue`,
   cockpit detail (decision record + citations), `/api/history` all return 200 (`app.json`).
 - **Serving:** the agent endpoint is `READY` on v6 (`@prod`, 100% traffic). A
   `persist=false` invocation returns a verdict and amount that match the
   deterministic authority, with no invariant violations (`serving.json`).
-- **Lakebase + Lakeflow:** live OLTP counts, 7 synced tables online, pipeline update
-  history, cdf/silver/gold counts (`lakebase-and-pipeline.json`).
+- **Lakebase:** live OLTP counts and 7 synced tables online. Counts for
+  cdf/silver/gold are in step with Lakebase: 5,100 claims, and 5,101 current
+  adjudications (5,003 FINAL + 98 RECOMMENDED) (`lakebase-and-pipeline.json`).
 - **End to end** for `CLM-DEMO-000006` (`e2e-trace.json`): the claim's human
   finalize produced a FINAL adjudication, decision record v2, and outbox row. The
-  relay then set `published_at`, and the settlement consumer wrote
-  `STL-CLM-DEMO-000006`. Native CDF captured all of these rows. The app's history
-  and cockpit return the claim.
-
-### Live gaps recorded by that capture
-- **Silver/gold lag:** the `steel-claims` pipeline last completed on 2026-10-07,
-  before the demo claims were finalized. Those claims are in `cdf.lb_*` but not
-  yet in silver/gold, so the operational Genie cannot see them yet. For the same
-  reason `gold.adjudication_decision_records` and the citation KPIs are empty.
-  The next pipeline update brings them in.
-- **Reasoning endpoint label:** all persisted decision records (latest one
-  2026-10-09) record `system.ai.gpt-5-4`. The source targets the
-  `fe-bar-ir.adjudication-agent.*` Unity Gateway services. The `persist=false`
-  response does not expose which endpoint the served v6 called.
+  relay set `published_at`, and the settlement consumer wrote `STL-CLM-DEMO-000006`.
+  Native CDF captured all of these rows. The claim then appears as RECOMMENDED →
+  FINAL SCD2 versions in silver and as FINAL in the gold current views and fact.
+  The operational Genie and the app's history and cockpit all return it.
 
 ### Proven in code and unit/integration tests (not a committed live capture)
 - Server-side authorization and the consumer dedup/skip logic.
@@ -94,6 +89,13 @@ Read-only captures from 2026-10-13 (see that folder's README):
   so the recovery consumer creates a case (see the supplier-recovery change in the
   source). The downstream consumers are **stubs** — they record/log the action; they
   do not integrate with a real settlement or ERP system.
+- **Reasoning-endpoint label:** the live `@prod` v6 records `reasoning_endpoint` as
+  `system.ai.gpt-5-4` on its decision records, which is the label from before the
+  label fix. The fix is merged in `main` (PR #58) and goes live on the next
+  register → evaluate → promote → deploy cycle. Per source, the call path targets the
+  Unity Gateway model service `fe-bar-ir.adjudication-agent.adjudication-reasoning`.
+- **Settlements stop at CDF:** the medallion has no settlement table, so a
+  settlement is visible in Lakebase and `cdf.lb_settlements_history` only.
 - **Committed evidence is point-in-time synthetic capture**, tied to the commit noted
   in each set — not continuous production monitoring.
 

@@ -1,0 +1,46 @@
+# Raw console output of the 2026-10-13 routine refresh (incremental, no full refresh).
+# Command: DATABRICKS_AUTH_STORAGE=plaintext uv run --with pyyaml python scripts/refresh.py routine
+# The runner process was interrupted after step 4 started; the Databricks job run itself completed
+# (prior_claims_corpus run 720489280072395 TERMINATED SUCCESS, 08:13:44Z-08:19:49Z). The last two steps
+# were then run directly; those lines are marked '(resumed)'. Local timestamps are UTC+05:30.
+# Medallion updates: f0857233-2ca2-4a67-b06e-ab800661a437 (step 1) and 002f10ae-a014-45b6-a992-23cc952159bb (step 6), both COMPLETED, full_refresh=false.
+
++ uv run --with pyyaml python pipelines/run.py refresh
+{"adjudications_table": "fe-bar-ir.cdf.lb_adjudications_history", "cdf_config": {"catalog": "fe-bar-ir", "cdf_config_id": "public", "create_time": "2026-10-07T11:11:32.497Z", "name": "projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres/cdf-configs/public", "postgres_schema": "public", "schema": "cdf"}, "claims_table": "fe-bar-ir.cdf.lb_claims_history", "decision_records_table": "fe-bar-ir.cdf.lb_adjudication_decision_records_history"}
++ databricks bundle deploy --target prod --profile fe-bar-ir-2026
+Uploading bundle files to /Workspace/Users/<user>/.bundle/fe-bar-agent/prod/files...
+Files: 49 uploaded, 0 deleted
+Resources: 0 created, 0 changed, 0 deleted, 3 unchanged
++ databricks bundle run fraud_graph --target prod --profile fe-bar-ir-2026
+Run URL: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com/jobs/292901465677776/runs/432328177977959?o=7474646906749000
+
+2026-10-13 13:42:48 "fe-bar-fraud-graph" RUNNING
+2026-10-13 13:43:40 "fe-bar-fraud-graph" TERMINATED SUCCESS
+{'catalog': 'fe-bar-ir', 'claims_scored': 5100, 'clusters': 900, 'risk_rows': 4400, 'high_risk_rows': 578}+ databricks bundle run prior_claims_corpus --target prod --profile fe-bar-ir-2026
+Run URL: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com/jobs/249063247999321/runs/720489280072395?o=7474646906749000
+
+2026-10-13 13:43:44 "fe-bar-prior-claims-corpus" RUNNING
++ (resumed) lakebase/run.py resync-synced-tables
+Downloading databricks-sdk (1.0MiB)
+ Downloaded databricks-sdk
+Installed 16 packages in 21ms
+{
+  "regranted": false,
+  "resynced": [
+    {
+      "pipeline_id": "0129c55c-ff49-4c0c-b1c0-b1685c4eb545",
+      "state": "COMPLETED",
+      "table": "fe_bar_operational.reference.customer_heat_risk",
+      "update_id": "1fe27d2a-b02f-4ec7-a274-d26c3537fe14"
+    },
+    {
+      "pipeline_id": "28d0c102-1a35-4fff-b010-a3d561c6621f",
+      "state": "COMPLETED",
+      "table": "fe_bar_operational.reference.prior_claims_corpus",
+      "update_id": "d39bc93c-3991-493a-89bf-57555445fb30"
+    }
+  ]
+}
++ (resumed) pipelines/run.py refresh
+{"adjudications_table": "fe-bar-ir.cdf.lb_adjudications_history", "cdf_config": {"catalog": "fe-bar-ir", "cdf_config_id": "public", "create_time": "2026-10-07T11:11:32.497Z", "name": "projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres/cdf-configs/public", "postgres_schema": "public", "schema": "cdf"}, "claims_table": "fe-bar-ir.cdf.lb_claims_history", "decision_records_table": "fe-bar-ir.cdf.lb_adjudication_decision_records_history"}
+EXIT 0

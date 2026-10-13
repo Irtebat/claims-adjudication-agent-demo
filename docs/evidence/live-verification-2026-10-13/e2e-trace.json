@@ -2,7 +2,7 @@
   "purpose": "End-to-end trace of CLM-DEMO-000006 across every stage (read-only)",
   "profile": "fe-bar-ir-2026",
   "workspace": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
-  "captured_at": "2026-10-13T08:00:43+00:00",
+  "captured_at": "2026-10-13T08:31:57+00:00",
   "capture_tool": "databricks CLI v1.17.0 + psycopg (Lakebase) + urllib (app HTTP)",
   "steps": [
     {
@@ -12,7 +12,7 @@
       "params": [
         "CLM-DEMO-000006"
       ],
-      "timestamp": "2026-10-13T08:00:43+00:00",
+      "timestamp": "2026-10-13T08:31:57+00:00",
       "exit_code": 0,
       "output": {
         "row_count": 1,
@@ -44,7 +44,7 @@
       "params": [
         "CLM-DEMO-000006"
       ],
-      "timestamp": "2026-10-13T08:00:48+00:00",
+      "timestamp": "2026-10-13T08:32:02+00:00",
       "exit_code": 0,
       "output": {
         "row_count": 1,
@@ -80,7 +80,7 @@
       "params": [
         "CLM-DEMO-000006"
       ],
-      "timestamp": "2026-10-13T08:00:49+00:00",
+      "timestamp": "2026-10-13T08:32:03+00:00",
       "exit_code": 0,
       "output": {
         "row_count": 2,
@@ -135,7 +135,7 @@
       "params": [
         "CLM-DEMO-000006"
       ],
-      "timestamp": "2026-10-13T08:00:49+00:00",
+      "timestamp": "2026-10-13T08:32:03+00:00",
       "exit_code": 0,
       "output": {
         "row_count": 1,
@@ -173,7 +173,7 @@
       "params": [
         "CLM-DEMO-000006"
       ],
-      "timestamp": "2026-10-13T08:00:49+00:00",
+      "timestamp": "2026-10-13T08:32:03+00:00",
       "exit_code": 0,
       "output": {
         "row_count": 1,
@@ -193,10 +193,10 @@
       "label": "6a UC native CDF: cdf.lb_claims_history",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.cdf.lb_claims_history where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:00:49+00:00",
+      "timestamp": "2026-10-13T08:32:04+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-3540-1a79-ad62-9c95fa9a1bdb",
+        "statement_id": "01f1c6e0-926d-13a3-8c8c-c949b6e86e70",
         "state": "SUCCEEDED",
         "error": null,
         "total_row_count": 1,
@@ -252,10 +252,10 @@
       "label": "6b UC native CDF: cdf.lb_adjudications_history",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.cdf.lb_adjudications_history where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:00:54+00:00",
+      "timestamp": "2026-10-13T08:32:09+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-37f9-14ef-a4a9-ef8cee41f09b",
+        "statement_id": "01f1c6e0-95aa-170b-8685-163a53d5ea8f",
         "state": "SUCCEEDED",
         "error": null,
         "total_row_count": 3,
@@ -419,10 +419,10 @@
       "label": "6c UC native CDF: cdf.lb_adjudication_decision_records_history (selected cols)",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select adjudication_id, record_version, recommended_verdict, approved_amount, reasoning_endpoint, created_at from `fe-bar-ir`.cdf.lb_adjudication_decision_records_history where claim_id='CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:00:58+00:00",
+      "timestamp": "2026-10-13T08:32:15+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-3a3c-14c6-82c3-62f48ca30336",
+        "statement_id": "01f1c6e0-98e9-1d78-8c60-40fceb21d9d5",
         "state": "SUCCEEDED",
         "error": null,
         "total_row_count": 2,
@@ -458,10 +458,10 @@
       "label": "6d UC native CDF: cdf.lb_outbox_history",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.cdf.lb_outbox_history where aggregate_id='CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:01:02+00:00",
+      "timestamp": "2026-10-13T08:32:20+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-3cb2-140b-b2ff-7abd0414e1a0",
+        "statement_id": "01f1c6e0-9bed-10a0-ac88-411e45c50259",
         "state": "SUCCEEDED",
         "error": null,
         "total_row_count": 3,
@@ -525,10 +525,10 @@
       "label": "6e UC native CDF: cdf.lb_settlements_history",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.cdf.lb_settlements_history where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:01:06+00:00",
+      "timestamp": "2026-10-13T08:32:25+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-3f01-1ebd-a081-30dc9601fe55",
+        "statement_id": "01f1c6e0-9f08-1f82-a41a-60d41c76977f",
         "state": "SUCCEEDED",
         "error": null,
         "total_row_count": 1,
@@ -566,13 +566,13 @@
       "label": "7a silver.claims_history",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.silver.claims_history where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:01:08+00:00",
+      "timestamp": "2026-10-13T08:32:27+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-4091-1bfc-863b-0d4b6d71d9de",
+        "statement_id": "01f1c6e0-a058-13d8-9ffe-df40f5bb3c17",
         "state": "SUCCEEDED",
         "error": null,
-        "total_row_count": 0,
+        "total_row_count": 1,
         "columns": [
           "claim_id",
           "coil_id",
@@ -590,20 +590,38 @@
           "__START_AT",
           "__END_AT"
         ],
-        "rows": []
+        "rows": [
+          {
+            "claim_id": "CLM-DEMO-000006",
+            "coil_id": "COIL-0000006",
+            "customer_id": "CUST-0102",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-01-01",
+            "install_date": "2014-01-31",
+            "environment": "inland",
+            "installation": "ventilated",
+            "coast_distance_km": "25.0",
+            "defect_code": "RED_RUST",
+            "defect_narrative": "Premature red rust and perforation observed on installed roofing.",
+            "claimed_tonnage": "10.000",
+            "claimed_freight": "0.00",
+            "__START_AT": "5006",
+            "__END_AT": null
+          }
+        ]
       }
     },
     {
       "label": "7b silver.adjudications_history",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.silver.adjudications_history where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:01:11+00:00",
+      "timestamp": "2026-10-13T08:32:30+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-424a-1bec-92db-f576eb434ba5",
+        "statement_id": "01f1c6e0-a1d6-1886-935a-27883d26c78a",
         "state": "SUCCEEDED",
         "error": null,
-        "total_row_count": 0,
+        "total_row_count": 2,
         "columns": [
           "adjudication_id",
           "claim_id",
@@ -637,20 +655,87 @@
           "__START_AT",
           "__END_AT"
         ],
-        "rows": []
+        "rows": [
+          {
+            "adjudication_id": "ADJ-03cec259986537abef5b",
+            "claim_id": "CLM-DEMO-000006",
+            "verdict": "APPROVE",
+            "recommended_verdict": "APPROVE",
+            "disposition": "CREDIT",
+            "claimed_amount": "8360.00",
+            "approved_amount": "8360.00",
+            "covered_tonnage": "10.000",
+            "freight_covered": "false",
+            "supplier_attributable": "true",
+            "recovery_supplier_id": null,
+            "defect_failure_mode_code": null,
+            "override_flag": "false",
+            "decision_status": "RECOMMENDED",
+            "rationale": "Approve and credit in line with the deterministic authorities. The claim is not a duplicate, conformance is failed due to tensile_mpa, and coating warranty coverage is active at 1 elapsed month under galvanized/NA/V2/coverage with full proration under galvanized/NA/V2/proration. No exclusion was hit in the structured coverage result, and the structured fields (inland, ventilated, 25.0 km from coast) do not contradict the exclusion conditions listed in galvanized/NA/V2/exclusions. Settlement estimate matches the settlement authority approved amount exactly. Advisory precedent is mixed and not controlling; elevated risk score supports monitoring only and does not change eligibility or amount.",
+            "cited_clause_ids": null,
+            "finalized_at": null,
+            "duplicate_of_claim_id": null,
+            "fraud_cluster_id": "CLM-0000005",
+            "decided_by": null,
+            "override_reason": null,
+            "recommended_disposition": "CREDIT",
+            "confidence": "0.95",
+            "flags": "{\"fraud_risk\":true,\"over_claim\":false,\"supplier_attributable\":true}",
+            "advisory_risk": "{\"found\":true,\"heat_no\":\"HEAT-000001\",\"cluster_id\":\"CLM-0000005\",\"risk_score\":0.75,\"computed_at\":\"2026-10-07T11:49:00.767481+00:00\",\"customer_id\":\"CUST-0102\",\"cluster_size\":10,\"repeat_customers\":true,\"distinct_heats_in_cluster\":1,\"distinct_customers_in_cluster\":5}",
+            "precedent": "[{\"verdict\":\"APPROVE\",\"claim_id\":\"CLM-0000300\",\"rrf_score\":0.016393,\"approved_amount\":6133.33},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000642\",\"rrf_score\":0.016393,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000645\",\"rrf_score\":0.016129,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0002442\",\"rrf_score\":0.016129,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000648\",\"rrf_score\":0.015873,\"approved_amount\":0.0}]",
+            "idempotency_key": "03cec259986537abef5b99a4c6905a7353ec83639d6c023472774932c4ebfbf8",
+            "decision_record_version": "1",
+            "recommended_at": "2026-10-07T20:47:29.005Z",
+            "__START_AT": "5007",
+            "__END_AT": "5104"
+          },
+          {
+            "adjudication_id": "ADJ-03cec259986537abef5b",
+            "claim_id": "CLM-DEMO-000006",
+            "verdict": "APPROVE",
+            "recommended_verdict": "APPROVE",
+            "disposition": "CREDIT",
+            "claimed_amount": "8360.00",
+            "approved_amount": "8360.00",
+            "covered_tonnage": "10.000",
+            "freight_covered": "false",
+            "supplier_attributable": "true",
+            "recovery_supplier_id": null,
+            "defect_failure_mode_code": null,
+            "override_flag": "false",
+            "decision_status": "FINAL",
+            "rationale": "Approve and credit in line with the deterministic authorities. The claim is not a duplicate, conformance is failed due to tensile_mpa, and coating warranty coverage is active at 1 elapsed month under galvanized/NA/V2/coverage with full proration under galvanized/NA/V2/proration. No exclusion was hit in the structured coverage result, and the structured fields (inland, ventilated, 25.0 km from coast) do not contradict the exclusion conditions listed in galvanized/NA/V2/exclusions. Settlement estimate matches the settlement authority approved amount exactly. Advisory precedent is mixed and not controlling; elevated risk score supports monitoring only and does not change eligibility or amount.",
+            "cited_clause_ids": null,
+            "finalized_at": "2026-10-09T07:30:49.980Z",
+            "duplicate_of_claim_id": null,
+            "fraud_cluster_id": "CLM-0000005",
+            "decided_by": "<user>",
+            "override_reason": null,
+            "recommended_disposition": "CREDIT",
+            "confidence": "0.95",
+            "flags": "{\"fraud_risk\":true,\"over_claim\":false,\"supplier_attributable\":true}",
+            "advisory_risk": "{\"found\":true,\"heat_no\":\"HEAT-000001\",\"cluster_id\":\"CLM-0000005\",\"risk_score\":0.75,\"computed_at\":\"2026-10-07T11:49:00.767481+00:00\",\"customer_id\":\"CUST-0102\",\"cluster_size\":10,\"repeat_customers\":true,\"distinct_heats_in_cluster\":1,\"distinct_customers_in_cluster\":5}",
+            "precedent": "[{\"verdict\":\"APPROVE\",\"claim_id\":\"CLM-0000300\",\"rrf_score\":0.016393,\"approved_amount\":6133.33},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000642\",\"rrf_score\":0.016393,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000645\",\"rrf_score\":0.016129,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0002442\",\"rrf_score\":0.016129,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000648\",\"rrf_score\":0.015873,\"approved_amount\":0.0}]",
+            "idempotency_key": "03cec259986537abef5b99a4c6905a7353ec83639d6c023472774932c4ebfbf8",
+            "decision_record_version": "1",
+            "recommended_at": "2026-10-07T20:47:29.005Z",
+            "__START_AT": "5104",
+            "__END_AT": null
+          }
+        ]
       }
     },
     {
       "label": "8a gold.claims_current",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.gold.claims_current where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:01:14+00:00",
+      "timestamp": "2026-10-13T08:32:32+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-43c6-1e40-9a76-e6a3c5d8f7d3",
+        "statement_id": "01f1c6e0-a353-1124-a558-2806582db2ed",
         "state": "SUCCEEDED",
         "error": null,
-        "total_row_count": 0,
+        "total_row_count": 1,
         "columns": [
           "claim_id",
           "coil_id",
@@ -668,20 +753,38 @@
           "__START_AT",
           "__END_AT"
         ],
-        "rows": []
+        "rows": [
+          {
+            "claim_id": "CLM-DEMO-000006",
+            "coil_id": "COIL-0000006",
+            "customer_id": "CUST-0102",
+            "claim_type": "coating_warranty",
+            "claim_date": "2026-01-01",
+            "install_date": "2014-01-31",
+            "environment": "inland",
+            "installation": "ventilated",
+            "coast_distance_km": "25.0",
+            "defect_code": "RED_RUST",
+            "defect_narrative": "Premature red rust and perforation observed on installed roofing.",
+            "claimed_tonnage": "10.000",
+            "claimed_freight": "0.00",
+            "__START_AT": "5006",
+            "__END_AT": null
+          }
+        ]
       }
     },
     {
       "label": "8b gold.adjudications_current",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.gold.adjudications_current where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:01:16+00:00",
+      "timestamp": "2026-10-13T08:32:35+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-450e-10ab-a12c-1667921bd194",
+        "statement_id": "01f1c6e0-a4dc-15a1-907d-6426866f596e",
         "state": "SUCCEEDED",
         "error": null,
-        "total_row_count": 0,
+        "total_row_count": 1,
         "columns": [
           "adjudication_id",
           "claim_id",
@@ -715,20 +818,54 @@
           "__START_AT",
           "__END_AT"
         ],
-        "rows": []
+        "rows": [
+          {
+            "adjudication_id": "ADJ-03cec259986537abef5b",
+            "claim_id": "CLM-DEMO-000006",
+            "verdict": "APPROVE",
+            "recommended_verdict": "APPROVE",
+            "disposition": "CREDIT",
+            "claimed_amount": "8360.00",
+            "approved_amount": "8360.00",
+            "covered_tonnage": "10.000",
+            "freight_covered": "false",
+            "supplier_attributable": "true",
+            "recovery_supplier_id": null,
+            "defect_failure_mode_code": null,
+            "override_flag": "false",
+            "decision_status": "FINAL",
+            "rationale": "Approve and credit in line with the deterministic authorities. The claim is not a duplicate, conformance is failed due to tensile_mpa, and coating warranty coverage is active at 1 elapsed month under galvanized/NA/V2/coverage with full proration under galvanized/NA/V2/proration. No exclusion was hit in the structured coverage result, and the structured fields (inland, ventilated, 25.0 km from coast) do not contradict the exclusion conditions listed in galvanized/NA/V2/exclusions. Settlement estimate matches the settlement authority approved amount exactly. Advisory precedent is mixed and not controlling; elevated risk score supports monitoring only and does not change eligibility or amount.",
+            "cited_clause_ids": null,
+            "finalized_at": "2026-10-09T07:30:49.980Z",
+            "duplicate_of_claim_id": null,
+            "fraud_cluster_id": "CLM-0000005",
+            "decided_by": "<user>",
+            "override_reason": null,
+            "recommended_disposition": "CREDIT",
+            "confidence": "0.95",
+            "flags": "{\"fraud_risk\":true,\"over_claim\":false,\"supplier_attributable\":true}",
+            "advisory_risk": "{\"found\":true,\"heat_no\":\"HEAT-000001\",\"cluster_id\":\"CLM-0000005\",\"risk_score\":0.75,\"computed_at\":\"2026-10-07T11:49:00.767481+00:00\",\"customer_id\":\"CUST-0102\",\"cluster_size\":10,\"repeat_customers\":true,\"distinct_heats_in_cluster\":1,\"distinct_customers_in_cluster\":5}",
+            "precedent": "[{\"verdict\":\"APPROVE\",\"claim_id\":\"CLM-0000300\",\"rrf_score\":0.016393,\"approved_amount\":6133.33},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000642\",\"rrf_score\":0.016393,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000645\",\"rrf_score\":0.016129,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0002442\",\"rrf_score\":0.016129,\"approved_amount\":0.0},{\"verdict\":\"DENY\",\"claim_id\":\"CLM-0000648\",\"rrf_score\":0.015873,\"approved_amount\":0.0}]",
+            "idempotency_key": "03cec259986537abef5b99a4c6905a7353ec83639d6c023472774932c4ebfbf8",
+            "decision_record_version": "1",
+            "recommended_at": "2026-10-07T20:47:29.005Z",
+            "__START_AT": "5104",
+            "__END_AT": null
+          }
+        ]
       }
     },
     {
       "label": "8c gold.gold_claim_adjudication_fact",
       "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85)",
       "statement": "select * from `fe-bar-ir`.gold.gold_claim_adjudication_fact where claim_id = 'CLM-DEMO-000006'",
-      "timestamp": "2026-10-13T08:01:19+00:00",
+      "timestamp": "2026-10-13T08:32:37+00:00",
       "exit_code": 0,
       "output": {
-        "statement_id": "01f1c6dc-46af-1630-8ecb-68864297f7a9",
+        "statement_id": "01f1c6e0-a66d-139f-be66-c7d480dda44a",
         "state": "SUCCEEDED",
         "error": null,
-        "total_row_count": 0,
+        "total_row_count": 1,
         "columns": [
           "adjudication_id",
           "claim_id",
@@ -795,24 +932,91 @@
           "customer_heat_high_risk",
           "customer_heat_risk_reason"
         ],
-        "rows": []
+        "rows": [
+          {
+            "adjudication_id": "ADJ-03cec259986537abef5b",
+            "claim_id": "CLM-DEMO-000006",
+            "claim_date": "2026-01-01",
+            "claim_type": "coating_warranty",
+            "customer_id": "CUST-0102",
+            "customer_name": "Johnson-Miller",
+            "customer_segment": "service_center",
+            "coil_id": "COIL-0000006",
+            "heat_no": "HEAT-000001",
+            "product": "galvanized",
+            "grade": "ASTM A653 CS Type B",
+            "coating": "G90",
+            "region": "NA",
+            "line": "LINE-1",
+            "prod_date": "2025-11-21",
+            "ship_date": "2025-12-01",
+            "shipped_tonnage": "10.000",
+            "unit_price": "836.00",
+            "claimed_tonnage": "10.000",
+            "claimed_freight": "0.00",
+            "defect_code": "RED_RUST",
+            "failure_mode_code": "RED_RUST",
+            "defect_description": "Field corrosion/perforation",
+            "process_step": "field",
+            "verdict": "APPROVE",
+            "disposition": "CREDIT",
+            "decision_status": "FINAL",
+            "recommended_verdict": "APPROVE",
+            "recommended_disposition": "CREDIT",
+            "override_flag": "false",
+            "claimed_amount": "8360.00",
+            "approved_amount": "8360.00",
+            "covered_tonnage": "10.000",
+            "finalized_at": "2026-10-09T07:30:49.980Z",
+            "cycle_time_days": "281",
+            "supplier_attributable": "true",
+            "recovery_supplier_id": null,
+            "recovery_supplier_name": null,
+            "recovery_supplier_type": null,
+            "fraud_cluster_id": "CLM-0000005",
+            "fraud_risk_flag": "true",
+            "over_claim_flag": "false",
+            "duplicate_flag": "false",
+            "material_in_spec": "false",
+            "warranty_covered": "true",
+            "decision_record_version": "2",
+            "agent_recommended_verdict": "APPROVE",
+            "agent_recommended_disposition": "CREDIT",
+            "agent_recommended_amount": "8360.00",
+            "agent_model_name": "fe-bar-ir.default.claims_adjudication_agent",
+            "agent_model_version": null,
+            "prompt_version": "claims-adjudication-prompt/v2-narrative-escalation",
+            "schema_version": "adjudication-decision-record/v2",
+            "cited_clause_ids": null,
+            "citations": "[{\"citation_key\":\"galvanized/NA/V2/exclusions\",\"section_ref\":\"exclusions\",\"clause_text_sha256\":\"6479b1ee3aea4091168f865795b69da7cbcba2403fd5abb31e7660e937fb8809\"},{\"citation_key\":\"galvanized/NA/V2/coverage\",\"section_ref\":\"coverage\",\"clause_text_sha256\":\"603da73447148c66d3fa2ea4e99532df523a79b6e768585484747499141dec43\"},{\"citation_key\":\"galvanized/NA/V2/proration\",\"section_ref\":\"proration\",\"clause_text_sha256\":\"71c150608fa3402231abb5ebdbcd36019cb23cf696c0eb9c8c062a19b41f6f43\"}]",
+            "authorities_source_sha256": "6373424cdb86f7eb513346c36687ee9c297aea9a05d551ccd42897f12f24a348",
+            "mlflow_trace_id": "tr-7bf659ecc79ebf80456afd568eb03bf9",
+            "graph_cluster_id": "CLM-0000005",
+            "graph_cluster_size": "20",
+            "graph_cluster_customers": "5",
+            "customer_heat_risk_score": "1.0",
+            "customer_heat_risky": "true",
+            "customer_heat_high_risk": "true",
+            "customer_heat_risk_reason": "Fraud cluster: 20 claims from 5 customers on heat HEAT-000001 (concentration 0.75)."
+          }
+        ]
       }
     },
     {
       "label": "8d steel-claims pipeline latest update (explains silver/gold lag)",
       "command": "databricks pipelines list-updates 736c9bbe-b9b0-4c8c-8478-54d0c6c0e578 --max-results 1 --profile fe-bar-ir-2026 -o json",
-      "timestamp": "2026-10-13T08:01:22+00:00",
+      "timestamp": "2026-10-13T08:32:41+00:00",
       "exit_code": 0,
       "output": {
-        "next_page_token": "CAIQrOP5sJE0GiQxODlmYzE5Zi1hYzllLTRlZWUtYTIxNS0zOGI1NWViYzI5MTA=",
+        "next_page_token": "CAIQhff7opM0GiQwMDJmMTBhZS1hMDE0LTQ1YjYtYTk5Mi0yM2NjOTUyMTU5YmI=",
         "updates": [
           {
-            "cause": "RETRY_ON_FAILURE",
-            "creation_time": 1791372456364,
+            "cause": "JOB_TASK",
+            "creation_time": 1791880002437,
             "full_refresh": false,
             "pipeline_id": "736c9bbe-b9b0-4c8c-8478-54d0c6c0e578",
             "state": "COMPLETED",
-            "update_id": "189fc19f-ac9e-4eee-a215-38b55ebc2910",
+            "update_id": "002f10ae-a014-45b6-a992-23cc952159bb",
             "validate_only": false
           }
         ]
@@ -821,61 +1025,61 @@
     {
       "label": "9 operational Genie: ask about the claim",
       "command": "databricks genie start-conversation 01f1c269ca3c1adea7feb9f248ab3445 Show the claim_id, decision_status, verdict, disposition and approved_amount for claim_id exactly 'CLM-DEMO-000006'. --timeout 5m --profile fe-bar-ir-2026 -o json",
-      "timestamp": "2026-10-13T08:01:23+00:00",
+      "timestamp": "2026-10-13T08:32:42+00:00",
       "exit_code": 0,
       "output": {
         "attachments": [
           {
-            "attachment_id": "01f1c6dc525710ab913f1e904e430b97",
+            "attachment_id": "01f1c6e0ac0d1b12b2cf418425433ac4",
             "query": {
-              "description": "You want to see the claim ID, decision status, verdict, disposition, and approved amount for the claim with ID 'CLM-DEMO-000006'.",
-              "query": "SELECT `claim_id`, `decision_status`, `verdict`, `disposition`, `approved_amount` FROM `fe-bar-ir`.`gold`.`adjudications_current` WHERE `claim_id` = 'CLM-DEMO-000006'",
+              "description": "You want to see the claim ID, decision status, verdict, disposition, and approved amount for the claim with the exact ID 'CLM-DEMO-000006'.",
+              "query": "SELECT `c`.`claim_id`, `a`.`decision_status`, `a`.`verdict`, `a`.`disposition`, `a`.`approved_amount`\nFROM `fe-bar-ir`.`gold`.`claims_current` AS `c`\nJOIN `fe-bar-ir`.`gold`.`adjudications_current` AS `a`\n  ON `c`.`claim_id` = `a`.`claim_id`\nWHERE `c`.`claim_id` = 'CLM-DEMO-000006'",
               "query_result_metadata": {
-                "row_count": 0
+                "row_count": 1
               },
-              "statement_id": "01f1c6dc-525f-1bed-b073-452318024332",
+              "statement_id": "01f1c6e0-ac17-1a32-ba71-3d78c91c65ae",
               "thoughts": [
                 {
-                  "content": "You want to see the claim ID, decision status, verdict, disposition, and approved amount for the claim with ID 'CLM-DEMO-000006'.",
+                  "content": "You want to see the claim ID, decision status, verdict, disposition, and approved amount for the claim with the exact ID 'CLM-DEMO-000006'.",
                   "thought_type": "THOUGHT_TYPE_DESCRIPTION"
                 },
                 {
-                  "content": "- fe-bar-ir.gold.adjudications_current",
+                  "content": "- fe-bar-ir.gold.claims_current\n- fe-bar-ir.gold.adjudications_current",
                   "thought_type": "THOUGHT_TYPE_DATA_SOURCING"
                 },
                 {
-                  "content": "- Retrieve the claim ID, decision status, verdict, disposition, and approved amount from the current adjudications data.\n- Filter the results to only include the claim with the exact ID 'CLM-DEMO-000006'.",
+                  "content": "- Retrieve the claim ID from the current claims data.\n- Find the matching adjudication record for that claim ID.\n- Get the decision status, verdict, disposition, and approved amount from the adjudication record.\n- Filter results to only include the claim with ID 'CLM-DEMO-000006'.",
                   "thought_type": "THOUGHT_TYPE_STEPS"
                 }
               ]
             }
           },
           {
-            "text": {
-              "content": "No record was returned for **claim_id CLM-DEMO-000006**, so there is no visible **decision_status**, **verdict**, **disposition**, or **approved_amount** to report from this result. This result set contains **0 rows**, which means there is no matching claim in the data returned by the query.",
-              "purpose": "TEXT_ATTACHMENT_PURPOSE_ANSWER"
+            "attachment_id": "01f1c6e0ad571531beb041818cb9e4ab",
+            "suggested_questions": {
+              "questions": [
+                "What is the decision status, verdict, disposition, and approved amount for claim_id 'CLM-0002796'?",
+                "Show the claim_id, decision_status, verdict, disposition, and approved_amount for all claims with decision_status 'FINAL'.",
+                "What are the verdicts and approved amounts for claims with the disposition 'APPROVED'?"
+              ]
             }
           },
           {
-            "attachment_id": "01f1c6dc546a1bcf9385695eaee72395",
-            "suggested_questions": {
-              "questions": [
-                "What is the current verdict, disposition, and approved amount for claim_id 'CLM-DEMO-000006' in the adjudication_decision_records table?",
-                "What are the claim details including claim_type and defect_code for claim_id 'CLM-DEMO-000006'?",
-                "Show the claim_id, decision_status, verdict, disposition and approved_amount for all claims with claim_id starting with 'CLM-DEMO-'"
-              ]
+            "text": {
+              "content": "For claim_id **CLM-DEMO-000006**, decision_status is **FINAL**, verdict is **APPROVE**, disposition is **CREDIT**, and approved_amount is **8360.00**. In the 1 returned record, claim_id **CLM-DEMO-000006** shows a finalized approval with a credited amount of **8360.00**.",
+              "purpose": "TEXT_ATTACHMENT_PURPOSE_ANSWER"
             }
           }
         ],
         "content": "Show the claim_id, decision_status, verdict, disposition and approved_amount for claim_id exactly 'CLM-DEMO-000006'.",
-        "conversation_id": "01f1c6dc49781c5eaacdcace771dda3a",
-        "created_timestamp": 1791878485424,
-        "id": "01f1c6dc498c1eafacaa3b8391ba9e78",
-        "last_updated_timestamp": 1791878508088,
-        "message_id": "01f1c6dc498c1eafacaa3b8391ba9e78",
+        "conversation_id": "01f1c6e0a95d1a48a9de6ba913806615",
+        "created_timestamp": 1791880364216,
+        "id": "01f1c6e0a9651d548777a544b9158c02",
+        "last_updated_timestamp": 1791880378311,
+        "message_id": "01f1c6e0a9651d548777a544b9158c02",
         "query_result": {
-          "row_count": 0,
-          "statement_id": "01f1c6dc-525f-1bed-b073-452318024332"
+          "row_count": 1,
+          "statement_id": "01f1c6e0-ac17-1a32-ba71-3d78c91c65ae"
         },
         "space_id": "01f1c269ca3c1adea7feb9f248ab3445",
         "status": "COMPLETED",
@@ -884,12 +1088,20 @@
     },
     {
       "label": "9b operational Genie: query result",
-      "command": "databricks genie get-message-attachment-query-result 01f1c269ca3c1adea7feb9f248ab3445 01f1c6dc49781c5eaacdcace771dda3a 01f1c6dc498c1eafacaa3b8391ba9e78 01f1c6dc525710ab913f1e904e430b97 --profile fe-bar-ir-2026 -o json",
-      "timestamp": "2026-10-13T08:01:51+00:00",
+      "command": "databricks genie get-message-attachment-query-result 01f1c269ca3c1adea7feb9f248ab3445 01f1c6e0a95d1a48a9de6ba913806615 01f1c6e0a9651d548777a544b9158c02 01f1c6e0ac0d1b12b2cf418425433ac4 --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T08:32:58+00:00",
       "exit_code": 0,
       "output": {
         "statement_response": {
           "manifest": {
+            "chunks": [
+              {
+                "byte_count": 928,
+                "chunk_index": 0,
+                "row_count": 1,
+                "row_offset": 0
+              }
+            ],
             "format": "JSON_ARRAY",
             "schema": {
               "column_count": 5,
@@ -928,13 +1140,26 @@
                 }
               ]
             },
-            "total_byte_count": 0,
-            "total_chunk_count": 0,
-            "total_row_count": 0,
+            "total_byte_count": 928,
+            "total_chunk_count": 1,
+            "total_row_count": 1,
             "truncated": false
           },
-          "result": {},
-          "statement_id": "01f1c6dc-525f-1bed-b073-452318024332",
+          "result": {
+            "chunk_index": 0,
+            "data_array": [
+              [
+                "CLM-DEMO-000006",
+                "FINAL",
+                "APPROVE",
+                "CREDIT",
+                "8360.00"
+              ]
+            ],
+            "row_count": 1,
+            "row_offset": 0
+          },
+          "statement_id": "01f1c6e0-ac17-1a32-ba71-3d78c91c65ae",
           "status": {
             "state": "SUCCEEDED"
           }
@@ -944,7 +1169,7 @@
     {
       "label": "10 App: /api/history (filtered client-side to the claim)",
       "command": "HTTP GET https://steel-claims-cockpit-7474646906749000.aws.databricksapps.com/api/history?limit=50 (Authorization: Bearer <user OAuth token from `databricks auth token --profile fe-bar-ir-2026`>)",
-      "timestamp": "2026-10-13T08:01:54+00:00",
+      "timestamp": "2026-10-13T08:33:01+00:00",
       "http_status": 200,
       "body": {
         "count": 50,
@@ -973,7 +1198,7 @@
     {
       "label": "11 App: cockpit detail for the claim",
       "command": "HTTP GET https://steel-claims-cockpit-7474646906749000.aws.databricksapps.com/api/claims/CLM-DEMO-000006?adjudication_id=ADJ-03cec259986537abef5b (Authorization: Bearer <user OAuth token from `databricks auth token --profile fe-bar-ir-2026`>)",
-      "timestamp": "2026-10-13T08:01:56+00:00",
+      "timestamp": "2026-10-13T08:33:03+00:00",
       "http_status": 200,
       "body": {
         "adjudication": {
@@ -1016,5 +1241,5 @@
     }
   ],
   "claim_id": "CLM-DEMO-000006",
-  "completed_at": "2026-10-13T08:01:57+00:00"
+  "completed_at": "2026-10-13T08:33:05+00:00"
 }
