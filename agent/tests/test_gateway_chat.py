@@ -1,4 +1,5 @@
 import urllib.error
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,11 +7,14 @@ from langchain_core.messages import HumanMessage
 
 from gateway_chat import UnityGatewayChatModel
 
+# Runtime sentinel for the refreshed auth header (no bearer literal in source).
+FAKE_AUTH = "Bearer " + uuid.uuid4().hex
+
 
 def _client():
     client = MagicMock()
     client.config.host = "https://workspace.example/"
-    client.config.authenticate.return_value = {"Authorization": "Bearer refreshed"}
+    client.config.authenticate.return_value = {"Authorization": FAKE_AUTH}
     return client
 
 
@@ -32,7 +36,7 @@ def test_governed_chat_request_and_response():
     assert response.content == "OK"
     url, authorization, body = calls[0]
     assert url.endswith("/ai-gateway/mlflow/v1/chat/completions")
-    assert authorization == "Bearer refreshed"
+    assert authorization == FAKE_AUTH
     assert body["model"] == "fe-bar-ir.adjudication-agent.adjudication-reasoning"
     assert body["temperature"] == 0.0
 

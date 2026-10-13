@@ -1,8 +1,12 @@
+import uuid
 from unittest.mock import patch
 
 import pytest
 
 from workspace_client import workspace_client
+
+# Runtime sentinel for the SP client secret (no credential-shaped literal in source).
+FAKE_SP_VALUE = uuid.uuid4().hex
 
 
 def test_workspace_client_uses_profile_without_service_principal(monkeypatch):
@@ -16,17 +20,17 @@ def test_workspace_client_uses_profile_without_service_principal(monkeypatch):
 def test_workspace_client_uses_service_principal_environment(monkeypatch):
     monkeypatch.setenv("DATABRICKS_HOST", "https://workspace.example")
     monkeypatch.setenv("APP_SP_CLIENT_ID", "client-id")
-    monkeypatch.setenv("APP_SP_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("APP_SP_CLIENT_SECRET", FAKE_SP_VALUE)
     with patch("databricks.sdk.WorkspaceClient") as constructor:
         workspace_client("ignored")
     constructor.assert_called_once_with(
-        host="https://workspace.example", client_id="client-id", client_secret="secret"
+        host="https://workspace.example", client_id="client-id", client_secret=FAKE_SP_VALUE
     )
 
 
 @pytest.mark.parametrize(
     ("client_id", "client_secret"),
-    [("client-id", None), (None, "secret")],
+    [("client-id", None), (None, FAKE_SP_VALUE)],
 )
 def test_workspace_client_rejects_partial_service_principal_environment(
     monkeypatch, client_id, client_secret
@@ -75,7 +79,7 @@ def test_workspace_client_applies_request_timeout_via_public_config(monkeypatch)
 def test_workspace_client_timeout_config_carries_service_principal_auth(monkeypatch):
     monkeypatch.setenv("DATABRICKS_HOST", "https://workspace.example")
     monkeypatch.setenv("APP_SP_CLIENT_ID", "client-id")
-    monkeypatch.setenv("APP_SP_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("APP_SP_CLIENT_SECRET", FAKE_SP_VALUE)
     captured = {}
 
     class FakeConfig:
@@ -94,7 +98,7 @@ def test_workspace_client_timeout_config_carries_service_principal_auth(monkeypa
     assert "retry_timeout_seconds" not in cfg  # only set when explicitly provided
     assert cfg["host"] == "https://workspace.example"
     assert cfg["client_id"] == "client-id"
-    assert cfg["client_secret"] == "secret"
+    assert cfg["client_secret"] == FAKE_SP_VALUE
 
 
 def test_workspace_client_without_timeout_builds_plain_client(monkeypatch):
