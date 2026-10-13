@@ -16,6 +16,11 @@ PEND-INVESTIGATE, with a disposition, an approved amount, and cited clauses.
 
 ## Stage → execution evidence
 
+**Start here: [`EVIDENCE.md`](EVIDENCE.md)** — pasted output from real runs for every stage
+(pipeline updates, live agent response, MLflow release-gate scores, rules-vs-agent ablation,
+Genie question → SQL → rows, dashboard KPIs, app API calls, one claim traced end to end).
+Every raw `.json` capture has a readable `.md` rendering beside it.
+
 Committed raw captures from real runs (text only). Fresh live captures are in
 [`docs/evidence/live-verification-2026-10-13/`](docs/evidence/live-verification-2026-10-13/).
 
@@ -24,7 +29,7 @@ Committed raw captures from real runs (text only). Fresh live captures are in
 | Lakeflow | [`routine-refresh.log`](docs/evidence/live-verification-2026-10-13/routine-refresh.log) (incremental routine refresh) · [`lakebase-and-pipeline.json`](docs/evidence/live-verification-2026-10-13/lakebase-and-pipeline.json) (pipeline updates, cdf/silver/gold counts) · [`synthetic-data/`](docs/evidence/synthetic-data/) · [`cdf-incremental-history/`](docs/evidence/cdf-incremental-history/) |
 | Unity Catalog | [`synthetic-data/`](docs/evidence/synthetic-data/) (grants, masks, integrity) · [`dashboard.json`](docs/evidence/live-verification-2026-10-13/dashboard.json) (governed metric view + gold datasets on the warehouse) |
 | Lakebase | [`lakebase-and-pipeline.json`](docs/evidence/live-verification-2026-10-13/lakebase-and-pipeline.json) (live row counts, synced-table states) · [`lakebase-serve-down/`](docs/evidence/lakebase-serve-down/) |
-| ML / GenAI | [`serving.json`](docs/evidence/live-verification-2026-10-13/serving.json) (live endpoint + `persist=false` invocation) · [`claims-adjudication-agent/`](docs/evidence/claims-adjudication-agent/) · [`ablation-eval/`](docs/evidence/ablation-eval/) |
+| ML / GenAI | [`serving.json`](docs/evidence/live-verification-2026-10-13/serving.json) (live endpoint + `persist=false` invocation) · [`release-gate-v6/`](docs/evidence/release-gate-v6/) (MLflow money-safety scorer results behind the v6 promotion) · [`claims-adjudication-agent/`](docs/evidence/claims-adjudication-agent/) · [`ablation-eval/`](docs/evidence/ablation-eval/) |
 | Genie | [`genie.json`](docs/evidence/live-verification-2026-10-13/genie.json) (both spaces: questions, generated SQL, result rows) |
 | App | [`app.json`](docs/evidence/live-verification-2026-10-13/app.json) (deployment status + authenticated API smoke) |
 

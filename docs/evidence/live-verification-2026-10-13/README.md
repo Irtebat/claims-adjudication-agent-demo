@@ -4,7 +4,7 @@
 > (catalog `fe-bar-ir`) on 2026-10-13 UTC — not production data or continuous
 > monitoring. See [`../../CURRENT-STATE.md`](../../CURRENT-STATE.md).
 
-Every file is raw captured output. Each `steps[]` entry records the exact command
+Every `.json` file is raw captured output; each has a readable `.md` rendering beside it (same content as tables and code blocks). Each `steps[]` entry records the exact command
 (CLI call, SQL statement, Lakebase `SELECT`, or HTTP request), a UTC timestamp, the
 exit code / HTTP status, and the output. Large payloads are trimmed (marked
 `trimmed`); personal email addresses are redacted as `<user>`; no tokens are

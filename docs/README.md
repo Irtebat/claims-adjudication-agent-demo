@@ -90,6 +90,7 @@ current-state and verification summary, see [`CURRENT-STATE.md`](CURRENT-STATE.m
 | `claims-adjudication-agent/` | ResponsesAgent build, money-safety invariant enforcement, decision records |
 | `gold-analytics/` | Gold KPI fact layer + governed metric view |
 | `ablation-eval/` | Deterministic-rules vs. agent comparison — where reasoning adds measurable value |
+| `release-gate-v6/` | MLflow scorer results (money-safety + quality) behind the v5 → v6 `@prod` promotion |
 
 Earlier iteration-workstream evidence and deployment-event captures from a retired
 workspace have been removed to keep this set current and self-consistent.
