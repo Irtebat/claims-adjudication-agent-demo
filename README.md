@@ -100,6 +100,11 @@ Two similarly-named things are intentionally different — do not conflate them:
 workspace/profile. Secrets live in Databricks secret scopes, referenced by name —
 never in source.
 
+These values are recorded in the environment manifest `config/envs/fe-bar-ir-2026.yaml`
+(intent) plus the git-ignored `.deploy/<env>/state.json` (discovered IDs); the
+bundle variable defaults mirror them. `scripts/env.py validate|show|vars|plan --env
+<env>` checks and renders them locally (`config/envs/README.md`).
+
 ## Prerequisites
 
 - Databricks CLI ≥ 1.17 and a workspace on Unity Catalog with create rights.
@@ -140,7 +145,8 @@ Every layer uses the **same two execution mechanisms — and only these two**:
      reseed / CDF-exists guards, and resolving the dynamic native-CDF table names
      before a medallion run.
 
-Each layer README states this rule and lists the exact commands for that layer.
+Each layer README states this rule and has Prerequisites, the exact deploy and run
+commands for that layer, and a read-only Verify section.
 `scripts/bootstrap.py` composes the end-to-end path from these mechanisms directly,
 and `scripts/refresh.py routine|demo` composes the refreshes (see `scripts/README.md`).
 

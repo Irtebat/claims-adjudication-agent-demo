@@ -14,14 +14,25 @@ This directory contains the deployed Steel Quality Claims Analytics dashboard an
 
 Workflow-backlog visuals remain deferred until settlement, recovery, and investigation events exist. The downstream consumers are implemented but are stubs, and the live broker fan-out requires the Aiven secrets (see `docs/CURRENT-STATE.md`), so those events are not populated in the demo.
 
-Deploy with the authenticated `fe-bar-ir-2026` profile:
+## Prerequisites
+
+- The gold analytics objects and `gold.quality_claims_metrics` exist
+  (`pipelines/README.md`: `run.py refresh` + `deploy_metric_views`).
+- A serverless SQL warehouse (`warehouse.id` in `config/envs/fe-bar-ir-2026.yaml`;
+  bundle variable `warehouse_id`).
+
+## Deploy
+
+Working directory: `dashboards/`.
 
 ```sh
-cd dashboards
 databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
 databricks bundle deploy -t prod --profile fe-bar-ir-2026
-databricks bundle summary -t prod --profile fe-bar-ir-2026
 ```
+
+Genie spaces are not bundle resources; create or update them as below. After
+changing a space or the dashboard `overrideId`, re-run both commands — validation
+alone does not update the deployed dashboard.
 
 ## Genie
 
@@ -48,6 +59,26 @@ databricks genie update-space <space-id> --json @/tmp/update-genie.json --profil
 ```
 
 The dashboard's `uiSettings.genieSpace.overrideId` links to the deployed business Genie space.
+
+## Run
+
+Dashboards and Genie run on read; data freshness follows the medallion refresh.
+
+## Verify
+
+Read-only. Space ids are the app bundle variables `genie_space_id` (operational) and
+`business_genie_space_id` (business) in `app/databricks.yml`.
+
+```sh
+cd dashboards
+DASH_ID="$(databricks bundle summary -t prod --profile fe-bar-ir-2026 -o json | jq -r .resources.dashboards.quality_claims.id)"
+databricks lakeview get "$DASH_ID" --profile fe-bar-ir-2026 -o json | jq '{display_name, lifecycle_state, warehouse_id}'
+databricks genie get-space <space-id> --profile fe-bar-ir-2026 -o json | jq '{title, warehouse_id}'
+```
+
+Expected: dashboard `Steel Quality Claims Analytics` is `ACTIVE`; the spaces return
+`Steel Claims Operational Cockpit` and `Steel Quality Claims Analytics` on the
+configured warehouse. Local check: `jq empty quality_claims.lvdash.json genie/genie_space.json`.
 
 ## Environment templates
 

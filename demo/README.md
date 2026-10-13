@@ -37,32 +37,52 @@ Per 100 claims:
 
 This ensures the demo backlog maintains the same realistic claim distribution as the main synthetic baseline.
 
-## Demo refresh
+## Prerequisites
 
-To load a backlog and bring every downstream layer up to date in one command, run
-`uv run --with pyyaml python scripts/refresh.py demo` from the repository root: it
-deploys and runs this job, then the routine refresh (see `docs/RUNBOOK.md`).
+- Lakebase seeded and the serving endpoint `READY` (`agent/README.md`) for the
+  default `serving_endpoint` mode.
 
-## Deployment
+## Deploy
 
-Deploy to Databricks:
+Working directory: `demo/`.
 
 ```bash
-cd demo/
+databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
 databricks bundle deploy -t prod --profile fe-bar-ir-2026
 ```
 
-Run the job with custom parameters:
+## Run
+
+Preferred, from the repository root (deploys and runs this job with defaults, then
+the routine refresh):
 
 ```bash
+uv run --with pyyaml python scripts/refresh.py demo
+```
+
+Direct run, from `demo/` (job parameters map from the `--` flags):
+
+```bash
+databricks bundle run demo_backlog -t prod --profile fe-bar-ir-2026                  # 500 claims, seed 42
 databricks bundle run demo_backlog -t prod --profile fe-bar-ir-2026 -- --count 1000 --seed 123 --mode serving_endpoint
 ```
 
-Or run with all defaults (500 claims, seed 42, serving endpoint):
+After a direct run, run `scripts/refresh.py routine` (not `demo`, which would run
+the job again) to carry the new rows into gold and the synced tables.
+
+## Verify
+
+Read-only:
 
 ```bash
-databricks bundle run demo_backlog -t prod --profile fe-bar-ir-2026
+databricks jobs list --name steel-claims-demo-backlog --profile fe-bar-ir-2026 -o json | jq '.[0].job_id'
+databricks jobs list-runs --job-id <job-id> --limit 3 --profile fe-bar-ir-2026 -o json \
+  | jq '.[] | {run_id, state: .status.state, result: .status.termination_details.code}'
 ```
+
+Expected: the latest run is `TERMINATED` / `SUCCESS`. Its notebook output is the
+JSON summary under **Example output**; the counts are also visible in the
+adjuster queue (`GET /api/queue` in the app) and with the provenance queries below.
 
 ## Recommendation contract
 
@@ -84,18 +104,27 @@ All inserted claims and adjudications carry `data_provenance = 'synthetic_demo_b
 
 ```sql
 -- Find demo claims
-SELECT COUNT(*) FROM claims WHERE data_provenance = 'synthetic_demo_backlog';
+SELECT COUNT(*) FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog';
 
 -- Find demo adjudications
-SELECT COUNT(*) FROM adjudications WHERE data_provenance = 'agent_recommendation' AND claim_id IN (
-  SELECT claim_id FROM claims WHERE data_provenance = 'synthetic_demo_backlog'
+SELECT COUNT(*) FROM public.adjudications WHERE data_provenance = 'agent_recommendation' AND claim_id IN (
+  SELECT claim_id FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog'
 );
+```
 
--- Clean up (if needed)
-DELETE FROM adjudications WHERE claim_id IN (
-  SELECT claim_id FROM claims WHERE data_provenance = 'synthetic_demo_backlog'
-);
-DELETE FROM claims WHERE data_provenance = 'synthetic_demo_backlog';
+Cleanup is destructive: native CDF carries the deletes into the SCD2 history. Run it
+as a Lakebase admin (decision records revoke `DELETE` from `PUBLIC`) over
+`databricks psql --project fe-bar-operational-plane --profile fe-bar-ir-2026 -- -d databricks_postgres`:
+
+```sql
+BEGIN;
+DELETE FROM public.adjudication_decision_records WHERE adjudication_id IN (
+  SELECT adjudication_id FROM public.adjudications WHERE claim_id IN (
+    SELECT claim_id FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog'));
+DELETE FROM public.adjudications WHERE claim_id IN (
+  SELECT claim_id FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog');
+DELETE FROM public.claims WHERE data_provenance = 'synthetic_demo_backlog';
+COMMIT;
 ```
 
 ## Files

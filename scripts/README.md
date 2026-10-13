@@ -26,6 +26,28 @@ operations:
    - `lakebase/run.py resync-synced-tables` — resolves each synced table's managed
      sync pipeline and runs an incremental update of it (never a re-grant).
 
+## Prerequisites
+
+- Databricks CLI >= 1.17 authenticated as `fe-bar-ir-2026`, `uv`, and the
+  prerequisites of each layer the composer touches (`pipelines/`, `lakebase/`,
+  `agent/`, `demo/` READMEs). There is no scripts bundle.
+- `env.py` checks the environment manifest locally (no workspace calls):
+
+  ```bash
+  uv run --with pyyaml python scripts/env.py validate --env fe-bar-ir-2026
+  uv run --with pyyaml python scripts/env.py show --env fe-bar-ir-2026
+  uv run --with pyyaml python scripts/env.py vars --env fe-bar-ir-2026 --bundle pipelines
+  uv run --with pyyaml python scripts/env.py plan --env fe-bar-ir-2026
+  ```
+
+  Intended values come from `config/envs/<env>.yaml`; discovered IDs (Genie spaces,
+  dashboard, app/serving SPs, model version) come from the git-ignored
+  `.deploy/<env>/state.json`. `vars` prints `--var=key=value` flags for one bundle
+  (`pipelines`, `lakebase`, `agent`, `services`, `demo`, `dashboards`, `app`) and
+  fails if a value it needs is unresolved. The bundle variable defaults already
+  carry the `fe-bar-ir-2026` values, so the commands in these READMEs work as
+  written. See `config/envs/README.md`.
+
 ## Bootstrap (fresh workspace only)
 
 ```bash
@@ -70,6 +92,21 @@ a workspace where no decision record has been written yet.
 adjudications) -> the routine steps.
 
 Each step runs with `check=True`; the first failure stops the composer.
+
+## Verify
+
+Read-only:
+
+```bash
+databricks pipelines list-pipelines --profile fe-bar-ir-2026 -o json | jq -r '.[] | [.name, .state] | @tsv'
+databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.prior_claims_corpus \
+  --profile fe-bar-ir-2026 -o json | jq '.status.detailed_state'
+```
+
+Expected after a bootstrap or refresh: `steel-claims` and the seven `Synced table:`
+pipelines are `IDLE`, and the corpus reports `SYNCED_TABLE_ONLINE*`. Both composers
+stop on the first failing step; `refresh.py` echoes each step (`+ <command>`)
+before running it.
 
 ## Checks
 

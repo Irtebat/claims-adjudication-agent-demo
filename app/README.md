@@ -75,8 +75,8 @@ route hard-denies.
 - **(b) `GET /api/claims/:id`** — cockpit detail from ALREADY-PERSISTED data: the recommendation + full `adjudication_decision_records` trail (deterministic conformance/coverage/duplicate/settlement), citations, context (heats_coils, mill_test_certs, customers, customer_heat_risk), and prior-claim precedent. (Not Genie.)
 - **(c) `POST /api/claims/:id/finalize`** — the human-finalization transaction (below).
 - **(d) `GET /api/history`** — FINAL adjudications with `decided_by` / override metadata, sort/filter.
-- **(e) cockpit copilot NL** — Genie plugin, alias `cockpit` → operational space `01f1bb5b9d081378b00a283760825c64`.
-- **(f) business dashboard** — analytics plugin (`config/queries/business_kpis.sql`, governed gold) + business chat via Genie alias `business` → gold-analytics space `01f1bac20bf6119f84fa99c7ba438ba4`.
+- **(e) cockpit copilot NL** — Genie plugin, alias `cockpit` → operational space (bundle variable `genie_space_id`).
+- **(f) business dashboard** — analytics plugin (`config/queries/business_kpis.sql`, governed gold) + business chat via Genie alias `business` → gold-analytics space (bundle variable `business_genie_space_id`).
 
 ## Finalization transaction (`server/finalize.ts`, Task 3)
 
@@ -112,51 +112,94 @@ databricks bundle validate --profile fe-bar-ir-2026   # Validation OK
 
 `server/**` and `client/**` are eslint- and prettier-clean.
 
+## Prerequisites
+
+- Lakebase seeded and the `reference.*` synced tables ONLINE (`lakebase/README.md`);
+  the app's context query reads them.
+- Both Genie spaces and the dashboard deployed (`dashboards/README.md`). Their IDs
+  are bundle variables in `databricks.yml` (`genie_space_id`,
+  `business_genie_space_id`, `warehouse_id`) and `DATABRICKS_DASHBOARD_ID` in
+  `app.yaml` (rendered from `app.yaml.tmpl`).
+- Node 18+ for local gates.
+
 ## Deploy
 
-Deploying provisions the app's own service principal, whose id the Lakebase grants
-need. Order:
+Working directory: `app/`. The app bundle uses target `default`.
 
-1. `databricks bundle deploy -t default --profile fe-bar-ir-2026` — creates the app + its SP,
-   injects `PGHOST`/`PGDATABASE`/`PGPORT`/`PGSSLMODE` + the resource envs.
-2. Grant the **app SP** its fine-grained Lakebase grants with
-   `app/scripts/setup_app_sp.py` (the app SP is distinct from the serving SP
-   `claims-adjudication-serving`; pass the app SP client id from step 1's
-   `service_principal_client_id`):
+```bash
+databricks bundle validate --strict -t default --profile fe-bar-ir-2026
+databricks bundle deploy -t default --profile fe-bar-ir-2026
+databricks bundle run app -t default --profile fe-bar-ir-2026
+```
+
+`bundle deploy` creates the app and its service principal, applies the
+`user_api_scopes` (`dashboards.genie`, `sql`) and resources, and injects
+`PGHOST`/`PGDATABASE`/`PGPORT`/`PGSSLMODE`. `bundle run app` builds and restarts the
+app from the uploaded source; run it after every code change.
+
+### First-time only
+
+1. Read the app SP client id from the deployed app:
+
+   ```bash
+   databricks apps get steel-claims-cockpit --profile fe-bar-ir-2026 -o json | jq -r .service_principal_client_id
+   ```
+
+2. Grant it the Lakebase privileges with `app/scripts/setup_app_sp.py` (idempotent;
+   `--app-principal` or env `APP_SP_PRINCIPAL`). The app SP is distinct from the
+   serving SP `claims-adjudication-serving`.
 
    ```bash
    uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
      python app/scripts/setup_app_sp.py --profile fe-bar-ir-2026 \
-     --app-principal <app-sp-client-id>
+     --app-principal <app-sp-id>
    ```
 
-   The grant set:
+   The grant set (`GRANTS` in the script):
    - `USAGE` on `public` + `reference`.
    - `SELECT` on `public.claims`, `adjudications`, `adjudication_decision_records`,
      `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses`, and
      `reference.heats_coils`, `mill_test_certs`, `customers`, `customer_heat_risk`,
-     `prior_claims_corpus`. The `reference.*` SELECTs are also reapplied by
-     `lakebase/scripts/regrant_synced_table_selects.py` (via `lakebase/run.py
-     synced-tables`) when a synced table is created or recreated.
+     `prior_claims_corpus`.
    - `INSERT, UPDATE` on `public.adjudications` and
      `public.adjudication_decision_records` (finalize UPDATE + new record_version).
-   - **`INSERT` on `public.outbox`** ← REQUIRED for finalize; not part of the serving
-     SP's grant set — a grant specific to the app SP.
-3. Enable **user authorization** with scopes `dashboards.genie` + `sql` (in
-   `databricks.yml`, applied on deploy) so OBO works for Genie + the warehouse.
-4. Set the role config (plain app env vars — no resource/grant needed):
-   `ADJUSTER_GROUPS` / `BUSINESS_GROUPS` (comma-separated group display names or ids)
-   as the **primary** mechanism, and optionally `ADJUSTER_USERS` / `BUSINESS_USERS`
-   (comma-separated emails) as the per-user **override**. Optionally set `GROUP_SCOPE`
-   (`account` | `workspace`, default `account`). With none set, all guarded routes
-   hard-deny. The SCIM `/Me` group lookup needs **no** extra `user_api_scope` and
-   **no** admin grant (default `iam.current-user:read` covers `/Me`). See
-   `.env.example`.
-5. **Deploy-time verification (not a blocker, no grant):** on the deployed app, confirm
-   the narrowly-scoped OBO token returns a populated `groups[]` under
-   `iam.current-user:read` — the server logs the resolved group count once per real
-   request. The `/Me` endpoint + body shape are confirmed with a full user token; the
-   scoped-token case is the only bit that can only be verified live.
+   - **`SELECT, INSERT` on `public.outbox`** — required by finalize; the outbox
+     write uses `ON CONFLICT (event_id) DO NOTHING`, which needs `SELECT`. Without
+     it finalize fails with `permission denied for table outbox`.
 
-Steps 2–4 need the deployed app SP id (step 1 creates it); some sub-steps need
-account-admin rights.
+   The `reference.*` SELECTs are reapplied by
+   `lakebase/scripts/regrant_synced_table_selects.py` whenever a synced table is
+   created or recreated; export `APP_SP_PRINCIPAL=<app-sp-id>` for those runs.
+3. Set the role config in `app.yaml` `env` (plain env vars, see `server/identity.ts`):
+   `ADJUSTER_GROUPS` / `BUSINESS_GROUPS` (comma-separated group display names or
+   ids) are the primary mechanism; `ADJUSTER_USERS` / `BUSINESS_USERS`
+   (comma-separated emails, e.g. `<user>`) are per-user overrides checked first.
+   Optionally set `GROUP_SCOPE` (`account` | `workspace`, default `account`). With
+   none set, every guarded route hard-denies. The SCIM `/Me` lookup needs no extra
+   `user_api_scope` and no admin grant. Redeploy (`bundle deploy` + `bundle run
+   app`) after changing them.
+4. For the embedded dashboard, add the app domain to the workspace AI/BI embedding
+   approved-domains list; until then the app shows an open-in-Databricks link.
+
+## Run
+
+The app runs continuously once deployed (`lifecycle.started: true`). Locally, set
+the role env vars in your own git-ignored `.env` and run `npm run dev`.
+
+## Verify
+
+Read-only:
+
+```bash
+databricks apps get steel-claims-cockpit --profile fe-bar-ir-2026 -o json \
+  | jq '{app: .app_status.state, compute: .compute_status.state, deployment: .active_deployment.status.state, url}'
+TOKEN="$(databricks auth token --profile fe-bar-ir-2026 -o json | jq -r .access_token)"
+curl -fsS -H "Authorization: Bearer $TOKEN" "<app-url>/api/whoami"
+```
+
+Expected: app `RUNNING`, compute `ACTIVE`, deployment `SUCCEEDED`, and
+`/api/whoami` returns the caller's resolved role set. After a redeploy, confirm
+`active_deployment.deployment_id` changed. The token command needs U2M
+authentication; never print or commit the bearer. On the deployed app, the server
+logs the resolved SCIM group count once per request — use it to confirm the scoped
+OBO token returns `groups[]`.

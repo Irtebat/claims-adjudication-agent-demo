@@ -28,7 +28,7 @@ orchestration a plain `bundle run` cannot express.
 | `agent/` | Job `fe-bar-deploy-claims-adjudication-agent` | Creates/updates the governed serving endpoint | Manual | After `register -> evaluate -> promote` |
 | `agent/`, `eval/` | `register_agent.py`, `evaluate.py`, `promote.py` | Human-gated model lifecycle | Manual `uv run python` | On an agent code change (including `retrieval.py`) |
 | `demo/` | Job `steel-claims-demo-backlog` | New synthetic claims plus RECOMMENDED agent adjudications | Manual | Demo refresh |
-| `services/` | Job `fe-bar-services-migrate` | Drops the retired pending queue; grants the app SP | Manual | Once, before the other services jobs |
+| `services/` | Job `fe-bar-services-migrate` | Drops the retired pending queue; grants the serving SP (`sp_role`) the outbox and downstream-table privileges | Manual | Once, before the other services jobs |
 | `services/` | Jobs `fe-bar-services-{producer, worker, relay, consumers}` | Kafka event backbone: CDF inserts -> `claim.submitted` -> RECOMMENDED adjudication; finalized outbox -> `claim.adjudicated` -> four consumers | Hourly periodic schedule (continuous toggle documented per job) | Automatic once deployed. They fail on every run until the Kafka secrets exist in scope `fe-bar-aiven-kafka` |
 | `app/` | App `steel-claims-cockpit` | Adjuster cockpit; the only writer of FINAL adjudications and `public.outbox` rows | Always running | Deploy (`-t default`) on an app change |
 | `dashboards/` | Dashboard `Steel Quality Claims Analytics` and the Genie space | Read gold views | On read | Deploy on a dashboard change; data freshness follows the medallion |
@@ -56,13 +56,26 @@ before the first medallion run: with no `gold.claims_current` it publishes an em
 typed risk table and exits, so the first medallion run succeeds. The second run
 scores for real, and the last medallion run picks up the scores.
 
-Then, once the app and serving service principals exist:
+Then complete the environment in this order:
 
-1. `uv run --with pyyaml python lakebase/run.py synced-tables` (creates all seven
-   synced tables, builds the corpus indexes, grants SELECT to both principals).
-2. `cd pipelines && databricks bundle run deploy_metric_views -t prod --profile fe-bar-ir-2026`
-3. `uv run --with pyyaml python pipelines/run.py govern`
-4. Deploy the agent endpoint, app, dashboards, and services as their READMEs describe.
+1. Serving SP: `agent/scripts/setup_serving_sp.py --profile fe-bar-ir-2026
+   --account-profile <account-profile>` (`agent/README.md`, Prerequisites).
+2. Dashboards and Genie spaces (`dashboards/README.md`), then the app:
+   `cd app && databricks bundle deploy -t default --profile fe-bar-ir-2026`
+   (creates the app SP), then `app/scripts/setup_app_sp.py --app-principal <app-sp-id>`
+   and `databricks bundle run app -t default --profile fe-bar-ir-2026`
+   (`app/README.md`).
+3. Synced tables, with both principal ids exported:
+   `APP_SP_PRINCIPAL=<app-sp-id> SERVING_SP_PRINCIPAL=<serving-sp-app-id> uv run --with pyyaml python lakebase/run.py synced-tables`
+   (creates all seven synced tables, builds the corpus indexes, grants SELECT to
+   both principals; fails before any GRANT if either id is unset). Both SP setup
+   scripts grant SELECT on `reference.*` and assume those tables exist; they are
+   idempotent, so re-run them after this step if a first run stopped on a missing
+   table.
+4. `cd pipelines && databricks bundle run deploy_metric_views -t prod --profile fe-bar-ir-2026`
+5. `uv run --with pyyaml python pipelines/run.py govern`
+6. Agent `register -> evaluate -> promote -> deploy_claims_agent` (`agent/README.md`).
+7. Event backbone (below) and, optionally, the demo backlog.
 
 The gold fact also joins the decision records, which exist only after the agent writes
 its first one (that write materializes `cdf.lb_adjudication_decision_records_history`).
@@ -132,11 +145,17 @@ UC source of a synced table:
 
 ### Event backbone
 
-1. Put the four Kafka secrets into scope `fe-bar-aiven-kafka` (`services/README.md`).
+1. Put the four Kafka keys (`bootstrap-servers`, `sasl-username`, `sasl-password`,
+   `ssl-ca-pem`) into scope `fe-bar-aiven-kafka` (`services/README.md`).
 2. `cd services && databricks bundle deploy -t prod --profile fe-bar-ir-2026`
 3. `databricks bundle run migrate -t prod --profile fe-bar-ir-2026` (once).
 4. The hourly schedules then run producer -> worker -> relay -> consumers. To drive it
    by hand, `bundle run` them in that order.
+
+Pause or resume a schedule by setting `trigger.pause_status` with
+`databricks jobs update <job-id> --json` (keep the full `periodic` block; see
+`services/README.md`). Every services `bundle deploy` resets the four triggers to
+`UNPAUSED`.
 
 The worker writes RECOMMENDED adjudications only. The `claim.adjudicated` outbox row
 is written only by the app when an adjuster finalizes, so the relay and consumers run
