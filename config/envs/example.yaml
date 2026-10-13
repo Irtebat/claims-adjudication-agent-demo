@@ -1,0 +1,53 @@
+# Copy this file to <environment>.yaml. Identifiers only: never put secret values here.
+workspace:
+  profile: new-env-profile
+  host: https://new-workspace.cloud.databricks.com
+  account_profile: new-account-profile
+  release_environment: false
+uc:
+  catalog: new-catalog
+  managed_storage_root: s3://new-environment-bucket
+  storage_credential: new-storage-credential
+  external_location: new-external-location
+  iam_role_arn: arn:aws:iam::123456789012:role/new-environment-role
+  schemas: {bronze: bronze, silver: silver, gold: gold, cdf: cdf, eval: eval, default: default}
+warehouse:
+  id: null # Leave null when the warehouse will be created; its ID belongs in runtime state.
+  name: New Environment Warehouse
+lakebase:
+  project: new-operational-plane
+  branch: production
+  endpoint: primary
+  database: databricks_postgres
+  resource_database: databricks-postgres
+  mirror_catalog: new_operational
+  public_schema: public
+  reference_schema: reference
+models:
+  registered_model: claims_adjudication_agent
+  serving_endpoint: agents_new-catalog-default-claims_adjudication_agent
+  model_service_schema: adjudication-agent
+  reasoning_service: new-catalog.adjudication-agent.adjudication-reasoning
+  reasoning_destination: system.ai.example-model
+  embedding_service: new-catalog.adjudication-agent.embedding
+  embedding_destination: system.ai.example-embedding
+  experiment: /Shared/claims-adjudication-evaluation
+genie:
+  operational_title: New Claims Operational Cockpit
+  business_title: New Quality Claims Analytics
+dashboard:
+  display_name: New Quality Claims Analytics
+app:
+  name: new-claims-cockpit
+  adjuster_users: [] # Optional direct-user overrides; prefer groups.
+  adjuster_groups: [new-adjusters]
+  business_users: []
+  business_groups: [new-business-users]
+secrets:
+  agent_scope: claims-agent
+  kafka_scope: new-kafka
+kafka:
+  bootstrap_servers: kafka.example.com:9093
+  topics:
+    claim_submitted: claim.submitted
+    claim_adjudicated: claim.adjudicated
