@@ -174,13 +174,24 @@ export function cockpitAdjudicationSql(claimId: string, adjudicationId?: string)
   };
 }
 
-/** Cockpit: the full immutable decision-record trail for one adjudication. */
+/**
+ * Cockpit: the full immutable decision-record trail for one adjudication.
+ *
+ * Also projects the frozen authority-input snapshots the agent persisted alongside the
+ * verdict — `spec_params`, `warranty_terms`, `mtc_measured`, `coil`, `claim_input` (all
+ * already-written JSONB columns, see agent/src/decision_record.py). The cockpit's
+ * read-only "spec vs measured" and warranty-proration detail views render these EXACT
+ * inputs for transparency; they are presented, never recomputed, and the conform/coverage
+ * decision still comes from the persisted `conformance` / `coverage` structs. A record
+ * predating these columns simply returns them null and the detail renders as unavailable.
+ */
 export function cockpitDecisionRecordsSql(adjudicationId: string): Sql {
   return {
     text: `SELECT record_version, deterministic_verdict, deterministic_disposition,
                   recommended_verdict, recommended_disposition, approved_amount,
                   over_claim_flag, duplicate_flag, conformance, coverage, settlement,
-                  duplicate, citations, cited_clause_ids, precedent, advisory_risk,
+                  duplicate, spec_params, warranty_terms, mtc_measured, coil, claim_input,
+                  citations, cited_clause_ids, precedent, advisory_risk,
                   rationale, confidence, invariant_violations, decided_by,
                   override_reason, created_at
              FROM public.adjudication_decision_records
