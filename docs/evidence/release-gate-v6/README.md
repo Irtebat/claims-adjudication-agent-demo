@@ -42,6 +42,6 @@ Runs: v6 exact `8ef313627600444fae6a731545f608db`, v5 exact `988d66f5e6f34ad5b58
 |---|---|---|
 | `84d2b181…` | pilot | every recorded money-safety metric 1.00; verdict/disposition 1.00 |
 | `f8cb1a55…` | LLM judges | `authority_guidelines` 0.47 (diagnostic only); `retrieval_groundedness` 0.0 is a known instrumentation gap — retriever spans carry clause ids, not clause text |
-| `446c092c…` | pilot | FAILED (auth token expiry mid-run); superseded by `84d2b181…` |
+| `446c092c…` | pilot | FAILED; superseded by the rerun `84d2b181…` |
 
 **Honest reading:** verdict agreement with the human-final decision is 0.9467; the capture does not include per-case counts. The gate is relative by design, so v6 cannot ship worse than v5; it does not claim the 0.95 target.
