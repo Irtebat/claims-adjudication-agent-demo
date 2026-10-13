@@ -52,7 +52,8 @@ commit and commands:
 ### Proven by live capture in `fe-bar-ir-2026` (`docs/evidence/live-verification-2026-10-13/`)
 Read-only captures from 2026-10-13 (see that folder's README):
 - **Lakeflow:** the incremental routine refresh (`scripts/refresh.py routine`, no full
-  refresh) completed. Medallion updates `f0857233…` and `002f10ae…` both reached
+  refresh) completed across one run plus a manual resumption of its final two steps
+  after the local runner was interrupted. Medallion updates `f0857233…` and `002f10ae…` both reached
   `COMPLETED` (`routine-refresh.log`).
 - **Genie:** both spaces answer live Conversation API questions with generated SQL
   and result rows. The operational space returns `CLM-DEMO-000006` as FINAL /
