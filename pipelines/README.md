@@ -51,7 +51,9 @@ Column-mask functions in `silver`: `mask_customer`, `mask_money`.
   workspace admins see raw values, other readers get stable hashed identifiers and
   NULL amounts. Bronze carries the same masks and no role is granted bronze or
   volume access. App/agent service-principal grants are real, conditional
-  statements that run only when the principal variables are supplied.
+  statements that run only when the principal variables are supplied. The agent
+  grants target the Lakebase mirror catalog `${mirror_catalog}`, rendered from
+  `settings.yaml` `databricks.mirror_catalog` (default `fe_bar_operational`).
 
 ## Data flow
 
@@ -217,7 +219,11 @@ uv run --with pyyaml python evidence.py
 
 The metric view is committed at `src/metric_views/quality_claims_metrics.sql` and
 executed by the bundle-managed `deploy_metric_views` SQL job because bundles do not
-have a native metric-view resource. Workflow backlog metrics are deliberately
+have a native metric-view resource. Its source is the sibling
+`quality_claims_metrics.sql.tmpl`, which uses `{{ uc.catalog }}` /
+`{{ uc.schemas.gold }}` tokens (the YAML `source:` is a string literal, so the catalog
+cannot be a SQL parameter); the committed `.sql` is the `fe-bar-ir` rendering, and
+`tests/test_env_templates.py` fails if the two drift. Workflow backlog metrics are deliberately
 excluded while settlement, recovery, and investigation operational tables remain
 empty. Synthetic cycle time is exposed but is expected to be nearly flat at two
 days.

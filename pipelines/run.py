@@ -30,14 +30,25 @@ def _job_params(**values):
     return output.getvalue()
 
 
+# Read-only UC mirror of the Lakebase operational plane (settings.yaml
+# databricks.mirror_catalog); the agent-principal grant chain targets it.
+DEFAULT_MIRROR_CATALOG = "fe_bar_operational"
+
+
 def _validate_principal(value):
     if value is not None and not _PRINCIPAL_RE.match(value):
         raise ValueError(f"unsafe principal identifier: {value!r}")
     return value
 
 
-def render_governance(sql_text, catalog, app_principal=None, agent_principal=None):
-    """Substitute ${catalog} and any supplied principals, then split into statements.
+def render_governance(
+    sql_text,
+    catalog,
+    app_principal=None,
+    agent_principal=None,
+    mirror_catalog=DEFAULT_MIRROR_CATALOG,
+):
+    """Substitute ${catalog}, ${mirror_catalog} and any supplied principals, then split.
 
     Returns (executable, skipped): a statement is skipped ONLY when it still contains
     an unresolved ${...} placeholder — i.e. a principal that was genuinely not supplied.
@@ -46,7 +57,7 @@ def render_governance(sql_text, catalog, app_principal=None, agent_principal=Non
     """
     _validate_principal(app_principal)
     _validate_principal(agent_principal)
-    subs = {"${catalog}": catalog}
+    subs = {"${catalog}": catalog, "${mirror_catalog}": mirror_catalog}
     if app_principal:
         subs["${app_principal}"] = app_principal
     if agent_principal:
@@ -112,6 +123,9 @@ def main():
     profile, catalog = db["profile"], db["catalog"]
     if not catalog or "`" in catalog or "/" in catalog:
         raise ValueError("Invalid catalog")
+    mirror_catalog = db.get("mirror_catalog") or DEFAULT_MIRROR_CATALOG
+    if "`" in mirror_catalog or "/" in mirror_catalog:
+        raise ValueError("Invalid mirror_catalog")
     # Source the warranty version schedule from the single authored policy so the
     # generator carries no hardcoded policy numerics (durations, effective windows).
     policy_source = json.loads((ROOT.parent / "lakebase/src/policy_source.json").read_text())
@@ -388,7 +402,11 @@ def main():
             args.agent_principal or os.environ.get("AGENT_PRINCIPAL") or gov.get("agent_principal")
         )
         executable, skipped = render_governance(
-            (ROOT / "governance.sql").read_text(), catalog, app_principal, agent_principal
+            (ROOT / "governance.sql").read_text(),
+            catalog,
+            app_principal,
+            agent_principal,
+            mirror_catalog=mirror_catalog,
         )
         for statement in skipped:
             # Only reached when a principal was genuinely not supplied; the grant SQL is

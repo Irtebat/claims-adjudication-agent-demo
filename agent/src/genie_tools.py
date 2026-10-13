@@ -54,8 +54,16 @@ from typing import Any, Callable
 import mlflow
 
 # The governed Genie Agent. Centralised here (not in agent.py) so the live space
-# wiring lives in one auditable place alongside the tool semantics.
-OPERATIONAL_SPACE_ID = "01f1c269ca3c1adea7feb9f248ab3445"
+# wiring lives in one auditable place alongside the tool semantics. Override with
+# GENIE_OPERATIONAL_SPACE_ID on the endpoint to target another environment's space.
+DEFAULT_OPERATIONAL_SPACE_ID = "01f1c269ca3c1adea7feb9f248ab3445"
+
+
+def _operational_space_id() -> str:
+    return os.environ.get("GENIE_OPERATIONAL_SPACE_ID") or DEFAULT_OPERATIONAL_SPACE_ID
+
+
+OPERATIONAL_SPACE_ID = _operational_space_id()
 
 # Per-call wall-clock bound (seconds); override with GENIE_TIMEOUT_S on the endpoint.
 DEFAULT_TIMEOUT_S = 45.0

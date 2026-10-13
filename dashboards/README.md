@@ -47,4 +47,16 @@ jq -n --argjson serialized_space "$SERIALIZED" '{serialized_space:$serialized_sp
 databricks genie update-space <space-id> --json @/tmp/update-genie.json --profile fe-bar-ir-2026
 ```
 
-The dashboard's `uiSettings.genieSpace.overrideId` links to the deployed space. Change it when importing into another workspace.
+The dashboard's `uiSettings.genieSpace.overrideId` links to the deployed business Genie space.
+
+## Environment templates
+
+Each environment-specific artifact has a `*.tmpl` source next to the committed file. The committed files are the rendered `fe-bar-ir-2026` output, so the commands above work unchanged; for another environment, render the template against that environment's values and use the rendered file instead.
+
+| Template | Tokens |
+|---|---|
+| `genie/genie_space.json.tmpl`, `genie/operational_genie_space.json.tmpl` | `{{ uc.catalog }}`, `{{ uc.schemas.gold }}`, `{{ uc.schemas.silver }}` (table identifiers and sample SQL) |
+| `quality_claims.lvdash.json.tmpl` | `{{ state.genie.business_id }}` (`overrideId` must be a literal; dataset catalog/schema already come from bundle variables) |
+| `../app/app.yaml.tmpl` | `{{ state.dashboard.id }}` (`DATABRICKS_DASHBOARD_ID`; `app.yaml` values cannot reference bundle variables) |
+
+`pipelines/tests/test_env_templates.py` checks that each template has no hardcoded environment literals or ids and that rendering it with today's values reproduces the committed file byte-for-byte.

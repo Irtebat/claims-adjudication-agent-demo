@@ -2,6 +2,7 @@
 databricks:
   profile: fe-bar-ir-2026
   catalog: fe-bar-ir
+  mirror_catalog: fe_bar_operational
   warehouse_name: Serverless Starter Warehouse
   lakebase_database: projects/fe-bar-operational-plane/branches/production/databases/databricks-postgres
   cdf_schema: cdf

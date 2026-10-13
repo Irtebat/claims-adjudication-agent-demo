@@ -1,4 +1,4 @@
--- Render ${catalog} from settings.yaml with run.py govern. No secrets.
+-- Render ${catalog} and ${mirror_catalog} from settings.yaml with run.py govern. No secrets.
 -- Account groups adjuster / metallurgy_analyst are provisioned by run.py.
 -- No users are enrolled automatically. Admins retain engineering visibility.
 CREATE SCHEMA IF NOT EXISTS `${catalog}`.bronze;
@@ -53,25 +53,25 @@ ALTER TABLE `${catalog}`.silver.adjudications_history ALTER COLUMN approved_amou
 --
 -- Agent-principal object->grant chain. The authorities now run IN-PROCESS (pure
 -- authorities.py, no UC functions, no warehouse), and the runtime adapter reads ALL
--- four inputs over the Lakebase psycopg (5432) path, governed through the
--- `fe_bar_operational` catalog. So the chain is entirely on `fe_bar_operational`:
---   USE CATALOG  `fe_bar_operational`
---   USE SCHEMA   `fe_bar_operational`.public
---   SELECT       `fe_bar_operational`.public.spec_params        (fetch_spec_params)
---   SELECT       `fe_bar_operational`.public.warranty_terms     (fetch_warranty_terms)
---   USE SCHEMA   `fe_bar_operational`.reference
---   SELECT       `fe_bar_operational`.reference.heats_coils     (atomic policy attrs + dimensions)
---   SELECT       `fe_bar_operational`.reference.mill_test_certs (fetch_measured: MTC)
+-- four inputs over the Lakebase psycopg (5432) path, governed through the Lakebase
+-- mirror catalog `${mirror_catalog}`. So the chain is entirely on `${mirror_catalog}`:
+--   USE CATALOG  `${mirror_catalog}`
+--   USE SCHEMA   `${mirror_catalog}`.public
+--   SELECT       `${mirror_catalog}`.public.spec_params        (fetch_spec_params)
+--   SELECT       `${mirror_catalog}`.public.warranty_terms     (fetch_warranty_terms)
+--   USE SCHEMA   `${mirror_catalog}`.reference
+--   SELECT       `${mirror_catalog}`.reference.heats_coils     (atomic policy attrs + dimensions)
+--   SELECT       `${mirror_catalog}`.reference.mill_test_certs (fetch_measured: MTC)
 -- No UC-function EXECUTE grants remain (the functions are retired); no UC silver
 -- grant is needed by the agent (it no longer reads UC silver on the decision path).
 GRANT USE CATALOG ON CATALOG `${catalog}` TO `${app_principal}`;
 GRANT USE SCHEMA ON SCHEMA `${catalog}`.gold TO `${app_principal}`;
 GRANT SELECT ON TABLE `${catalog}`.gold.claims_history TO `${app_principal}`;
-GRANT USE CATALOG ON CATALOG `fe_bar_operational` TO `${agent_principal}`;
-GRANT USE SCHEMA ON SCHEMA `fe_bar_operational`.public TO `${agent_principal}`;
-GRANT SELECT ON TABLE `fe_bar_operational`.public.spec_params TO `${agent_principal}`;
-GRANT SELECT ON TABLE `fe_bar_operational`.public.warranty_terms TO `${agent_principal}`;
-GRANT USE SCHEMA ON SCHEMA `fe_bar_operational`.reference TO `${agent_principal}`;
-GRANT SELECT ON TABLE `fe_bar_operational`.reference.heats_coils TO `${agent_principal}`;
-GRANT SELECT ON TABLE `fe_bar_operational`.reference.mill_test_certs TO `${agent_principal}`;
+GRANT USE CATALOG ON CATALOG `${mirror_catalog}` TO `${agent_principal}`;
+GRANT USE SCHEMA ON SCHEMA `${mirror_catalog}`.public TO `${agent_principal}`;
+GRANT SELECT ON TABLE `${mirror_catalog}`.public.spec_params TO `${agent_principal}`;
+GRANT SELECT ON TABLE `${mirror_catalog}`.public.warranty_terms TO `${agent_principal}`;
+GRANT USE SCHEMA ON SCHEMA `${mirror_catalog}`.reference TO `${agent_principal}`;
+GRANT SELECT ON TABLE `${mirror_catalog}`.reference.heats_coils TO `${agent_principal}`;
+GRANT SELECT ON TABLE `${mirror_catalog}`.reference.mill_test_certs TO `${agent_principal}`;
 -- SP unmasking entitlement is intentionally deferred; do not add SPs to human roles.
