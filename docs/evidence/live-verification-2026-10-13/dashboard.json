@@ -1,0 +1,759 @@
+{
+  "purpose": "AI/BI dashboard: deployed definition/status + every dataset query executed live on the SQL warehouse",
+  "profile": "fe-bar-ir-2026",
+  "workspace": "https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com",
+  "captured_at": "2026-10-13T08:31:57+00:00",
+  "capture_tool": "databricks CLI v1.17.0 + psycopg (Lakebase) + urllib (app HTTP)",
+  "steps": [
+    {
+      "label": "lakeview get (draft)",
+      "command": "databricks lakeview get 01f1c269ddc4143aa9bf584f267bd10b --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T08:31:57+00:00",
+      "exit_code": 0,
+      "output": {
+        "create_time": "2026-10-07T16:12:17.360Z",
+        "dashboard_id": "01f1c269ddc4143aa9bf584f267bd10b",
+        "display_name": "Steel Quality Claims Analytics",
+        "etag": "-1629398363",
+        "lifecycle_state": "ACTIVE",
+        "parent_path": "/Users/<user>/.bundle/steel-claims-dashboards/prod/resources",
+        "path": "/Users/<user>/.bundle/steel-claims-dashboards/prod/resources/Steel Quality Claims Analytics.lvdash.json",
+        "update_time": "2026-10-07T16:12:17.545Z",
+        "warehouse_id": "a323b5700ae25d85",
+        "serialized_dashboard_summary": {
+          "datasets": [
+            "executive_kpis",
+            "cycle_time",
+            "quality_pareto",
+            "quarantine",
+            "finance",
+            "supplier",
+            "fraud",
+            "alignment",
+            "citations"
+          ],
+          "pages": [
+            {
+              "name": "executive",
+              "displayName": "Executive COPQ",
+              "widgets": 8
+            },
+            {
+              "name": "quality",
+              "displayName": "Quality / Metallurgy",
+              "widgets": 4
+            },
+            {
+              "name": "finance",
+              "displayName": "Finance / Recovery",
+              "widgets": 3
+            },
+            {
+              "name": "trust",
+              "displayName": "Trust / Ops",
+              "widgets": 4
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "lakeview get-published",
+      "command": "databricks lakeview get-published 01f1c269ddc4143aa9bf584f267bd10b --profile fe-bar-ir-2026 -o json",
+      "timestamp": "2026-10-13T08:31:58+00:00",
+      "exit_code": 0,
+      "output": {
+        "display_name": "Steel Quality Claims Analytics",
+        "embed_credentials": false,
+        "revision_create_time": "2026-10-07T16:12:18.003Z",
+        "warehouse_id": "a323b5700ae25d85"
+      }
+    },
+    {
+      "label": "dataset executive_kpis",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT MEASURE(`Claim Count`) AS claim_count, MEASURE(`Approval Rate`) AS approval_rate, MEASURE(`Denial Rate`) AS denial_rate, MEASURE(`Pend Rate`) AS pend_rate, MEASURE(`Claimed Amount`) AS claimed_amount, MEASURE(`Approved Amount`) AS approved_amount, MEASURE(`In Spec Denial Amount`) AS in_spec_denial_amount, MEASURE(`Warranty Exclusion Denial Amount`) AS warranty_exclusion_denial_amount, MEASURE(`Duplicate Blocked Amount`) AS duplicate_blocked_amount, MEASURE(`Over Claim Reduction Amount`) AS over_claim_reduction_amount FROM quality_claims_metrics ",
+      "timestamp": "2026-10-13T08:32:00+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-8fff-1db1-82be-0da638466cf6",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 1,
+        "columns": [
+          "claim_count",
+          "approval_rate",
+          "denial_rate",
+          "pend_rate",
+          "claimed_amount",
+          "approved_amount",
+          "in_spec_denial_amount",
+          "warranty_exclusion_denial_amount",
+          "duplicate_blocked_amount",
+          "over_claim_reduction_amount"
+        ],
+        "rows": [
+          {
+            "claim_count": "5101",
+            "approval_rate": "0.4971574201137032",
+            "denial_rate": "0.4526563418937463",
+            "pend_rate": "0.05018623799255048",
+            "claimed_amount": "86278451.00",
+            "approved_amount": "39136448.76",
+            "in_spec_denial_amount": "19711064.00",
+            "warranty_exclusion_denial_amount": "15935474.00",
+            "duplicate_blocked_amount": "8620568.00",
+            "over_claim_reduction_amount": "6795228.24"
+          }
+        ]
+      }
+    },
+    {
+      "label": "dataset cycle_time",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT AVG(average_cycle_time_days) AS average_cycle_time_days FROM gold_quality_kpis ",
+      "timestamp": "2026-10-13T08:32:05+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-92e5-131a-9f63-6dca7644e4a1",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 1,
+        "columns": [
+          "average_cycle_time_days"
+        ],
+        "rows": [
+          {
+            "average_cycle_time_days": "2.174166666666667"
+          }
+        ]
+      }
+    },
+    {
+      "label": "dataset quality_pareto",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT failure_mode_code, defect_description, line, grade, coating, SUM(claim_count) AS claims, SUM(affected_tonnage) AS affected_tonnage, SUM(affected_claimed_amount) AS affected_claimed_amount FROM gold_failure_mode_analytics GROUP BY ALL ORDER BY claims DESC LIMIT 20 ",
+      "timestamp": "2026-10-13T08:32:10+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-9642-1dcb-b5f7-1150fbee1b1e",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 9,
+        "columns": [
+          "failure_mode_code",
+          "defect_description",
+          "line",
+          "grade",
+          "coating",
+          "claims",
+          "affected_tonnage",
+          "affected_claimed_amount"
+        ],
+        "rows": [
+          {
+            "failure_mode_code": "MECH_TENSILE",
+            "defect_description": "Mechanical tensile deviation",
+            "line": "LINE-1",
+            "grade": "ASTM A653 CS Type B",
+            "coating": "G90",
+            "claims": "1018",
+            "affected_tonnage": "11200.000",
+            "affected_claimed_amount": "10816620.00"
+          },
+          {
+            "failure_mode_code": "MECH_TENSILE",
+            "defect_description": "Mechanical tensile deviation",
+            "line": "LINE-2",
+            "grade": "ASTM A792 AZ50",
+            "coating": "AZ50",
+            "claims": "1014",
+            "affected_tonnage": "18972.000",
+            "affected_claimed_amount": "18014577.00"
+          },
+          {
+            "failure_mode_code": "MECH_TENSILE",
+            "defect_description": "Mechanical tensile deviation",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "claims": "1013",
+            "affected_tonnage": "26760.000",
+            "affected_claimed_amount": "25201536.00"
+          },
+          {
+            "failure_mode_code": "RED_RUST",
+            "defect_description": "Field corrosion/perforation",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "claims": "431",
+            "affected_tonnage": "10344.000",
+            "affected_claimed_amount": "9533088.00"
+          },
+          {
+            "failure_mode_code": "RED_RUST",
+            "defect_description": "Field corrosion/perforation",
+            "line": "LINE-2",
+            "grade": "ASTM A792 AZ50",
+            "coating": "AZ50",
+            "claims": "430",
+            "affected_tonnage": "7310.000",
+            "affected_claimed_amount": "6745345.00"
+          },
+          {
+            "failure_mode_code": "RED_RUST",
+            "defect_description": "Field corrosion/perforation",
+            "line": "LINE-1",
+            "grade": "ASTM A653 CS Type B",
+            "coating": "G90",
+            "claims": "430",
+            "affected_tonnage": "4300.000",
+            "affected_claimed_amount": "3956700.00"
+          },
+          {
+            "failure_mode_code": "COATING_VOID",
+            "defect_description": "Coating adhesion/voids",
+            "line": "LINE-2",
+            "grade": "ASTM A792 AZ50",
+            "coating": "AZ50",
+            "claims": "255",
+            "affected_tonnage": "4335.000",
+            "affected_claimed_amount": "4002565.00"
+          },
+          {
+            "failure_mode_code": "COATING_VOID",
+            "defect_description": "Coating adhesion/voids",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "claims": "255",
+            "affected_tonnage": "6120.000",
+            "affected_claimed_amount": "5652720.00"
+          },
+          {
+            "failure_mode_code": "COATING_VOID",
+            "defect_description": "Coating adhesion/voids",
+            "line": "LINE-1",
+            "grade": "ASTM A653 CS Type B",
+            "coating": "G90",
+            "claims": "255",
+            "affected_tonnage": "2550.000",
+            "affected_claimed_amount": "2355300.00"
+          }
+        ]
+      }
+    },
+    {
+      "label": "dataset quarantine",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT heat_no, line, grade, coating, failure_mode_code, SUM(claim_count) AS recurrence, SUM(affected_tonnage) AS affected_tonnage, SUM(affected_claimed_amount) AS affected_claimed_amount FROM gold_failure_mode_analytics WHERE quarantine_candidate = true GROUP BY ALL ORDER BY recurrence DESC LIMIT 50 ",
+      "timestamp": "2026-10-13T08:32:15+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-9967-12e4-aa65-4b055c3a946d",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 50,
+        "columns": [
+          "heat_no",
+          "line",
+          "grade",
+          "coating",
+          "failure_mode_code",
+          "recurrence",
+          "affected_tonnage",
+          "affected_claimed_amount"
+        ],
+        "rows": [
+          {
+            "heat_no": "HEAT-000901",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "failure_mode_code": "MECH_TENSILE",
+            "recurrence": "4",
+            "affected_tonnage": "96.000",
+            "affected_claimed_amount": "88944.00"
+          },
+          {
+            "heat_no": "HEAT-000800",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "failure_mode_code": "RED_RUST",
+            "recurrence": "4",
+            "affected_tonnage": "96.000",
+            "affected_claimed_amount": "93840.00"
+          },
+          {
+            "heat_no": "HEAT-000340",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "failure_mode_code": "RED_RUST",
+            "recurrence": "4",
+            "affected_tonnage": "96.000",
+            "affected_claimed_amount": "110064.00"
+          },
+          {
+            "heat_no": "HEAT-000221",
+            "line": "LINE-2",
+            "grade": "ASTM A792 AZ50",
+            "coating": "AZ50",
+            "failure_mode_code": "MECH_TENSILE",
+            "recurrence": "4",
+            "affected_tonnage": "68.000",
+            "affected_claimed_amount": "57902.00"
+          },
+          {
+            "heat_no": "HEAT-000541",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "failure_mode_code": "MECH_TENSILE",
+            "recurrence": "4",
+            "affected_tonnage": "96.000",
+            "affected_claimed_amount": "91344.00"
+          },
+          {
+            "heat_no": "HEAT-000161",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "failure_mode_code": "MECH_TENSILE",
+            "recurrence": "4",
+            "affected_tonnage": "96.000",
+            "affected_claimed_amount": "89520.00"
+          },
+          {
+            "heat_no": "HEAT-000261",
+            "line": "LINE-1",
+            "grade": "ASTM A653 CS Type B",
+            "coating": "G90",
+            "failure_mode_code": "MECH_TENSILE",
+            "recurrence": "4",
+            "affected_tonnage": "40.000",
+            "affected_claimed_amount": "40060.00"
+          },
+          {
+            "heat_no": "HEAT-000681",
+            "line": "LINE-2",
+            "grade": "ASTM A792 AZ50",
+            "coating": "AZ50",
+            "failure_mode_code": "MECH_TENSILE",
+            "recurrence": "4",
+            "affected_tonnage": "68.000",
+            "affected_claimed_amount": "65110.00"
+          },
+          {
+            "heat_no": "HEAT-000400",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "failure_mode_code": "RED_RUST",
+            "recurrence": "4",
+            "affected_tonnage": "96.000",
+            "affected_claimed_amount": "105264.00"
+          },
+          {
+            "heat_no": "HEAT-000281",
+            "line": "LINE-3",
+            "grade": "EN 10346 DX51D+Z275",
+            "coating": "Z275",
+            "failure_mode_code": "MECH_TENSILE",
+            "recurrence": "4",
+            "affected_tonnage": "96.000",
+            "affected_claimed_amount": "79920.00"
+          }
+        ],
+        "rows_trimmed_to": 10
+      }
+    },
+    {
+      "label": "dataset finance",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT `Disposition` AS disposition, `Product` AS product, `Region` AS region, MEASURE(`Approved Amount`) AS approved_amount FROM quality_claims_metrics GROUP BY ALL ORDER BY approved_amount DESC ",
+      "timestamp": "2026-10-13T08:32:19+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-9b92-17c0-972b-9d0d57333f22",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 36,
+        "columns": [
+          "disposition",
+          "product",
+          "region",
+          "approved_amount"
+        ],
+        "rows": [
+          {
+            "disposition": "CREDIT",
+            "product": "prepainted",
+            "region": "NA",
+            "approved_amount": "5558473.86"
+          },
+          {
+            "disposition": "REWORK",
+            "product": "prepainted",
+            "region": "NA",
+            "approved_amount": "4564000.00"
+          },
+          {
+            "disposition": "REPLACEMENT",
+            "product": "prepainted",
+            "region": "NA",
+            "approved_amount": "4089984.00"
+          },
+          {
+            "disposition": "CREDIT",
+            "product": "galvalume",
+            "region": "NA",
+            "approved_amount": "3956463.83"
+          },
+          {
+            "disposition": "REWORK",
+            "product": "galvalume",
+            "region": "NA",
+            "approved_amount": "3253177.00"
+          },
+          {
+            "disposition": "REPLACEMENT",
+            "product": "galvalume",
+            "region": "NA",
+            "approved_amount": "2893383.00"
+          },
+          {
+            "disposition": "CREDIT",
+            "product": "galvanized",
+            "region": "NA",
+            "approved_amount": "2318453.88"
+          },
+          {
+            "disposition": "REWORK",
+            "product": "galvanized",
+            "region": "NA",
+            "approved_amount": "1954190.00"
+          },
+          {
+            "disposition": "REPLACEMENT",
+            "product": "galvanized",
+            "region": "NA",
+            "approved_amount": "1688350.00"
+          },
+          {
+            "disposition": "CREDIT",
+            "product": "prepainted",
+            "region": "EU",
+            "approved_amount": "1563613.34"
+          }
+        ],
+        "rows_trimmed_to": 10
+      }
+    },
+    {
+      "label": "dataset supplier",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT COALESCE(NULLIF(supplier, ''), 'Unassigned') AS supplier, SUM(supplier_attributable_amount) AS supplier_attributable_amount, SUM(supplier_attributable_count) AS claim_count FROM gold_supplier_recovery_analytics GROUP BY 1 ORDER BY supplier_attributable_amount DESC ",
+      "timestamp": "2026-10-13T08:32:23+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-9d9a-1952-840f-ef3688caac8c",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 2,
+        "columns": [
+          "supplier",
+          "supplier_attributable_amount",
+          "claim_count"
+        ],
+        "rows": [
+          {
+            "supplier": "Bowman-Bradshaw",
+            "supplier_attributable_amount": "11775285.00",
+            "claim_count": "750"
+          },
+          {
+            "supplier": "Unassigned",
+            "supplier_attributable_amount": "362524.00",
+            "claim_count": "61"
+          }
+        ]
+      }
+    },
+    {
+      "label": "dataset fraud",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT cluster_id, customer_name, heat_no, SUM(risky_claim_count) AS risky_claims, SUM(risky_claimed_amount) AS risky_claimed_amount, MAX(customer_heat_risk_score) AS risk_score FROM gold_fraud_cluster_analytics GROUP BY ALL ORDER BY risky_claimed_amount DESC LIMIT 30 ",
+      "timestamp": "2026-10-13T08:32:28+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-a09b-1971-b238-8cde197a0005",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 30,
+        "columns": [
+          "cluster_id",
+          "customer_name",
+          "heat_no",
+          "risky_claims",
+          "risky_claimed_amount",
+          "risk_score"
+        ],
+        "rows": [
+          {
+            "cluster_id": "CLM-0000005",
+            "customer_name": "Huber Group",
+            "heat_no": "HEAT-000001",
+            "risky_claims": "4",
+            "risky_claimed_amount": "86208.00",
+            "risk_score": "1.0"
+          },
+          {
+            "cluster_id": "CLM-0000000",
+            "customer_name": "Ford-Price",
+            "heat_no": "HEAT-000000",
+            "risky_claims": "5",
+            "risky_claimed_amount": "85440.00",
+            "risk_score": "1.0"
+          },
+          {
+            "cluster_id": "CLM-0000065",
+            "customer_name": "Russell LLC",
+            "heat_no": "HEAT-000013",
+            "risky_claims": "2",
+            "risky_claimed_amount": "78057.60",
+            "risk_score": "0.75"
+          },
+          {
+            "cluster_id": "CLM-0000005",
+            "customer_name": "Gaines PLC",
+            "heat_no": "HEAT-000001",
+            "risky_claims": "4",
+            "risky_claimed_amount": "77280.00",
+            "risk_score": "1.0"
+          },
+          {
+            "cluster_id": "CLM-0000065",
+            "customer_name": "Vaughn Ltd",
+            "heat_no": "HEAT-000013",
+            "risky_claims": "2",
+            "risky_claimed_amount": "71808.00",
+            "risk_score": "0.75"
+          },
+          {
+            "cluster_id": "CLM-0000075",
+            "customer_name": "Meyer-Thompson",
+            "heat_no": "HEAT-000015",
+            "risky_claims": "2",
+            "risky_claimed_amount": "59846.40",
+            "risk_score": "0.75"
+          },
+          {
+            "cluster_id": "CLM-0000070",
+            "customer_name": "Foley-Diaz",
+            "heat_no": "HEAT-000014",
+            "risky_claims": "2",
+            "risky_claimed_amount": "59292.00",
+            "risk_score": "0.75"
+          },
+          {
+            "cluster_id": "CLM-0000005",
+            "customer_name": "Harris, Jackson and Hebert",
+            "heat_no": "HEAT-000001",
+            "risky_claims": "4",
+            "risky_claimed_amount": "58956.00",
+            "risk_score": "1.0"
+          },
+          {
+            "cluster_id": "CLM-0001505",
+            "customer_name": "Owens, Norris and Bryan",
+            "heat_no": "HEAT-000301",
+            "risky_claims": "2",
+            "risky_claimed_amount": "57504.00",
+            "risk_score": "0.75"
+          },
+          {
+            "cluster_id": "CLM-0004805",
+            "customer_name": "Duran, Cortez and Gibson",
+            "heat_no": "HEAT-000961",
+            "risky_claims": "2",
+            "risky_claimed_amount": "57504.00",
+            "risk_score": "0.75"
+          }
+        ],
+        "rows_trimmed_to": 10
+      }
+    },
+    {
+      "label": "dataset alignment",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT SUM(adjudication_count) AS adjudications, SUM(verdict_agreement_count) / NULLIF(SUM(adjudication_count), 0) AS verdict_agreement_rate, SUM(override_rate * adjudication_count) / NULLIF(SUM(adjudication_count), 0) AS override_rate FROM gold_agent_human_alignment ",
+      "timestamp": "2026-10-13T08:32:31+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-a2d1-187e-a3a6-19ecdc16f2d6",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 1,
+        "columns": [
+          "adjudications",
+          "verdict_agreement_rate",
+          "override_rate"
+        ],
+        "rows": [
+          {
+            "adjudications": "5101",
+            "verdict_agreement_rate": "0.9988237600470496",
+            "override_rate": "0.001176239952950402"
+          }
+        ]
+      }
+    },
+    {
+      "label": "dataset citations",
+      "command": "databricks api post /api/2.0/sql/statements --profile fe-bar-ir-2026 (warehouse_id=a323b5700ae25d85, catalog=fe-bar-ir, schema=gold)",
+      "statement": "SELECT SUM(decision_record_count) AS decision_records, SUM(citation_coverage * decision_record_count) / NULLIF(SUM(decision_record_count), 0) AS citation_coverage FROM gold_retrieval_citation_kpis ",
+      "timestamp": "2026-10-13T08:32:35+00:00",
+      "exit_code": 0,
+      "output": {
+        "statement_id": "01f1c6e0-a52b-1cc7-a60e-6f4c62a5feb7",
+        "state": "SUCCEEDED",
+        "error": null,
+        "total_row_count": 1,
+        "columns": [
+          "decision_records",
+          "citation_coverage"
+        ],
+        "rows": [
+          {
+            "decision_records": "101",
+            "citation_coverage": "0.3465346534653465"
+          }
+        ]
+      }
+    }
+  ],
+  "dashboard_id_source": "databricks lakeview list (display_name 'Steel Quality Claims Analytics', bundle dashboards/databricks.yml)",
+  "completed_at": "2026-10-13T08:32:39+00:00",
+  "summary": [
+    {
+      "dataset": "executive_kpis",
+      "displayName": "Governed executive KPIs",
+      "state": "SUCCEEDED",
+      "row_count": 1,
+      "first_row": {
+        "claim_count": "5101",
+        "approval_rate": "0.4971574201137032",
+        "denial_rate": "0.4526563418937463",
+        "pend_rate": "0.05018623799255048",
+        "claimed_amount": "86278451.00",
+        "approved_amount": "39136448.76",
+        "in_spec_denial_amount": "19711064.00",
+        "warranty_exclusion_denial_amount": "15935474.00",
+        "duplicate_blocked_amount": "8620568.00",
+        "over_claim_reduction_amount": "6795228.24"
+      }
+    },
+    {
+      "dataset": "cycle_time",
+      "displayName": "Cycle time",
+      "state": "SUCCEEDED",
+      "row_count": 1,
+      "first_row": {
+        "average_cycle_time_days": "2.174166666666667"
+      }
+    },
+    {
+      "dataset": "quality_pareto",
+      "displayName": "Failure mode Pareto",
+      "state": "SUCCEEDED",
+      "row_count": 9,
+      "first_row": {
+        "failure_mode_code": "MECH_TENSILE",
+        "defect_description": "Mechanical tensile deviation",
+        "line": "LINE-1",
+        "grade": "ASTM A653 CS Type B",
+        "coating": "G90",
+        "claims": "1018",
+        "affected_tonnage": "11200.000",
+        "affected_claimed_amount": "10816620.00"
+      }
+    },
+    {
+      "dataset": "quarantine",
+      "displayName": "Quarantine candidates",
+      "state": "SUCCEEDED",
+      "row_count": 50,
+      "first_row": {
+        "heat_no": "HEAT-000901",
+        "line": "LINE-3",
+        "grade": "EN 10346 DX51D+Z275",
+        "coating": "Z275",
+        "failure_mode_code": "MECH_TENSILE",
+        "recurrence": "4",
+        "affected_tonnage": "96.000",
+        "affected_claimed_amount": "88944.00"
+      }
+    },
+    {
+      "dataset": "finance",
+      "displayName": "Approved value by disposition",
+      "state": "SUCCEEDED",
+      "row_count": 36,
+      "first_row": {
+        "disposition": "CREDIT",
+        "product": "prepainted",
+        "region": "NA",
+        "approved_amount": "5558473.86"
+      }
+    },
+    {
+      "dataset": "supplier",
+      "displayName": "Supplier attributable recovery opportunity",
+      "state": "SUCCEEDED",
+      "row_count": 2,
+      "first_row": {
+        "supplier": "Bowman-Bradshaw",
+        "supplier_attributable_amount": "11775285.00",
+        "claim_count": "750"
+      }
+    },
+    {
+      "dataset": "fraud",
+      "displayName": "Fraud cluster risk",
+      "state": "SUCCEEDED",
+      "row_count": 30,
+      "first_row": {
+        "cluster_id": "CLM-0000005",
+        "customer_name": "Huber Group",
+        "heat_no": "HEAT-000001",
+        "risky_claims": "4",
+        "risky_claimed_amount": "86208.00",
+        "risk_score": "1.0"
+      }
+    },
+    {
+      "dataset": "alignment",
+      "displayName": "Agent-human alignment subset",
+      "state": "SUCCEEDED",
+      "row_count": 1,
+      "first_row": {
+        "adjudications": "5101",
+        "verdict_agreement_rate": "0.9988237600470496",
+        "override_rate": "0.001176239952950402"
+      }
+    },
+    {
+      "dataset": "citations",
+      "displayName": "Citation coverage subset",
+      "state": "SUCCEEDED",
+      "row_count": 1,
+      "first_row": {
+        "decision_records": "101",
+        "citation_coverage": "0.3465346534653465"
+      }
+    }
+  ]
+}

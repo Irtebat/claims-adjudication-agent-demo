@@ -14,6 +14,22 @@ PEND-INVESTIGATE, with a disposition, an approved amount, and cited clauses.
 > the docs and `docs/evidence/` are results of synthetic demo runs, not production
 > outcomes.
 
+## Stage → execution evidence
+
+Committed raw captures from real runs (text only). Fresh live captures are in
+[`docs/evidence/live-verification-2026-10-13/`](docs/evidence/live-verification-2026-10-13/).
+
+| Stage | Execution evidence |
+| --- | --- |
+| Lakeflow | [`routine-refresh.log`](docs/evidence/live-verification-2026-10-13/routine-refresh.log) (incremental routine refresh) · [`lakebase-and-pipeline.json`](docs/evidence/live-verification-2026-10-13/lakebase-and-pipeline.json) (pipeline updates, cdf/silver/gold counts) · [`synthetic-data/`](docs/evidence/synthetic-data/) · [`cdf-incremental-history/`](docs/evidence/cdf-incremental-history/) |
+| Unity Catalog | [`synthetic-data/`](docs/evidence/synthetic-data/) (grants, masks, integrity) · [`dashboard.json`](docs/evidence/live-verification-2026-10-13/dashboard.json) (governed metric view + gold datasets on the warehouse) |
+| Lakebase | [`lakebase-and-pipeline.json`](docs/evidence/live-verification-2026-10-13/lakebase-and-pipeline.json) (live row counts, synced-table states) · [`lakebase-serve-down/`](docs/evidence/lakebase-serve-down/) |
+| ML / GenAI | [`serving.json`](docs/evidence/live-verification-2026-10-13/serving.json) (live endpoint + `persist=false` invocation) · [`claims-adjudication-agent/`](docs/evidence/claims-adjudication-agent/) · [`ablation-eval/`](docs/evidence/ablation-eval/) |
+| Genie | [`genie.json`](docs/evidence/live-verification-2026-10-13/genie.json) (both spaces: questions, generated SQL, result rows) |
+| App | [`app.json`](docs/evidence/live-verification-2026-10-13/app.json) (deployment status + authenticated API smoke) |
+
+One claim (`CLM-DEMO-000006`) traced across every stage, from Lakebase through CDF, silver/gold and Genie to the app: [`e2e-trace.json`](docs/evidence/live-verification-2026-10-13/e2e-trace.json).
+
 ## Design principle
 
 Decisions that move money are made by **deterministic, auditable code** —
@@ -125,11 +141,10 @@ and `scripts/refresh.py routine|demo` composes the refreshes (see `scripts/READM
 
 ## Current state and verification
 
-See **`docs/CURRENT-STATE.md`** for what is implemented, what is verified by committed
-(synthetic) evidence, and what is code-complete but not live-verified in the current
-workspace. In short: the system is implemented end-to-end **in code**; committed
-evidence is point-in-time synthetic-demo capture, not continuous production
-monitoring.
+See **`docs/CURRENT-STATE.md`** for what is implemented and what each piece of
+committed evidence verifies, including the 2026-10-13 live capture of every stage
+and the remaining known limitations. Committed evidence is point-in-time synthetic-demo
+capture, not continuous production monitoring.
 
 ## Known limitations
 
