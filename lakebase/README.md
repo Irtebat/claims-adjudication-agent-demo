@@ -22,7 +22,7 @@ Native Postgres tables in schema `public`:
 
 | Group | Tables | Notes |
 | --- | --- | --- |
-| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite). The pending/retry queue is deferred to the future services layer. |
+| Operational (OLTP) | `claims`, `adjudications`, `outbox`, `settlements`, `investigation_cases`, `supplier_recovery_cases` | Primary key + `REPLICA IDENTITY FULL` (CDF prerequisite). |
 | Decision record (created by `src/setup_and_seed.py`) | `adjudication_decision_records` | Append-only canonical record per adjudication, PK `(adjudication_id, record_version)`, JSONB payload, `REPLICA IDENTITY FULL`; UPDATE/DELETE revoked (immutability by access) |
 | Policy (created by `agent/` intake) | `spec_params`, `spec_clauses`, `warranty_terms`, `warranty_clauses` | Natural-key policy params + citable clauses |
 
@@ -81,8 +81,8 @@ Secret scope `fe-bar-lakebase` — keys `database`, `endpoint`, `host`, `port`,
   The re-grant applies `SELECT` on the `reference.*` synced tables to the documented
   consumers — the app SP and the serving SP (`claims-adjudication-serving`) — so a
   create/recreate is reproducible without a manual `GRANT` (the app-SP losing SELECT
-  on `reference.customer_heat_risk` once 500'd the cockpit). Override the SP ids via
-  `APP_SP_PRINCIPAL` / `SERVING_SP_PRINCIPAL` if they are rotated.
+  on `reference.customer_heat_risk` once 500'd the cockpit). Both SP ids come from
+  `APP_SP_PRINCIPAL` / `SERVING_SP_PRINCIPAL`; there is no default.
 - The one-time seed tags every synthetic row with
   `data_provenance = 'synthetic_reference_baseline'` and is idempotent; it must not be
   rerun after CDF is active (use `scripts/bootstrap.py`, or `lakebase/run.py
@@ -160,32 +160,84 @@ non-bundle step:
   (when it created a table) and recreate re-grant; re-sync never does.
 
 Because these guards protect money-adjacent SCD2 history, run the wrapper rather
-than the raw bundle for these actions. Plain bundle operations are not wrapped; run
-them directly from `lakebase/`:
+than the raw bundle for these actions. The wrappers always use
+`-t prod --profile fe-bar-ir-2026`; the underlying bundle job key is
+`setup_and_seed`.
+
+## Prerequisites
+
+- The pipelines bundle deployed and `pipelines/run.py generate` run (the seed reads
+  the raw landing Parquet); `scripts/bootstrap.py` does both.
+- Lakebase Search enabled in the workspace (the `lakebase_bm25` / `lakebase_ann`
+  indexes need it).
+- For synced-table create/recreate: the app and serving service principals exist
+  (`app/README.md`, `agent/README.md`), and their ids are exported — the re-grant has
+  no default ids and fails before any GRANT if either is missing:
+
+  ```bash
+  export APP_SP_PRINCIPAL=<app-sp-id> SERVING_SP_PRINCIPAL=<serving-sp-app-id>
+  ```
+
+## Deploy
+
+Working directory: `lakebase/`.
 
 ```bash
 databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
 databricks bundle deploy -t prod --profile fe-bar-ir-2026
 ```
 
-Guarded and non-bundle actions:
+## Run
+
+Working directory: repository root. See `docs/RUNBOOK.md` for when each is
+triggered.
 
 ```bash
+# Fresh workspace only (setup-and-seed already runs the policy intake)
 uv run --with pyyaml python lakebase/run.py setup-and-seed  # guarded: reseed guard + seed + policy intake
-uv run --with pyyaml python lakebase/run.py policy-intake   # non-bundle psycopg policy load
 uv run --with pyyaml python lakebase/run.py create-cdf      # guarded: create CDF + poll to STREAMING
 uv run --with pyyaml python lakebase/run.py synced-tables   # create missing synced tables (+ indexes, re-grant if any created)
-uv run --with pyyaml python lakebase/run.py resync-synced-tables                       # routine: customer_heat_risk + prior_claims_corpus
+
+# After editing src/policy_source.json
+uv run --with pyyaml python lakebase/run.py policy-intake
+
+# Routine (scripts/refresh.py runs this): customer_heat_risk + prior_claims_corpus
+uv run --with pyyaml python lakebase/run.py resync-synced-tables
 uv run --with pyyaml python lakebase/run.py resync-synced-tables --tables heats_coils  # any subset
-uv run --with pyyaml python lakebase/run.py recreate-synced-table --table <name>      # schema change only
 ```
 
-See `docs/RUNBOOK.md` for when each is triggered.
+Schema change only — this deletes the synced table and drops the Postgres table,
+its indexes, and grants before re-creating them; never use it for bootstrap or
+routine refresh:
 
-The wrappers always use `-t prod --profile fe-bar-ir-2026`. The underlying bundle job key
-is `setup_and_seed`; `lakebase/scripts/synced_tables.py` is the direct alternative
-to the synced-table actions. `setup-and-seed` refuses before its own
-Lakebase bundle deploy or seed if native CDF already exists. When run through
-`scripts/bootstrap.py`, the pipelines deploy and `generate` steps have already run
-by the time this guard is checked (see `scripts/README.md`).
-The pending/retry queue remains a future services-layer responsibility.
+```bash
+uv run --with pyyaml python lakebase/run.py recreate-synced-table --table <name>
+```
+
+Create and recreate poll until `SYNCED_TABLE_ONLINE*`; a failure or timeout stops
+before indexes and grants. To re-apply only the `reference.*` SELECTs:
+
+```bash
+uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
+  python lakebase/scripts/regrant_synced_table_selects.py --profile fe-bar-ir-2026 \
+  --app-principal <app-sp-id> --serving-principal <serving-sp-app-id>
+```
+
+`--allow-single-principal` grants only the principal(s) supplied.
+
+## Verify
+
+Read-only:
+
+```bash
+databricks postgres get-synced-table synced_tables/fe_bar_operational.reference.prior_claims_corpus \
+  --profile fe-bar-ir-2026 -o json | jq '.status.detailed_state'
+databricks pipelines list-pipelines --profile fe-bar-ir-2026 -o json \
+  | jq -r '.[] | select(.name | startswith("Synced table:")) | [.name, .state] | @tsv'
+databricks psql --project fe-bar-operational-plane --profile fe-bar-ir-2026 -- -d databricks_postgres \
+  -c "SELECT count(*) FROM reference.prior_claims_corpus"
+```
+
+Expected: each of the seven synced tables (repeat `get-synced-table` with
+`synced_tables/fe_bar_operational.reference.<name>`) reports a
+`SYNCED_TABLE_ONLINE*` state, and their sync pipelines are `IDLE`.

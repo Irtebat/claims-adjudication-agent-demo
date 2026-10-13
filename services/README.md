@@ -63,7 +63,7 @@ compute is **scheduled serverless** (cheapest); every streaming job documents a
 
 | Job | File | What it does |
 |-----|------|--------------|
-| `fe-bar-services-migrate`   | `src/migrate.py`   | Grants the app SP the outbox/settlements/investigation/supplier-recovery privileges this layer needs (and retires a legacy `public.claims_pending` queue if present — a no-op on a fresh setup). Run once. |
+| `fe-bar-services-migrate`   | `src/migrate.py`   | Grants the serving SP (`sp_role`) the outbox/settlements/investigation/supplier-recovery privileges this layer needs (and retires a legacy `public.claims_pending` queue if present — a no-op on a fresh setup). Run once. |
 | `fe-bar-services-producer`  | `src/producer.py`  | Spark structured streaming, `availableNow`. CDF inserts on `fe-bar-ir.cdf.lb_claims_history` → `claim.submitted`. Checkpointed; initial snapshot replays the ~5000 seeded claims once, then only new claims stream. |
 | `fe-bar-services-worker`    | `src/worker.py`    | Consumes `claim.submitted`; skips claims that already have a human decision (`decision_status` FINAL or REVIEWED) or an `agent_recommendation` adjudication; otherwise invokes the endpoint with `persist=true`, which writes a RECOMMENDED adjudication + decision record (no outbox row). |
 | `fe-bar-services-relay`     | `src/relay.py`     | Polls unpublished `outbox` rows (written only by App finalization), publishes `claim.adjudicated`, sets `published_at` only after the broker acks. Idle until an adjuster finalizes. |
@@ -123,55 +123,99 @@ at every stage, keyed on stable, deterministic ids:
 
 ## Auth model
 
-Jobs read Kafka creds from secret scope `fe-bar-aiven-kafka` and the app-SP
-creds from scope `claims-agent`, then authenticate to the endpoint **and** Lakebase
+Jobs read Kafka creds from secret scope `fe-bar-aiven-kafka` and the serving
+service principal's OAuth creds (`app-sp-client-id` / `app-sp-client-secret`) from
+scope `claims-agent`, then authenticate to the endpoint **and** Lakebase
 **as that service principal** (mirrors `agent/src/db.py` + `workspace_client.py`).
 The SP therefore carries the grants that gate every write (see `src/migrate.py`).
 No secret is ever inlined or committed.
 
-## Deploy & run
+## Prerequisites
 
-**User prerequisites (one-time):**
+- The serving endpoint and the `claims-agent` scope (`app-sp-client-id`,
+  `app-sp-client-secret`, `lakebase-db-user`) exist — both come from
+  `agent/scripts/setup_serving_sp.py` (see `agent/README.md`).
+- Scope `fe-bar-aiven-kafka` holds the four keys `src/config.py` reads
+  (`KAFKA_KEYS`). Values come from the Aiven console; never commit them. Scope
+  creation and secret writes are mutating — run them deliberately:
 
-1. **Populate the Kafka secret scope** — the Aiven MCP connector redacts all secret
-   material, so these must be set by a human from the Aiven console:
-   ```bash
-   databricks secrets put-secret fe-bar-aiven-kafka bootstrap-servers --profile fe-bar-ir-2026 \
-     --string-value 'fe-bar-kafka-kafka-dbx-pipeline-001.i.aivencloud.com:25358'
-   databricks secrets put-secret fe-bar-aiven-kafka sasl-username --profile fe-bar-ir-2026   # Aiven "avnadmin"
-   databricks secrets put-secret fe-bar-aiven-kafka sasl-password --profile fe-bar-ir-2026   # Aiven SASL password
-   databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem   --profile fe-bar-ir-2026    # Aiven CA cert (PEM)
-   ```
-2. The `claims-agent` scope (`app-sp-client-id`, `app-sp-client-secret`,
-   `lakebase-db-user`) and the serving endpoint must already exist (they do).
+  ```bash
+  databricks secrets create-scope fe-bar-aiven-kafka --profile fe-bar-ir-2026
+  databricks secrets put-secret fe-bar-aiven-kafka bootstrap-servers --profile fe-bar-ir-2026  # host:port
+  databricks secrets put-secret fe-bar-aiven-kafka sasl-username     --profile fe-bar-ir-2026
+  databricks secrets put-secret fe-bar-aiven-kafka sasl-password     --profile fe-bar-ir-2026
+  databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem        --profile fe-bar-ir-2026 < ca.pem
+  ```
 
-**Deploy the bundle:**
+  Without `--string-value`, `put-secret` prompts for a single-line value, so it
+  stays out of shell history; the multi-line CA certificate is piped on stdin. The non-secret bootstrap address is recorded in
+  `config/envs/fe-bar-ir-2026.yaml` (`kafka.bootstrap_servers`).
+
+## Deploy
+
+Working directory: `services/`.
+
 ```bash
-cd services
 databricks bundle validate --strict -t prod --profile fe-bar-ir-2026
 databricks bundle deploy   -t prod --profile fe-bar-ir-2026
+databricks bundle run migrate -t prod --profile fe-bar-ir-2026   # once: grants + retire legacy queue
 ```
 
-**Run (order matters the first time):**
+`migrate` grants the serving service principal (bundle variable `sp_role`, its
+application UUID) the outbox, settlements, investigation, and supplier-recovery
+privileges; override with `--var sp_role=<serving-sp-app-id>` if it is rotated.
+
+**Schedules.** Producer, worker, relay, and consumers are authored with an hourly
+`trigger.periodic` and `pause_status: UNPAUSED`. Until all four Kafka keys exist,
+every scheduled run fails at Kafka client setup. Pause or unpause a job by updating
+its trigger (keep the full periodic block):
+
 ```bash
-databricks bundle run migrate  -t prod --profile fe-bar-ir-2026   # grants (+ retire legacy queue if present) (once)
-databricks bundle run producer -t prod --profile fe-bar-ir-2026   # CDF inserts -> claim.submitted
-databricks bundle run worker   -t prod --profile fe-bar-ir-2026   # RECOMMENDED adjudications (persist=true)
-# ... an adjuster finalizes claims in the App, which writes the outbox rows ...
-databricks bundle run relay    -t prod --profile fe-bar-ir-2026   # outbox -> claim.adjudicated
-databricks bundle run consumers -t prod --profile fe-bar-ir-2026  # fan-out (4 parallel tasks)
+databricks jobs list --name fe-bar-services-worker --profile fe-bar-ir-2026 -o json   # find <job-id>
+databricks jobs update <job-id> --profile fe-bar-ir-2026 --json \
+  '{"new_settings":{"trigger":{"pause_status":"PAUSED","periodic":{"interval":1,"unit":"HOURS"}}}}'
 ```
 
-**Schedules.** The producer, worker, relay, and consumers jobs deploy with an hourly
-periodic trigger. Until the four `fe-bar-aiven-kafka` secrets above exist, every
-scheduled run fails at Kafka client setup; that is expected and stops once the scope
-is populated. Pause the triggers if the failures are unwanted before then. See
-`docs/RUNBOOK.md` (event backbone run order).
+Use `"UNPAUSED"` to resume; the Jobs UI toggle is equivalent. **The next
+`bundle deploy` reapplies the bundle definition and resets all four triggers to
+`UNPAUSED`** — re-pause after deploying if needed.
 
 **Live-demo (continuous) mode:** flip each streaming job's trigger to `continuous`
 and adjust the notebook trigger / poll settings as documented at the bottom of
 `resources/producer.yml`, `worker.yml`, `relay.yml`, and `consumers.yml`, then
 re-deploy. Scheduled serverless remains the default for cost.
+
+## Run
+
+The schedules drive the backbone once deployed. To drive it by hand, in order
+(working directory `services/`):
+
+```bash
+databricks bundle run producer  -t prod --profile fe-bar-ir-2026   # CDF inserts -> claim.submitted
+databricks bundle run worker    -t prod --profile fe-bar-ir-2026   # RECOMMENDED adjudications (persist=true)
+# ... an adjuster finalizes claims in the App, which writes the outbox rows ...
+databricks bundle run relay     -t prod --profile fe-bar-ir-2026   # outbox -> claim.adjudicated
+databricks bundle run consumers -t prod --profile fe-bar-ir-2026   # fan-out (4 parallel tasks)
+```
+
+See `docs/RUNBOOK.md` (event backbone).
+
+## Verify
+
+Read-only:
+
+```bash
+databricks secrets list-secrets fe-bar-aiven-kafka --profile fe-bar-ir-2026 -o json   # key names only
+databricks secrets list-secrets claims-agent --profile fe-bar-ir-2026 -o json
+databricks jobs list --profile fe-bar-ir-2026 -o json \
+  | jq -r '.[] | select(.settings.name | startswith("fe-bar-services-")) | [.job_id, .settings.name, (.settings.trigger.pause_status // "-")] | @tsv'
+```
+
+Expected: the four Kafka keys and three `claims-agent` keys are listed (values are
+never returned); five `fe-bar-services-*` jobs exist, and the four scheduled ones
+show the intended pause state. Inspect a run with
+`databricks jobs list-runs --job-id <job-id> --limit 5 --profile fe-bar-ir-2026 -o json`.
+An idle relay/consumers run (no finalized claims yet) is expected.
 
 ## Tests
 

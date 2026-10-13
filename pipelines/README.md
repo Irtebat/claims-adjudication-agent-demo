@@ -95,12 +95,18 @@ Two mechanisms only (see the repo-root README):
   with extra orchestration (parameter injection, dynamic CDF-table resolution, group
   creation). Plain `bundle validate`/`deploy`/`summary` are run directly (below).
 
-## Deploy and run on the workspace
+## Prerequisites
 
-Requires an authenticated Databricks CLI (>= 1.0), `uv`, an accessible UC managed
-storage root, and permission to create schemas, volumes, and account groups. All
-compute is serverless; there is no schedule. The guarded end-to-end path, from the
-repository root:
+- Databricks CLI >= 1.17 authenticated as `fe-bar-ir-2026`, and `uv`.
+- Catalog `fe-bar-ir` on an accessible managed storage root (`uc.*` in
+  `config/envs/fe-bar-ir-2026.yaml`), and permission to create schemas, volumes,
+  and account groups.
+- Lakebase native CDF enabled for `refresh` (`run.py preview-status` probes it).
+
+## Deploy
+
+All compute is serverless; there is no schedule. The guarded end-to-end path, from
+the repository root:
 
 ```bash
 uv run --with pyyaml python scripts/bootstrap.py
@@ -114,7 +120,10 @@ databricks bundle deploy            --target prod --profile fe-bar-ir-2026
 databricks bundle summary           --target prod --profile fe-bar-ir-2026
 ```
 
-**`run.py` actions** (DABs job run plus the orchestration each needs):
+## Run
+
+`run.py` actions (DABs job run plus the orchestration each needs), from the
+repository root:
 
 ```bash
 uv run --with pyyaml python pipelines/run.py generate         # bundle run generate_raw + inject warranty schedule
@@ -231,6 +240,22 @@ days.
 Follow-ups are to fix reference-dimension replay duplication at its silver root
 (using the heats/coils natural-key pattern) and seed downstream operational events
 before adding settlement, recovery, or investigation backlog KPIs.
+
+## Verify
+
+Read-only:
+
+```bash
+databricks pipelines list-pipelines --filter "name LIKE 'steel-claims'" --profile fe-bar-ir-2026 -o json \
+  | jq -r '.[] | [.name, .state, .latest_updates[0].state] | @tsv'
+databricks tables list fe-bar-ir gold --profile fe-bar-ir-2026 -o json | jq -r '.[] | [.name, .table_type] | @tsv'
+databricks tables list fe-bar-ir cdf --profile fe-bar-ir-2026 -o json | jq -r '.[].name'
+```
+
+Expected: pipeline `steel-claims` is `IDLE` with latest update `COMPLETED`; `gold`
+lists the views, materialized views, decision-record streaming table, and the
+`quality_claims_metrics` metric view in the table above; `cdf` lists the
+`lb_*_history` landing tables.
 
 ## Development checks
 

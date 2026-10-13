@@ -145,9 +145,59 @@ legitimate direct-`uv run python` exception**:
   (`scripts/refresh.py routine`, see `docs/RUNBOOK.md`) runs `fraud_graph` and
   `prior_claims_corpus` in order and then re-syncs their Lakebase synced tables.
 
-## Release and deployment
+## Prerequisites
 
-Use the `fe-bar-ir-2026` workspace profile for every command. The release order is fixed:
+- The governed Unity Gateway model services
+  `fe-bar-ir.adjudication-agent.adjudication-reasoning` and
+  `fe-bar-ir.adjudication-agent.embedding` exist (recorded in
+  `config/envs/fe-bar-ir-2026.yaml` under `models`). The agent calls only these
+  services (`src/gateway_chat.py`, `src/gateway_embed.py`), never a foundation-model
+  endpoint directly.
+- Lakebase seeded, the policy tables loaded, and the `reference.*` synced tables
+  ONLINE (`lakebase/README.md`) before the agent is deployed.
+- The serving service principal, provisioned once by a workspace administrator with
+  `agent/scripts/setup_serving_sp.py`. Pass `--profile` explicitly (the script's
+  default is not this workspace); `--account-profile` is required for the account-SP
+  and OAuth-secret steps; `--warehouse <warehouse-id>` is optional (otherwise a
+  serverless warehouse is discovered):
+
+  ```bash
+  uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
+    python agent/scripts/setup_serving_sp.py \
+    --profile fe-bar-ir-2026 --account-profile <account-profile>
+  ```
+
+  The account profile for this workspace is `workspace.account_profile` in the
+  environment manifest. Each step is skipped when its resource already exists; the
+  script prints the SP application id:
+
+  1. Create `claims-adjudication-serving` and assign it to the workspace with the
+     `workspace-access` entitlement (no admin, cluster, or SQL entitlement).
+  2. Generate an OAuth (M2M) secret for it.
+  3. Create the Lakebase OAuth role (its application UUID) and grant CONNECT, schema
+     USAGE, the agent read set, `SELECT, INSERT, UPDATE` on `public.adjudications`,
+     and `SELECT, INSERT` on `public.adjudication_decision_records`.
+  4. Grant `USE CATALOG` / `USE SCHEMA` / `EXECUTE` on the two model services.
+  5. Create scope `claims-agent` with `app-sp-client-id`, `app-sp-client-secret`,
+     and `lakebase-db-user` (the application UUID) — the references
+     `deploy_agent.py` injects into the endpoint.
+  6. Grant the advisory Genie tool access: CAN_RUN on the operational Genie space,
+     CAN USE on its warehouse, and the UC `USE SCHEMA` / `SELECT` its SQL needs.
+
+  The application id is printed to stderr before any grant. On a fresh workspace the
+  `reference` synced tables don't exist yet: the script skips those `reference.*`
+  grants, lists them in a warning and in its JSON summary (`lakebase_grants_skipped`,
+  `complete: false`), and exits 0. Create the synced tables, then re-run it until it
+  reports `complete: true` (see the two-pass order in `docs/RUNBOOK.md`). Every other
+  grant still fails loud. The `reference.*` SELECTs are also reapplied by
+  `lakebase/scripts/regrant_synced_table_selects.py` whenever a synced table is
+  created or recreated; export `SERVING_SP_PRINCIPAL=<serving-sp-app-id>` for those
+  runs.
+
+## Deploy
+
+Use the `fe-bar-ir-2026` workspace profile for every command. The release order is
+fixed and human-gated:
 
 1. `agent/src/register_agent.py` logs and isolated-validates a new model version,
    registers it, and assigns `@candidate`.
@@ -155,47 +205,10 @@ Use the `fe-bar-ir-2026` workspace profile for every command. The release order 
    release-gate metrics in MLflow.
 3. `eval/src/promote.py --promote` applies the gate and is the only script that
    assigns `@prod`.
-4. `agent/src/deploy_agent.py` resolves `@prod` and creates or updates the Model
-   Serving endpoint. The `deploy_claims_agent` job in `agent/databricks.yml` runs
-   the same script.
+4. The `deploy_claims_agent` job (`agent/src/deploy_agent.py`) resolves `@prod` and
+   creates or updates the Model Serving endpoint.
 
-Before the first deployment, a workspace administrator runs
-`agent/scripts/setup_serving_sp.py`, the idempotent prerequisite script that
-provisions the application service principal end to end (it takes the workspace
-profile and the account profile, since the account-SP and OAuth-secret steps need
-the account profile):
-
-```bash
-uv run --with "psycopg[binary]==3.2.10" --with "databricks-sdk>=0.81.0" \
-  python agent/scripts/setup_serving_sp.py \
-  --profile fe-bar-ir-2026 --account-profile <account-profile>
-```
-
-It performs these steps, skipping any resource that already exists and printing the
-resulting service principal application id:
-
-1. Create the application service principal and assign it to the workspace with the
-   `workspace-access` entitlement (the USER workspace permission). This lets the
-   service principal call the workspace API to resolve the Lakebase endpoint and mint
-   a database credential; it does not need workspace admin, cluster creation, or SQL
-   access.
-2. Generate a workspace-level OAuth secret for it.
-3. Create the Lakebase OAuth role for the service principal and grant the
-   table-level read/write permissions required by the agent. The role value is the
-   application service principal's application UUID.
-4. Grant the service principal `USE CATALOG` / `USE SCHEMA` / `EXECUTE` on the two
-   governed Unity Gateway model services `fe-bar-ir.adjudication-agent.adjudication-reasoning`
-   (reasoning) and `fe-bar-ir.adjudication-agent.embedding` (embedding).
-5. Create the `claims-agent` secret scope and write `app-sp-client-id`,
-   `app-sp-client-secret`, and `lakebase-db-user`. `lakebase-db-user` is the Lakebase
-   OAuth role from step 3: the application service principal's application UUID.
-
-The `reference.*` synced-table SELECTs in the grant set are also reapplied by
-`lakebase/scripts/regrant_synced_table_selects.py` whenever a synced table is created
-or recreated.
-
-Run the lifecycle and deployment as follows, replacing `N` with the newly
-registered version:
+Replace `N` with the newly registered version:
 
 ```bash
 cd agent
@@ -207,6 +220,7 @@ DATABRICKS_CONFIG_PROFILE=fe-bar-ir-2026 LAKEBASE_PROFILE=fe-bar-ir-2026 \
   MLFLOW_GENAI_EVAL_MAX_WORKERS=5 uv run python src/evaluate.py \
   --profile fe-bar-ir-2026 --experiment /Shared/claims-adjudication-offline-evaluation \
   --candidate-version N
+uv run python src/promote.py --profile fe-bar-ir-2026 --candidate-version N            # dry run
 uv run python src/promote.py --profile fe-bar-ir-2026 --candidate-version N --promote
 
 cd ../agent
@@ -220,7 +234,9 @@ The deployment is idempotent. It serves the `@prod` version at
 with scale-to-zero enabled. Wait for both `state.ready == READY` and
 `state.config_update == NOT_UPDATING` before invoking it.
 
-Send a claim through the deployed endpoint, with persistence explicitly enabled:
+To write a recommendation through the endpoint, POST to
+`/serving-endpoints/agents_fe-bar-ir-default-claims_adjudication_agent/invocations`
+with workspace authentication:
 
 ```json
 {
@@ -229,14 +245,10 @@ Send a claim through the deployed endpoint, with persistence explicitly enabled:
 }
 ```
 
-POST this body to
-`/serving-endpoints/agents_fe-bar-ir-default-claims_adjudication_agent/invocations`
-using workspace authentication. Verify `custom_outputs.llm_used`,
-`custom_outputs.write_result.persisted`, and
+Check `custom_outputs.llm_used`, `custom_outputs.write_result.persisted`, and
 `custom_outputs.write_result.decision_record_inserted`, then query
 `public.adjudications` joined to `public.adjudication_decision_records` by the
-returned `adjudication_id`. A successful response proves the request traversed
-Lakebase, governed retrieval embedding, governed reasoning, and the atomic write.
+returned `adjudication_id`. Use `"persist": false` for a read-only invocation.
 
 ## Components
 
@@ -301,6 +313,22 @@ databricks bundle run prior_claims_corpus -t prod --profile fe-bar-ir-2026  # go
 On a fresh workspace `fraud_graph` runs once before the first medallion refresh: with
 no `gold.claims_current` yet it publishes an empty, typed `gold.customer_heat_risk`
 so the gold fact can build, then exits (see `docs/RUNBOOK.md`).
+
+## Verify
+
+Read-only:
+
+```bash
+databricks serving-endpoints get agents_fe-bar-ir-default-claims_adjudication_agent --profile fe-bar-ir-2026 -o json \
+  | jq '{state, routes: .config.traffic_config.routes}'
+databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_agent prod --profile fe-bar-ir-2026 -o json
+databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_agent candidate --profile fe-bar-ir-2026 -o json
+```
+
+Expected: endpoint `READY` / `NOT_UPDATING`, with 100% of traffic routed to the
+served entity for the `@prod` version (`..._<version>`); both aliases resolve to
+`READY` versions. A `"persist": false` invocation (above) is the
+read-only end-to-end smoke.
 
 ## Development checks
 

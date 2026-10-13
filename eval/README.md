@@ -29,6 +29,17 @@ local CLI profile, so a bundle job running `evaluate.py` could not pass that gua
 The guard is intentionally kept; evaluation therefore runs locally where the `fe-bar-ir-2026`
 profile resolves.
 
+## Prerequisites
+
+- A local, authenticated `fe-bar-ir-2026` CLI profile (`evaluate.py` refuses any
+  other) and `uv`; dependencies come from `eval/pyproject.toml`.
+- Populated gold claim/adjudication histories (`pipelines/README.md`) and a seeded
+  Lakebase (`LAKEBASE_PROFILE`) — the packaged agent reads its policy and reference
+  tables with `persist=false`. Dataset queries use a SQL warehouse
+  (`--warehouse-id`, default the manifest's `warehouse.id`).
+- A registered candidate version `N` (`agent/src/register_agent.py`). There is no
+  eval bundle to deploy.
+
 ## Ordered register → evaluate → promote lifecycle
 
 Run these steps in order, carrying the newly registered version number (`N`) into
@@ -179,6 +190,23 @@ The dataset is experiment-scoped and MLflow-managed. Databricks gives that
 managed dataset a UC backing identifier; the harness does not create or manage a
 separate duplicate table. Evidence is aggregate/redacted and contains no claim
 content or PII.
+
+## Verify
+
+Read-only:
+
+```bash
+databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_agent candidate --profile fe-bar-ir-2026 -o json
+databricks model-versions get-by-alias fe-bar-ir.default.claims_adjudication_agent prod --profile fe-bar-ir-2026 -o json
+EXP_ID="$(databricks experiments get-by-name /Shared/claims-adjudication-offline-evaluation --profile fe-bar-ir-2026 -o json | jq -r .experiment.experiment_id)"
+databricks experiments search-runs --profile fe-bar-ir-2026 --limit 5 -o json \
+  --json "{\"experiment_ids\":[\"$EXP_ID\"],\"filter\":\"tags.candidate_version = 'N'\",\"order_by\":[\"start_time DESC\"]}" \
+  | jq -c '.[] | {run_id: .info.run_id, status: .info.status, tags: [.data.tags[] | select(.key == "candidate_version" or .key == "release_gate_passed")]}'
+```
+
+Expected: both aliases resolve to `READY` versions and the version-`N` runs are
+`FINISHED`. Read `release_gate_passed` and the `<scorer>/mean` metrics on those runs
+before running `promote.py --promote`; `promote.py` (dry run) reports the decision.
 
 ## Known limitations
 
