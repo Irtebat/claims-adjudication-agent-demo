@@ -1,0 +1,84 @@
+{
+  "source": "databricks experiments search-runs --profile fe-bar-ir-2026 (experiment /Shared/claims-adjudication-offline-evaluation, id 3711089841553520), captured 2026-10-14, read-only",
+  "prod_alias_now": "fe-bar-ir.default.claims_adjudication_agent@prod = version 6",
+  "runs": [
+    {
+      "run_id": "f8cb1a55c11f4714aa573765cc1619a4",
+      "run_name": "eval-judges-v6-20261008T095343Z",
+      "status": "FINISHED",
+      "candidate_version": "6",
+      "tier": "judges",
+      "metrics": {
+        "authority_guidelines/mean": 0.4666666666666667,
+        "retrieval_groundedness/mean": 0
+      }
+    },
+    {
+      "run_id": "8ef313627600444fae6a731545f608db",
+      "run_name": "eval-exact-v6-20261008T095343Z",
+      "status": "FINISHED",
+      "candidate_version": "6",
+      "tier": "exact",
+      "metrics": {
+        "verdict_matches_eligibility/mean": 1,
+        "verdict_exact_match/mean": 0.9466666666666667,
+        "no_payable_duplicate/mean": 1,
+        "invariant_clean/mean": 0.9733333333333334,
+        "disposition_exact_match/mean": 0.9466666666666667,
+        "citations_in_resolved_policy/mean": 1,
+        "citation_reciprocal_rank/mean": 0.9733333333333334,
+        "citation_recall/mean": 1,
+        "amount_matches_gold/mean": 1,
+        "amount_matches_authority/mean": 1
+      }
+    },
+    {
+      "run_id": "84d2b181d79242e9901f513048cdbb83",
+      "run_name": "eval-pilot-v6-20261008T095343Z",
+      "status": "FINISHED",
+      "candidate_version": "6",
+      "tier": "pilot",
+      "metrics": {
+        "amount_matches_authority/mean": 1,
+        "verdict_matches_eligibility/mean": 1,
+        "verdict_exact_match/mean": 1,
+        "retrieval_groundedness/mean": 0,
+        "no_payable_duplicate/mean": 1,
+        "invariant_clean/mean": 1,
+        "disposition_exact_match/mean": 1,
+        "citations_in_resolved_policy/mean": 1,
+        "citation_reciprocal_rank/mean": 1,
+        "citation_recall/mean": 1,
+        "authority_guidelines/mean": 0.7,
+        "amount_matches_gold/mean": 1
+      }
+    },
+    {
+      "run_id": "446c092c11974660a0d938a233e4e860",
+      "run_name": "eval-pilot-v6-20261008T094115Z",
+      "status": "FAILED",
+      "candidate_version": "6",
+      "tier": "pilot",
+      "metrics": {}
+    },
+    {
+      "run_id": "988d66f5e6f34ad5b58316fc8e612652",
+      "run_name": "eval-exact-v5-20261007T130035Z",
+      "status": "FINISHED",
+      "candidate_version": "5",
+      "tier": "exact",
+      "metrics": {
+        "amount_matches_authority/mean": 1,
+        "amount_matches_gold/mean": 1,
+        "citation_recall/mean": 1,
+        "citation_reciprocal_rank/mean": 0.9733333333333334,
+        "citations_in_resolved_policy/mean": 1,
+        "disposition_exact_match/mean": 0.9466666666666667,
+        "invariant_clean/mean": 1,
+        "no_payable_duplicate/mean": 1,
+        "verdict_exact_match/mean": 0.9466666666666667,
+        "verdict_matches_eligibility/mean": 1
+      }
+    }
+  ]
+}
