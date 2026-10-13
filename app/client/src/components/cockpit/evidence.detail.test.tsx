@@ -180,6 +180,19 @@ describe('ConformanceDetail — spec vs measured (Feature A)', () => {
     expect(html).toContain('Not checked');
   });
 
+  it('shows Not checked (never Fail) for a listed nonconforming property whose spec field is missing', () => {
+    // The verdict names tensile_mpa, but this snapshot lacks the tensile band — the row has no
+    // spec to fail against, so it must read "Not checked", not Fail.
+    const conformance: ConformanceEvidence = { conforms: false, nonconforming_properties: ['tensile_mpa'] };
+    const { tensile_mpa_min: _min, tensile_mpa_max: _max, ...noTensile } = specParams();
+    const html = renderToStaticMarkup(
+      <ConformanceDetail conformance={conformance} specParams={noTensile} measured={measured()} />
+    );
+    expect(html).not.toContain(FAIL_MARKER); // the only listed property has no spec → no Fail pill
+    expect(html).toContain(PASS_MARKER); // the other, fully evaluated rows still Pass
+    expect(html).toContain('Not checked');
+  });
+
   it('degrades to a graceful notice when the spec snapshot is unavailable (older records)', () => {
     const conformance: ConformanceEvidence = { conforms: true, nonconforming_properties: [] };
     expect(() =>
