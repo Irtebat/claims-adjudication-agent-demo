@@ -287,13 +287,13 @@ interface ConformanceRow {
  * A property's result marker, from the authority's recorded verdict — never fabricated.
  *  - `nonconforming === null` → the verdict was NOT recorded on this snapshot (unknown), so
  *    return 'none' ("Not checked") and NEVER a 'pass'.
- *  - verdict present (array, possibly empty): a property named in it is 'fail'; otherwise
- *    'pass' ONLY when the row was actually evaluated (both spec and measurement present).
+ *  - row not evaluated (spec field or measured value missing) → 'none', even if the verdict
+ *    lists the property: a Fail next to a '—' spec would be just as unsupported as a Pass.
+ *  - otherwise a property named in the verdict is 'fail', else 'pass'.
  */
 function resultOf(key: string, evaluated: boolean, nonconforming: string[] | null): 'pass' | 'fail' | 'none' {
-  if (nonconforming === null) return 'none';
-  if (nonconforming.includes(key)) return 'fail';
-  return evaluated ? 'pass' : 'none';
+  if (nonconforming === null || !evaluated) return 'none';
+  return nonconforming.includes(key) ? 'fail' : 'pass';
 }
 
 function buildConformanceRow(
