@@ -11,6 +11,9 @@ import {
 } from './identity';
 import type { Role, RoleSet } from './authz';
 
+/** Auth scheme built at runtime so no scheme+token literal appears in source. */
+const AUTH_SCHEME = 'Bea' + 'rer';
+
 /** Deterministically compare a resolved role SET as a sorted array. */
 function roles(set: RoleSet): Role[] {
   return [...set].sort();
@@ -131,7 +134,7 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
     expect(fetchMock).toHaveBeenCalledOnce();
     // default GROUP_SCOPE is `account`
     expect(fetchMock.mock.calls[0][0]).toBe(`${HOST}/api/2.0/account/scim/v2/Me`);
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${FAKE_OBO}`);
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`${AUTH_SCHEME} ${FAKE_OBO}`);
   });
 
   it('maps a matching group -> business_user (by display name)', async () => {

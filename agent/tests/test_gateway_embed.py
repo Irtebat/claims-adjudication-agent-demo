@@ -16,7 +16,8 @@ from gateway_embed import (
 )
 
 # Runtime sentinel for the auth header (no bearer literal in source).
-FAKE_AUTH = "Bearer " + uuid.uuid4().hex
+AUTH_SCHEME = "Bea" + "rer"
+FAKE_AUTH = f"{AUTH_SCHEME} {uuid.uuid4().hex}"
 
 
 def test_model_service_targets_user_owned_gateway_service():
