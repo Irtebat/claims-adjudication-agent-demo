@@ -30,6 +30,7 @@ node_modules/
 
 # Databricks
 .databricks/
+.deploy/
 mlflow.db
 mlflow.db-*
 mlruns/

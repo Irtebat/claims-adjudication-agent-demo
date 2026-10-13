@@ -1,0 +1,52 @@
+workspace:
+  profile: fe-bar-ir-2026
+  host: https://fe-sandbox-fe-bar-ir-2026.cloud.databricks.com
+  account_profile: aws-one-env-account_account
+  release_environment: true
+uc:
+  catalog: fe-bar-ir
+  managed_storage_root: s3://fe-bar-ir-bucket
+  storage_credential: fe-bar-ir-cred
+  external_location: fe-bar-ir-ext-location
+  iam_role_arn: arn:aws:iam::332745928618:role/fe-bar-ir-role
+  schemas: {bronze: bronze, silver: silver, gold: gold, cdf: cdf, eval: eval, default: default}
+warehouse:
+  id: a323b5700ae25d85
+  name: Serverless Starter Warehouse
+lakebase:
+  project: fe-bar-operational-plane
+  branch: production
+  endpoint: primary
+  database: databricks_postgres
+  resource_database: databricks-postgres
+  mirror_catalog: fe_bar_operational
+  public_schema: public
+  reference_schema: reference
+models:
+  registered_model: claims_adjudication_agent
+  serving_endpoint: agents_fe-bar-ir-default-claims_adjudication_agent
+  model_service_schema: adjudication-agent
+  reasoning_service: fe-bar-ir.adjudication-agent.adjudication-reasoning
+  reasoning_destination: system.ai.gpt-5-4
+  embedding_service: fe-bar-ir.adjudication-agent.embedding
+  embedding_destination: databricks-gte-large-en
+  experiment: /Users/irtebat.shaukat@databricks.com/claims_adjudication_agent
+genie:
+  operational_title: Steel Claims Operational Cockpit
+  business_title: Steel Quality Claims Analytics
+dashboard:
+  display_name: Steel Quality Claims Analytics
+app:
+  name: steel-claims-cockpit
+  adjuster_users: [irtebat.shaukat@databricks.com]
+  adjuster_groups: []
+  business_users: [irtebat.shaukat@databricks.com]
+  business_groups: []
+secrets:
+  agent_scope: claims-agent
+  kafka_scope: fe-bar-aiven-kafka
+kafka:
+  bootstrap_servers: fe-bar-kafka-kafka-dbx-pipeline-001.i.aivencloud.com:25358
+  topics:
+    claim_submitted: claim.submitted
+    claim_adjudicated: claim.adjudicated
