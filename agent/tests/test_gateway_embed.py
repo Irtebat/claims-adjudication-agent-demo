@@ -1,6 +1,7 @@
 """Gateway embedding helper: normalization, batching, and 429 retry — no network."""
 
 import urllib.error
+import uuid
 from email.message import Message
 
 import pytest
@@ -13,6 +14,9 @@ from gateway_embed import (
     l2_normalize,
     parse_retry_after,
 )
+
+# Runtime sentinel for the auth header (no bearer literal in source).
+FAKE_AUTH = "Bearer " + uuid.uuid4().hex
 
 
 def test_model_service_targets_user_owned_gateway_service():
@@ -43,12 +47,12 @@ def test_backoff_delay_honors_retry_after():
 
 
 def _token():
-    return ("https://host.example", "Bearer test")
+    return ("https://host.example", FAKE_AUTH)
 
 
 def _post_ok(url, authorization, body):
     assert url.endswith("/ai-gateway/mlflow/v1/embeddings")
-    assert authorization == "Bearer test"
+    assert authorization == FAKE_AUTH
     assert "dimensions" not in body  # GTE does not accept dimensions
     return {"data": [{"index": i, "embedding": [3.0, 4.0]} for i, _ in enumerate(body["input"])]}
 

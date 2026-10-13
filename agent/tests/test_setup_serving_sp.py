@@ -9,6 +9,7 @@ SDK installed (the SDK is imported lazily on the paths that create resources).
 
 import importlib.util
 import sys
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +22,8 @@ setup = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(setup)
 
 APP_ID = "11111111-2222-3333-4444-555555555555"
+# Runtime sentinel for the minted SP secret (no credential-shaped literal in source).
+FAKE_MINTED = uuid.uuid4().hex
 
 
 class FakeCursor:
@@ -365,7 +368,7 @@ def test_ensure_secrets_creates_scope_and_mints_secret_when_absent():
     account = SimpleNamespace(
         service_principal_secrets=SimpleNamespace(
             create=lambda service_principal_id: (
-                minted.append(service_principal_id) or SimpleNamespace(secret="minted-secret")
+                minted.append(service_principal_id) or SimpleNamespace(secret=FAKE_MINTED)
             )
         )
     )
@@ -375,7 +378,7 @@ def test_ensure_secrets_creates_scope_and_mints_secret_when_absent():
     assert result["client_secret_minted"] is True
     assert (setup.SECRET_CLIENT_ID_KEY, APP_ID) in puts
     assert (setup.SECRET_DB_USER_KEY, APP_ID) in puts
-    assert (setup.SECRET_CLIENT_SECRET_KEY, "minted-secret") in puts
+    assert (setup.SECRET_CLIENT_SECRET_KEY, FAKE_MINTED) in puts
 
 
 def test_ensure_secrets_skips_minting_when_secret_present():

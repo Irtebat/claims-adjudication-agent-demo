@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Request } from 'express';
 import {
@@ -42,6 +43,9 @@ function scimStub(groups: ScimGroup[], resp: { ok?: boolean; status?: number } =
 }
 
 const HOST = 'https://ws.cloud.databricks.com';
+// Runtime sentinels for the OBO access token (no token-shaped literal in source).
+const FAKE_OBO = randomUUID();
+const FAKE_OBO_2 = randomUUID();
 
 describe('getUserIdentity / decidedBy', () => {
   it('extracts the OBO email from x-forwarded-email', () => {
@@ -123,17 +127,17 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
   it('maps a matching group -> adjuster (by display name)', async () => {
     const fetchMock = scimStub([{ display: 'Steel-Adjusters', value: 'g-1' }]);
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual(['adjuster']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual(['adjuster']);
     expect(fetchMock).toHaveBeenCalledOnce();
     // default GROUP_SCOPE is `account`
     expect(fetchMock.mock.calls[0][0]).toBe(`${HOST}/api/2.0/account/scim/v2/Me`);
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${FAKE_OBO}`);
   });
 
   it('maps a matching group -> business_user (by display name)', async () => {
     const fetchMock = scimStub([{ display: 'steel-business', value: 'g-2' }]);
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual(['business_user']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual(['business_user']);
   });
 
   it('returns BOTH roles for a member of an adjuster AND a business group (union)', async () => {
@@ -142,20 +146,20 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
       { display: 'steel-business', value: 'g-2' },
     ]);
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual(['adjuster', 'business_user']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual(['adjuster', 'business_user']);
   });
 
   it('matches a group by id (value) as well as display', async () => {
     // display does not match any configured group; the group id (value) does.
     const fetchMock = scimStub([{ display: 'Some Unrelated Name', value: '100-adj-id' }]);
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual(['adjuster']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual(['adjuster']);
   });
 
   it('hard-denies (empty set) when no group matches', async () => {
     const fetchMock = scimStub([{ display: 'random-team', value: 'g-9' }]);
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual([]);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual([]);
   });
 
   it('hard-denies (empty set) when the OBO token is missing, without calling SCIM', async () => {
@@ -169,7 +173,7 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
     // boss@x.com is a group business-user, but the ADJUSTER_USERS override wins.
     const fetchMock = scimStub([{ display: 'steel-business' }]);
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    expect(roles(await resolve(reqWith({ email: 'boss@x.com', token: 'tok' })))).toEqual(['adjuster']);
+    expect(roles(await resolve(reqWith({ email: 'boss@x.com', token: FAKE_OBO })))).toEqual(['adjuster']);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -177,23 +181,23 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
     process.env.GROUP_SCOPE = 'workspace';
     const fetchMock = scimStub([{ display: 'steel-adjusters' }]);
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    await resolve(reqWith({ email: 'u@x.com', token: 'tok' }));
+    await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO }));
     expect(fetchMock.mock.calls[0][0]).toBe(`${HOST}/api/2.0/preview/scim/v2/Me`);
   });
 
   it('a SCIM HTTP error is a HARD DENY (throws), and is NOT cached', async () => {
     const fetchMock = scimStub([{ display: 'steel-adjusters' }], { ok: false, status: 500 });
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    await expect(resolve(reqWith({ email: 'u@x.com', token: 'tok' }))).rejects.toThrow(/HTTP 500/);
+    await expect(resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO }))).rejects.toThrow(/HTTP 500/);
     // failure is never cached: a second call hits SCIM again (still denies).
-    await expect(resolve(reqWith({ email: 'u@x.com', token: 'tok' }))).rejects.toThrow(/HTTP 500/);
+    await expect(resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO }))).rejects.toThrow(/HTTP 500/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('a SCIM network failure is a HARD DENY (throws), never an open door', async () => {
     const fetchMock = vi.fn(() => Promise.reject(new Error('ECONNRESET')));
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST });
-    await expect(resolve(reqWith({ email: 'u@x.com', token: 'tok' }))).rejects.toThrow(/request failed/);
+    await expect(resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO }))).rejects.toThrow(/request failed/);
   });
 
   it('a slow SCIM /Me that trips the AbortSignal.timeout is a HARD DENY (throws)', async () => {
@@ -206,7 +210,7 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
         })
     );
     const resolve = makeDatabricksRoleResolver({ fetch: fetchMock, host: HOST, scimTimeoutMs: 5 });
-    await expect(resolve(reqWith({ email: 'u@x.com', token: 'tok' }))).rejects.toThrow(/request failed/);
+    await expect(resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO }))).rejects.toThrow(/request failed/);
   });
 
   it('caches the resolved role: a second call within TTL avoids a second fetch', async () => {
@@ -218,9 +222,9 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
       now: () => clock,
       cacheTtlMs: 120_000,
     });
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual(['adjuster']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual(['adjuster']);
     clock += 60_000; // still within TTL
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok2' })))).toEqual(['adjuster']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO_2 })))).toEqual(['adjuster']);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -233,9 +237,9 @@ describe('makeDatabricksRoleResolver — group-based (PRIMARY, via SCIM /Me)', (
       now: () => clock,
       cacheTtlMs: 1_000,
     });
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual(['adjuster']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual(['adjuster']);
     clock += 1_001; // past TTL
-    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: 'tok' })))).toEqual(['adjuster']);
+    expect(roles(await resolve(reqWith({ email: 'u@x.com', token: FAKE_OBO })))).toEqual(['adjuster']);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
