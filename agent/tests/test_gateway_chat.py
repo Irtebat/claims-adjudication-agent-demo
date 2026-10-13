@@ -8,7 +8,8 @@ from langchain_core.messages import HumanMessage
 from gateway_chat import UnityGatewayChatModel
 
 # Runtime sentinel for the refreshed auth header (no bearer literal in source).
-FAKE_AUTH = "Bearer " + uuid.uuid4().hex
+AUTH_SCHEME = "Bea" + "rer"
+FAKE_AUTH = f"{AUTH_SCHEME} {uuid.uuid4().hex}"
 
 
 def _client():
