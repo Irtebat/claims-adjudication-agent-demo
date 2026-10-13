@@ -137,7 +137,10 @@ need. Order:
      `reference.heats_coils`, `mill_test_certs`, `customers`, `customer_heat_risk`,
      `prior_claims_corpus`. The `reference.*` SELECTs are also reapplied by
      `lakebase/scripts/regrant_synced_table_selects.py` (via `lakebase/run.py
-     synced-tables`) when a synced table is created or recreated.
+     synced-tables`) when a synced table is created or recreated. On a fresh
+     workspace, `reference.*` grants whose table does not exist yet are skipped. The
+     script warns, reports them under `skipped` in its JSON summary, and exits 0.
+     Create the synced tables, then re-run the script.
    - `INSERT, UPDATE` on `public.adjudications` and
      `public.adjudication_decision_records` (finalize UPDATE + new record_version).
    - **`INSERT` on `public.outbox`** ← REQUIRED for finalize; not part of the serving

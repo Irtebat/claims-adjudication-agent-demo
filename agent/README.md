@@ -190,7 +190,12 @@ resulting service principal application id:
    `app-sp-client-secret`, and `lakebase-db-user`. `lakebase-db-user` is the Lakebase
    OAuth role from step 3: the application service principal's application UUID.
 
-The `reference.*` synced-table SELECTs in the grant set are also reapplied by
+The application id is printed to stderr before any grant runs, because creating the
+synced tables needs it. On a fresh workspace the `reference` synced tables do not exist
+yet: the script skips those `reference.*` grants, lists them in a warning and in the
+JSON summary (`lakebase_grants_skipped`, `complete: false`), and still exits 0.
+Create the synced tables, then re-run the script. Every other grant still fails loud.
+The `reference.*` SELECTs are also reapplied by
 `lakebase/scripts/regrant_synced_table_selects.py` whenever a synced table is created
 or recreated.
 
