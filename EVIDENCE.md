@@ -76,7 +76,7 @@ invoked with `persist=false` (nothing written):
 
 The approved amount equals the deterministic settlement authority; the LLM reasoned and cited.
 
-## 4. ML / GenAI — MLflow release-gate scores (v6, 75 held-out claims)
+## 4. ML / GenAI — MLflow release-gate scores (v6 exact tier)
 
 | Scorer | Threshold | v5 `@prod` | v6 candidate |
 |---|---|---:|---:|
@@ -88,7 +88,7 @@ The approved amount equals the deterministic settlement authority; the LLM reaso
 | disposition_exact_match | not worse than @prod | 0.9467 | **0.9467** |
 | amount_matches_gold | not worse than @prod | 1.00 | **1.00** |
 
-Decision: promoted v5 → v6. Runs `8ef31362…` (v6) / `988d66f5…` (v5). Details:
+Gate reconstruction: the captured v5 and v6 metrics satisfy the current `promote.py` gate, and the 2026-10-14 capture reports `@prod = version 6`. Runs `8ef31362…` (v6) / `988d66f5…` (v5). Details:
 [release-gate-v6/](docs/evidence/release-gate-v6/README.md).
 
 ## 5. ML / GenAI — rules vs. agent (ablation, 100 held-out claims)
@@ -144,8 +144,8 @@ Dashboard `01f1c269ddc4…` `ACTIVE`; 9/9 datasets `SUCCEEDED`. Executive KPI ro
 
 ## 9. End to end — `CLM-DEMO-000006`
 
-Lakebase claim → engineer finalizes in the app (APPROVE / CREDIT / **8,360.00**) → decision record +
-outbox event (`published_at` set) → Kafka consumer writes settlement `STL-CLM-DEMO-000006`
+Lakebase claim → finalized adjudication (APPROVE / CREDIT / **8,360.00**) → decision record +
+outbox event (`published_at` set) → settlement consumer writes settlement `STL-CLM-DEMO-000006`
 (`PENDING_PAYMENT`, 8,360.00) → native CDF `cdf.lb_*_history` → `silver.adjudications_history`
 (RECOMMENDED → FINAL SCD2 versions) → `gold.adjudications_current` → operational Genie returns
 the row (FINAL / APPROVE / 8360.00) → app history + cockpit. Each hop with its query:
