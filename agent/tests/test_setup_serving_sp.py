@@ -50,7 +50,6 @@ def _expected_lakebase(role):
         f'GRANT SELECT ON "public"."warranty_terms" TO "{role}"',
         f'GRANT SELECT ON "public"."spec_clauses" TO "{role}"',
         f'GRANT SELECT ON "public"."warranty_clauses" TO "{role}"',
-        f'GRANT SELECT ON "public"."prior_claims" TO "{role}"',
         f'GRANT SELECT ON "reference"."heats_coils" TO "{role}"',
         f'GRANT SELECT ON "reference"."mill_test_certs" TO "{role}"',
         f'GRANT SELECT ON "reference"."customer_heat_risk" TO "{role}"',
@@ -87,6 +86,16 @@ def test_lakebase_grants_cover_the_synced_precedent_corpus():
     cur = FakeCursor()
     setup.apply_lakebase_grants(cur, APP_ID)
     assert f'GRANT SELECT ON "reference"."prior_claims_corpus" TO "{APP_ID}"' in cur.statements
+
+
+def test_lakebase_grants_skip_the_retired_native_prior_claims_table():
+    # public.prior_claims was retired for reference.prior_claims_corpus and does not exist
+    # on fresh workspaces, so granting on it would fail the whole provisioning run.
+    assert ("SELECT", ("table", "reference", "prior_claims_corpus")) in setup.GRANTS
+    assert all(target != ("table", "public", "prior_claims") for _, target in setup.GRANTS)
+    cur = FakeCursor()
+    setup.apply_lakebase_grants(cur, APP_ID)
+    assert not any('"public"."prior_claims"' in s for s in cur.statements)
 
 
 # --- Unity Catalog EXECUTE grants: exact statements, backtick-quoted ---------------

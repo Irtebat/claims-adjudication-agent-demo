@@ -115,7 +115,8 @@ ROLE_AUTH_METHOD = "LAKEBASE_OAUTH_V1"
 # for the public reads and writes and the serving read set in
 # lakebase/scripts/regrant_synced_table_selects.py (SERVING_TABLES) for the reference.*
 # synced tables, which includes the precedent corpus prior_claims_corpus that
-# find_similar_prior_claims reads. Each entry is (privileges, target) where target is
+# find_similar_prior_claims reads (the retired native public.prior_claims table is not
+# granted; it does not exist on fresh workspaces). Each entry is (privileges, target) where target is
 # one of ("database", <db>), ("schema", <schema>), or ("table", <schema>, <table>).
 GRANTS: list[tuple[str, tuple]] = [
     ("CONNECT", ("database", DATABASE)),
@@ -126,7 +127,6 @@ GRANTS: list[tuple[str, tuple]] = [
     ("SELECT", ("table", "public", "warranty_terms")),
     ("SELECT", ("table", "public", "spec_clauses")),
     ("SELECT", ("table", "public", "warranty_clauses")),
-    ("SELECT", ("table", "public", "prior_claims")),
     ("SELECT", ("table", "reference", "heats_coils")),
     ("SELECT", ("table", "reference", "mill_test_certs")),
     ("SELECT", ("table", "reference", "customer_heat_risk")),
