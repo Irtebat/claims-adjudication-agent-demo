@@ -144,7 +144,7 @@ No secret is ever inlined or committed.
   databricks secrets put-secret fe-bar-aiven-kafka bootstrap-servers --profile fe-bar-ir-2026  # host:port
   databricks secrets put-secret fe-bar-aiven-kafka sasl-username     --profile fe-bar-ir-2026
   databricks secrets put-secret fe-bar-aiven-kafka sasl-password     --profile fe-bar-ir-2026
-  databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem        --profile fe-bar-ir-2026 < <ca.pem>
+  databricks secrets put-secret fe-bar-aiven-kafka ssl-ca-pem        --profile fe-bar-ir-2026 < ca.pem
   ```
 
   Without `--string-value`, `put-secret` prompts for a single-line value, so it

@@ -58,20 +58,26 @@ scores for real, and the last medallion run picks up the scores.
 
 Then complete the environment in this order:
 
-1. Serving SP: `agent/scripts/setup_serving_sp.py --profile fe-bar-ir-2026
-   --account-profile <account-profile>` (`agent/README.md`, Prerequisites).
-2. Dashboards and Genie spaces (`dashboards/README.md`), then the app:
-   `cd app && databricks bundle deploy -t default --profile fe-bar-ir-2026`
-   (creates the app SP), then `app/scripts/setup_app_sp.py --app-principal <app-sp-id>`
-   and `databricks bundle run app -t default --profile fe-bar-ir-2026`
-   (`app/README.md`).
-3. Synced tables, with both principal ids exported:
+SP setup runs in two passes, because the SP scripts grant on `reference.*` synced
+tables and synced-table creation needs both SP ids.
+
+1. **First pass — create both SPs.**
+   - Serving SP: `agent/scripts/setup_serving_sp.py --profile fe-bar-ir-2026
+     --account-profile <account-profile>` (`agent/README.md`, Prerequisites). It prints
+     the serving SP application id first; `reference.*` grants on tables that don't
+     exist yet are skipped with a warning.
+   - Dashboards and Genie spaces (`dashboards/README.md`), then the app:
+     `cd app && databricks bundle deploy -t default --profile fe-bar-ir-2026`
+     (creates the app SP), then `app/scripts/setup_app_sp.py --app-principal <app-sp-id>`
+     (`app/README.md`). Missing `reference.*` tables are skipped the same way.
+2. **Synced tables, with both principal ids exported:**
    `APP_SP_PRINCIPAL=<app-sp-id> SERVING_SP_PRINCIPAL=<serving-sp-app-id> uv run --with pyyaml python lakebase/run.py synced-tables`
    (creates all seven synced tables, builds the corpus indexes, grants SELECT to
-   both principals; fails before any GRANT if either id is unset). Both SP setup
-   scripts grant SELECT on `reference.*` and assume those tables exist; they are
-   idempotent, so re-run them after this step if a first run stopped on a missing
-   table.
+   both principals; fails before any GRANT if either id is unset).
+3. **Second pass:** re-run both SP setup scripts (idempotent). Each should report
+   no skipped grants. Then start the app:
+   `databricks bundle run app -t default --profile fe-bar-ir-2026`. Do not run the
+   app until the second pass reports no skips.
 4. `cd pipelines && databricks bundle run deploy_metric_views -t prod --profile fe-bar-ir-2026`
 5. `uv run --with pyyaml python pipelines/run.py govern`
 6. Agent `register -> evaluate -> promote -> deploy_claims_agent` (`agent/README.md`).
