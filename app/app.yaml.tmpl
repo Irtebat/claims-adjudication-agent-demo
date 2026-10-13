@@ -1,0 +1,27 @@
+command: ['npm', 'run', 'start']
+env:
+  # Build + run in production mode so the on-platform `npm install` omits devDependencies.
+  # The Databricks npm proxy does not mirror every test-only transitive (e.g. jsdom's
+  # xmlchars@2.2.0, which 404s and fails the build). Build tools live in `dependencies`
+  # (see package.json) so the production build still has tsc/vite/tsdown/tailwind.
+  - name: NODE_ENV
+    value: production
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: DATABRICKS_GENIE_SPACE_ID
+    valueFrom: genie-space
+  - name: DATABRICKS_BUSINESS_GENIE_SPACE_ID
+    valueFrom: genie-space-business
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: postgres
+  # Governed AI/BI dashboard embedded on the Business-Leader surface. Embedding also
+  # requires the deployed app's domain on the workspace AI/BI embedding approved-domains
+  # allowlist; until then the app shows an open-in-Databricks fallback.
+  - name: DATABRICKS_DASHBOARD_ID
+    value: '{{ state.dashboard.id }}'
+  # Per-user role allowlist OVERRIDE (see server/identity.ts). Same user in BOTH so a
+  # single demo account can drive the adjuster and business-leader personas.
+  - name: ADJUSTER_USERS
+    value: 'irtebat.shaukat@databricks.com'
+  - name: BUSINESS_USERS
+    value: 'irtebat.shaukat@databricks.com'

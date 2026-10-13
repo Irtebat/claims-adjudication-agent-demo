@@ -181,6 +181,13 @@ def test_only_the_operational_agent_is_configured():
     assert not hasattr(genie_tools, "ANALYTICS_SPACE_ID")
 
 
+def test_operational_space_id_env_override(monkeypatch):
+    monkeypatch.delenv("GENIE_OPERATIONAL_SPACE_ID", raising=False)
+    assert genie_tools._operational_space_id() == genie_tools.DEFAULT_OPERATIONAL_SPACE_ID
+    monkeypatch.setenv("GENIE_OPERATIONAL_SPACE_ID", "other-env-space")
+    assert genie_tools._operational_space_id() == "other-env-space"
+
+
 # --- pool hardening: isolated per-call thread, no shared pool to exhaust ----------
 
 
